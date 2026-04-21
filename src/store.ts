@@ -15,7 +15,7 @@ import {
   serverTimestamp,
   orderBy
 } from 'firebase/firestore';
-import { onAuthStateChanged, getRedirectResult, User as FirebaseUser, setPersistence, browserSessionPersistence, sendEmailVerification, reload } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult, User as FirebaseUser, setPersistence, browserSessionPersistence } from 'firebase/auth';
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; // km
@@ -106,12 +106,6 @@ interface NomadStore {
   updateAppSettings: (settings: Partial<AppSettings>) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   updateUserRole: (userId: string, role: FamilyProfile['role']) => Promise<void>;
-  resolveReport: (reportId: string, action: 'dismiss' | 'remove') => Promise<void>;
-
-  // Email Verification & Level System
-  sendVerificationEmail: () => Promise<void>;
-  checkEmailVerified: () => Promise<boolean>;
-  updateVerificationLevel: () => Promise<void>;
 }
 
 export const useNomadStore = create<NomadStore>((set, get) => ({
@@ -532,27 +526,11 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   vouchForFamily: async (vouchingId, targetId) => {
     try {
       const targetDoc = await getDoc(doc(db, 'users', targetId));
-      if (!targetDoc.exists()) return;
-
-      const data = targetDoc.data() as FamilyProfile;
-      const vouchedBy = Array.from(new Set([...data.vouchedBy, vouchingId]));
-
-      const updates: Record<string, any> = { vouchedBy };
-
-      // Upgrade target's Trusted Member badge and level when they hit 3 vouches
-      if (vouchedBy.length >= 3) {
-        const currentBadges: string[] = data.badges || [];
-        if (!currentBadges.includes('Trusted Member')) {
-          updates.badges = [...currentBadges, 'Trusted Member'];
-        }
-        // Level 3 if they had email verified, else bring to max possible
-        const currentLevel = data.verificationLevel ?? 1;
-        if (currentLevel < 3) {
-          updates.verificationLevel = 3;
-        }
+      if (targetDoc.exists()) {
+        const data = targetDoc.data() as FamilyProfile;
+        const vouchedBy = Array.from(new Set([...data.vouchedBy, vouchingId]));
+        await updateDoc(doc(db, 'users', targetId), { vouchedBy });
       }
-
-      await updateDoc(doc(db, 'users', targetId), updates);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${targetId}`);
     }
@@ -976,21 +954,12 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       newBadges.push('Tribe Pioneer');
     }
 
-    // 4. Email Verified (checked against live Firebase auth token)
-    if (auth.currentUser?.emailVerified) {
-      newBadges.push('Email Verified');
-    }
-
-    // Update badges if changed
+    // Update if changed
     const currentBadges = user.badges || [];
-    const sorted = (arr: string[]) => [...arr].sort().join(',');
-    if (sorted(currentBadges) !== sorted(newBadges)) {
+    if (JSON.stringify(currentBadges.sort()) !== JSON.stringify(newBadges.sort())) {
       await updateDoc(doc(db, 'users', user.id), { badges: newBadges });
       set({ currentUser: { ...user, badges: newBadges } });
     }
-
-    // Always sync verification level after badge recalc
-    await get().updateVerificationLevel();
   },
 
   reportContent: async (targetId, targetType, reason) => {
@@ -1035,78 +1004,5 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
     }
-  },
-
-  resolveReport: async (reportId, action) => {
-    try {
-      const report = get().reports.find((r: any) => r.id === reportId);
-      if (!report) return;
-
-      if (action === 'remove') {
-        // Delete the reported content from its collection
-        if (report.targetType === 'MarketItem') {
-          await deleteDoc(doc(db, 'marketplace', report.targetId));
-        } else if (report.targetType === 'Spot') {
-          await deleteDoc(doc(db, 'spots', report.targetId));
-        } else if (report.targetType === 'User') {
-          await deleteDoc(doc(db, 'users', report.targetId));
-        }
-      }
-
-      await updateDoc(doc(db, 'reports', reportId), {
-        status: 'resolved',
-        resolution: action,
-        resolvedAt: new Date().toISOString(),
-      });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `reports/${reportId}`);
-    }
-  },
-
-  sendVerificationEmail: async () => {
-    const firebaseUser = auth.currentUser;
-    if (!firebaseUser) return;
-    try {
-      await sendEmailVerification(firebaseUser);
-    } catch (err) {
-      console.error('sendEmailVerification failed:', err);
-      throw err;
-    }
-  },
-
-  checkEmailVerified: async () => {
-    const firebaseUser = auth.currentUser;
-    if (!firebaseUser) return false;
-    try {
-      await reload(firebaseUser);
-      if (firebaseUser.emailVerified) {
-        await get().calculateBadges();
-        await get().updateVerificationLevel();
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error('checkEmailVerified failed:', err);
-      return false;
-    }
-  },
-
-  updateVerificationLevel: async () => {
-    const user = get().currentUser;
-    if (!user) return;
-
-    const emailVerified = auth.currentUser?.emailVerified ?? false;
-    const vouchCount = user.vouchedBy?.length ?? 0;
-
-    let newLevel: 1 | 2 | 3 = 1;
-    if (emailVerified) newLevel = 2;
-    if (emailVerified && vouchCount >= 3) newLevel = 3;
-    // Level 3 also achievable via vouches alone (covers non-email-auth flows)
-    if (vouchCount >= 3) newLevel = Math.max(newLevel, 3) as 1 | 2 | 3;
-
-    if (newLevel !== user.verificationLevel) {
-      await updateDoc(doc(db, 'users', user.id), { verificationLevel: newLevel });
-      set({ currentUser: { ...user, verificationLevel: newLevel } });
-    }
-  },
+  }
 }));

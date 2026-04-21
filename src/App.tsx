@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { TagInput } from './components/TagInput';
 import { SharedJourneyTimeline } from './components/SharedJourneyTimeline';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -15,7 +15,6 @@ import { useNomadStore } from './store';
 import { calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, DestinationGuidance, Parent, CollabAsk, CollabCard, CollabEndorsement } from './types';
 import { format, parseISO } from 'date-fns';
 import { cn } from './lib/utils';
-import L from 'leaflet';
 import cities from './data/citiesSeed.json';
 import occupations from './data/occupationsSeed.json';
 import skillsSeed from './data/skillsSeed.json';
@@ -178,9 +177,8 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
 };
 
 const AdminDashboard = () => {
-  const { appSettings, updateAppSettings, profiles, deleteUser, updateUserRole, marketItems, removeMarketItem, spots, removeSpot, reports, resolveReport } = useNomadStore() as any;
+  const { appSettings, updateAppSettings, profiles, deleteUser, updateUserRole, marketItems, removeMarketItem, spots, removeSpot, reports } = useNomadStore() as any;
   const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'content' | 'reports'>('settings');
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-4 md:p-8 space-y-8 max-w-7xl mx-auto pb-32 md:pb-8">
@@ -479,44 +477,17 @@ const AdminDashboard = () => {
                         </div>
                         
                         <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
-                          <div>
-                            <p className="text-[10px] text-slate-400 font-medium">
-                              Reported on {new Date(report.createdAt).toLocaleDateString()}
-                            </p>
-                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">Target: {report.targetId?.substring(0, 12)}…</p>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            Reported on {new Date(report.createdAt).toLocaleDateString()}
+                          </p>
+                          <div className="flex gap-2">
+                            <button className="px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors">
+                              Dismiss
+                            </button>
+                            <button className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-colors">
+                              Take Action
+                            </button>
                           </div>
-                          {report.status === 'pending' ? (
-                            <div className="flex gap-2">
-                              <button
-                                disabled={resolvingId === report.id}
-                                onClick={async () => {
-                                  setResolvingId(report.id);
-                                  await resolveReport(report.id, 'dismiss');
-                                  setResolvingId(null);
-                                }}
-                                className="px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors disabled:opacity-40"
-                              >
-                                {resolvingId === report.id ? '…' : 'Dismiss'}
-                              </button>
-                              <button
-                                disabled={resolvingId === report.id}
-                                onClick={async () => {
-                                  const label = report.targetType === 'User' ? 'delete this user' : 'remove this content';
-                                  if (!confirm(`Are you sure you want to ${label}? This is irreversible.`)) return;
-                                  setResolvingId(report.id);
-                                  await resolveReport(report.id, 'remove');
-                                  setResolvingId(null);
-                                }}
-                                className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-colors disabled:opacity-40"
-                              >
-                                {resolvingId === report.id ? '…' : `Remove ${report.targetType}`}
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-[10px] font-black uppercase tracking-widest text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">
-                              {report.resolution === 'remove' ? 'Content Removed' : 'Dismissed'}
-                            </span>
-                          )}
                         </div>
                       </div>
                     ))}
@@ -718,100 +689,6 @@ const Modal = ({ isOpen, onClose, title, children, dark }: { isOpen: boolean, on
   </AnimatePresence>
 );
 
-// Fix Leaflet default icon paths broken by bundlers
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Medical: '#ef4444',
-  Workspace: '#3b82f6',
-  Playground: '#22c55e',
-  Accommodation: '#a855f7',
-};
-
-interface MapMarker {
-  lat: number;
-  lng: number;
-  label: string;
-  category?: string;
-}
-
-const LeafletMap: React.FC<{
-  markers: MapMarker[];
-  center?: { lat: number; lng: number };
-  zoom?: number;
-  className?: string;
-}> = ({ markers, center, zoom = 13, className }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const layerRef = useRef<L.LayerGroup | null>(null);
-
-  // Initialize map once
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-
-    const initialCenter: [number, number] = center
-      ? [center.lat, center.lng]
-      : markers.length > 0
-        ? [markers[0].lat, markers[0].lng]
-        : [13.7563, 100.5018];
-
-    const map = L.map(containerRef.current, {
-      center: initialCenter,
-      zoom,
-      zoomControl: true,
-      scrollWheelZoom: false,
-    });
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
-    }).addTo(map);
-
-    layerRef.current = L.layerGroup().addTo(map);
-    mapRef.current = map;
-
-    return () => {
-      map.remove();
-      mapRef.current = null;
-      layerRef.current = null;
-    };
-  }, []);
-
-  // Sync markers
-  useEffect(() => {
-    if (!mapRef.current || !layerRef.current) return;
-    layerRef.current.clearLayers();
-
-    markers.forEach(m => {
-      const color = CATEGORY_COLORS[m.category || ''] || '#E2725B';
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="background:${color};width:30px;height:30px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:white;"></div></div>`,
-        iconSize: [30, 30],
-        iconAnchor: [15, 15],
-        popupAnchor: [0, -18],
-      });
-      L.marker([m.lat, m.lng], { icon })
-        .addTo(layerRef.current!)
-        .bindPopup(`<strong style="font-size:13px">${m.label}</strong>${m.category ? `<br><span style="font-size:11px;color:#666">${m.category}</span>` : ''}`);
-    });
-
-    if (markers.length > 1) {
-      const bounds = L.latLngBounds(markers.map(m => [m.lat, m.lng] as [number, number]));
-      mapRef.current.fitBounds(bounds, { padding: [40, 40] });
-    } else if (markers.length === 1) {
-      mapRef.current.setView([markers[0].lat, markers[0].lng], zoom);
-    }
-  }, [markers, zoom]);
-
-  return <div ref={containerRef} className={cn('w-full rounded-3xl overflow-hidden border border-slate-100', className)} style={{ minHeight: 280 }} />;
-};
-
 const Badge: React.FC<{ name: string, size?: 'sm' | 'md' }> = ({ name, size = 'sm' }) => {
   const getBadgeInfo = (name: string) => {
     switch (name) {
@@ -821,7 +698,6 @@ const Badge: React.FC<{ name: string, size?: 'sm' | 'md' }> = ({ name, size = 's
       case 'Top Contributor': return { icon: <Star className="w-3 h-3" />, color: 'bg-purple-100 text-purple-600', label: 'Top Contributor' };
       case 'Trusted Member': return { icon: <ShieldCheck className="w-3 h-3" />, color: 'bg-accent/10 text-accent', label: 'Trusted' };
       case 'Tribe Pioneer': return { icon: <Award className="w-3 h-3" />, color: 'bg-emerald-100 text-emerald-600', label: 'Tribe Pioneer' };
-      case 'Email Verified': return { icon: <CheckCircle2 className="w-3 h-3" />, color: 'bg-sky-100 text-sky-600', label: 'Verified' };
       default: return { icon: <Shield className="w-3 h-3" />, color: 'bg-slate-100 text-slate-600', label: name };
     }
   };
@@ -2504,7 +2380,6 @@ const TribeNearbyView = ({ onPaywall, onViewAllDeals, onRecommendSpot, onViewAll
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
   const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '' });
   const [activeLocationIndex, setActiveLocationIndex] = useState(0);
-  const [showSpotMap, setShowSpotMap] = useState(false);
 
   useEffect(() => {
     if (collabMode) {
@@ -2870,41 +2745,13 @@ const TribeNearbyView = ({ onPaywall, onViewAllDeals, onRecommendSpot, onViewAll
       <section id="directory" className="space-y-4">
         <div className="flex justify-between items-end">
           <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Vetted Directory</h2>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowSpotMap(v => !v)}
-              className={cn(
-                "flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border transition-all",
-                showSpotMap
-                  ? (collabMode ? "bg-white/20 text-white border-white/30" : "bg-primary text-white border-primary")
-                  : (collabMode ? "bg-white/5 text-white/60 border-white/10" : "bg-white text-slate-500 border-slate-200")
-              )}
-            >
-              <MapIcon className="w-3 h-3" />
-              {showSpotMap ? 'List' : 'Map'}
-            </button>
-            <button
-              onClick={() => onRecommendSpot()}
-              className={cn("text-xs font-bold flex items-center gap-1", collabMode ? "text-white" : "text-primary")}
-            >
-              <Plus className="w-3 h-3" /> Add Spot
-            </button>
-          </div>
+          <button 
+            onClick={() => onRecommendSpot()}
+            className={cn("text-xs font-bold flex items-center gap-1", collabMode ? "text-white" : "text-primary")}
+          >
+            <Plus className="w-3 h-3" /> Recommend Spot
+          </button>
         </div>
-
-        {showSpotMap && (() => {
-          const mapSpots = spots.filter(spot => {
-            if (!collabMode) return true;
-            return spot.category === 'Workspace' || spot.category === 'Accommodation';
-          }).filter(s => s.coordinates?.lat && s.coordinates?.lng);
-          return (
-            <LeafletMap
-              markers={mapSpots.map(s => ({ lat: s.coordinates.lat, lng: s.coordinates.lng, label: s.name, category: s.category }))}
-              className="h-[340px] shadow-lg"
-            />
-          );
-        })()}
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {spots
             .filter(spot => {
@@ -3372,15 +3219,12 @@ const NotificationCenter = ({ isOpen, onClose, onOpenConnect }: { isOpen: boolea
 };
 
 const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificationCenterOpen, isNotificationCenterOpen, setIsConnectOpen, onSetLocation }: { onShare: () => void, onLogout: () => void, onAddTrip: () => void, onEditTrip: (trip: Trip) => void, setIsNotificationCenterOpen: (open: boolean) => void, isNotificationCenterOpen: boolean, setIsConnectOpen: (open: boolean) => void, onSetLocation: () => void }) => {
-  const { currentUser, trips, removeTrip, updateProfile, updateKids, reviews, marketItems, spots, destinations, notifications, addToast, collabMode, collabEndorsements, sendVerificationEmail, checkEmailVerified, calculateBadges } = useNomadStore() as any;
+  const { currentUser, trips, removeTrip, updateProfile, updateKids, reviews, marketItems, spots, destinations, notifications, addToast, collabMode, collabEndorsements } = useNomadStore();
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isEditTribeOpen, setIsEditTribeOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isEditCollabCardOpen, setIsEditCollabCardOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
-  const [checkingVerification, setCheckingVerification] = useState(false);
-  const isEmailVerified = auth.currentUser?.emailVerified ?? false;
   
   const [editProfile, setEditProfile] = useState<Partial<FamilyProfile>>({
     collabCard: { occupation: '', superpowers: [], currentMission: '', linkedInUrl: '' },
@@ -3449,10 +3293,6 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
     const hasParents = currentUser.parents && currentUser.parents.length > 0;
     const hasLanguages = currentUser.spokenLanguages && currentUser.spokenLanguages.length > 0;
     
-    if (!isEmailVerified) {
-      return { icon: <CheckCircle2 className="w-4 h-4" />, text: 'Verify your email to reach Level 2 + Verified badge', color: 'text-sky-400', bg: 'bg-sky-400/10' };
-    }
-
     if (!badges.includes('Profile Pro')) {
       const missing = [];
       if (!hasBio) missing.push('bio');
@@ -3462,12 +3302,7 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
       if (!hasLanguages) missing.push('languages');
       return { icon: <Award className="w-4 h-4" />, text: `Complete ${missing[0]} for Profile Pro`, color: 'text-green-400', bg: 'bg-green-400/10' };
     }
-
-    if (!badges.includes('Trusted Member')) {
-      const remaining = Math.max(0, 3 - (currentUser.vouchedBy?.length || 0));
-      if (remaining > 0) return { icon: <ShieldCheck className="w-4 h-4" />, text: `${remaining} more vouch${remaining > 1 ? 'es' : ''} → Level 3 + Trusted Member`, color: 'text-accent', bg: 'bg-accent/10' };
-    }
-
+    
     if (!badges.includes('Top Contributor') && userReviews.length < 5) {
       return { icon: <Star className="w-4 h-4" />, text: `${5 - userReviews.length} more reviews for Top Contributor`, color: 'text-purple-400', bg: 'bg-purple-400/10' };
     }
@@ -3481,65 +3316,13 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
     }
 
     return null;
-  }, [currentUser, reviews, marketItems, spots, isEmailVerified]);
+  }, [currentUser, reviews, marketItems, spots]);
 
   return (
     <div className={cn(
       "p-4 md:p-8 space-y-8 max-w-5xl mx-auto pb-24 md:pb-8 transition-colors duration-500 min-h-full",
       collabMode ? "bg-[#006d77] text-white" : "text-secondary"
     )}>
-
-      {/* Email Verification Banner */}
-      {!isEmailVerified && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-sky-50 border border-sky-200 rounded-2xl">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center text-sky-500 shrink-0">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-sky-800">Verify your email to unlock Level 2</p>
-              <p className="text-xs text-sky-600">Get the <strong>Verified</strong> badge and level up your profile.</p>
-            </div>
-          </div>
-          <div className="flex gap-2 shrink-0">
-            {!emailSent ? (
-              <button
-                onClick={async () => {
-                  try {
-                    await sendVerificationEmail();
-                    setEmailSent(true);
-                    addToast('Verification email sent! Check your inbox.', 'success');
-                  } catch {
-                    addToast('Could not send email. Try again later.', 'error');
-                  }
-                }}
-                className="px-3 py-1.5 bg-sky-500 text-white rounded-xl text-xs font-bold hover:bg-sky-600 transition-colors"
-              >
-                Send Email
-              </button>
-            ) : (
-              <button
-                disabled={checkingVerification}
-                onClick={async () => {
-                  setCheckingVerification(true);
-                  const verified = await checkEmailVerified();
-                  setCheckingVerification(false);
-                  if (verified) {
-                    addToast('Email verified! You\'re now Level 2 🎉', 'success');
-                    await calculateBadges();
-                  } else {
-                    addToast('Not verified yet. Check your inbox and try again.', 'info');
-                  }
-                }}
-                className="px-3 py-1.5 bg-sky-100 text-sky-700 rounded-xl text-xs font-bold hover:bg-sky-200 transition-colors disabled:opacity-50"
-              >
-                {checkingVerification ? 'Checking…' : "I've Verified"}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       <header className="flex flex-col md:flex-row items-center gap-8 text-center md:text-left relative">
         <div className="w-32 h-32 rounded-[3rem] bg-slate-100 overflow-hidden border-4 border-white shadow-xl relative">
           <img 
@@ -3568,21 +3351,10 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                 )}
                 
                 {/* Verification Level Label */}
-                {(() => {
-                  const lvl = currentUser.verificationLevel ?? 1;
-                  const configs = {
-                    1: { bg: 'bg-slate-100', text: 'text-slate-500', border: 'border-slate-200', label: 'Level 1' },
-                    2: { bg: 'bg-sky-100', text: 'text-sky-700', border: 'border-sky-200', label: 'Level 2 · Verified' },
-                    3: { bg: 'bg-accent/10', text: 'text-accent', border: 'border-accent/20', label: 'Level 3 · Trusted' },
-                  };
-                  const cfg = configs[lvl as 1 | 2 | 3];
-                  return (
-                    <div className={cn("flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border", cfg.bg, cfg.text, cfg.border)}>
-                      <ShieldCheck className="w-3 h-3" />
-                      {cfg.label}
-                    </div>
-                  );
-                })()}
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-green-200">
+                  <ShieldCheck className="w-3 h-3" />
+                  LVL {currentUser.verificationLevel}
+                </div>
                 
                 {/* Professional Endorsements (Collab Mode specific) */}
                 {collabMode && (
@@ -5293,12 +5065,11 @@ export default function App() {
     currentUser, 
     init, 
     isAuthReady, 
-    requestConnection,
-    connections,
-    conversations,
-    acceptConnection,
-    addTrip,
-    updateTrip,
+    requestConnection, 
+    connections, 
+    acceptConnection, 
+    addTrip, 
+    updateTrip, 
     calculateBadges,
     notifications,
     collabMode,
@@ -5355,14 +5126,8 @@ export default function App() {
 
   useEffect(() => {
     init();
+    calculateBadges();
   }, []);
-
-  // Run badge + level recalculation once the user and auth are ready
-  useEffect(() => {
-    if (isAuthReady && currentUser) {
-      calculateBadges();
-    }
-  }, [isAuthReady, currentUser?.id]);
 
   useEffect(() => {
     if (isAuthReady && currentUser && (!currentUser.familyName || currentUser.familyName === 'New Nomad Family')) {
@@ -5401,7 +5166,9 @@ export default function App() {
       setIsLoggingIn(false);
       console.error("Login Error Details:", error);
 
-      if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+      if (error.code === 'auth/operation-not-allowed') {
+        addToast(`Deze inlogmethode (${provider}) is nog niet ingeschakeld in de Firebase Console. Ga naar 'Authentication' > 'Sign-in method' en schakel ${provider} in.`, "error");
+      } else if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
         if (isMobile || isIframe) {
           try {
             addToast("Popup geblokkeerd. We proberen het nu via een redirect...", "info");
@@ -5515,6 +5282,9 @@ export default function App() {
               Facebook
             </button>
           </div>
+          <p className="text-[9px] text-slate-400 mt-4 px-6 text-center leading-tight">
+            Let op: Facebook & Apple login vereisen handmatige configuratie van App ID's in de Firebase Console.
+          </p>
         </div>
 
           <div className="flex flex-col gap-3">
@@ -6103,7 +5873,7 @@ export default function App() {
       </Modal>
 
       {/* Floating Connect Widget */}
-      <div className="fixed bottom-[env(safe-area-inset-bottom,0px)] right-0 pb-6 pr-6 z-[120] flex flex-col items-end gap-4 pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-[120] flex flex-col items-end gap-4 pointer-events-none">
         <AnimatePresence>
           {isConnectOpen && (
             <motion.div 
@@ -6111,8 +5881,7 @@ export default function App() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className={cn(
-                "w-[90vw] md:w-[420px] rounded-[2.5rem] shadow-2xl border flex flex-col overflow-hidden pointer-events-auto",
-                "h-[calc(100dvh-9rem)] max-h-[800px] min-h-[400px]",
+                "w-[90vw] md:w-[420px] h-[75vh] max-h-[800px] rounded-[2.5rem] shadow-2xl border flex flex-col overflow-hidden pointer-events-auto",
                 collabMode ? "bg-[#004d55] border-white/10" : "bg-white border-slate-100"
               )}
             >
