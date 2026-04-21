@@ -1,0 +1,7 @@
+{
+  "name": "NomadTribe",
+  "description": "A social utility app for full-time traveling families to find community, plan overlaps, and discover vetted family-friendly spots.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

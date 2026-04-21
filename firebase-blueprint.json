@@ -1,0 +1,192 @@
+{
+  "entities": {
+    "FamilyProfile": {
+      "title": "Family Profile",
+      "description": "A profile for a nomadic family",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyName": { "type": "string" },
+        "bio": { "type": "string" },
+        "travelReason": { "type": "string" },
+        "nativeLanguage": { "type": "string" },
+        "spokenLanguages": { "type": "array", "items": { "type": "string" } },
+        "isPremium": { "type": "boolean" },
+        "verificationLevel": { "type": "number" },
+        "vouchedBy": { "type": "array", "items": { "type": "string" } },
+        "badges": { "type": "array", "items": { "type": "string" } },
+        "askUsAbout": { "type": "string" }
+      },
+      "required": ["id", "familyName", "nativeLanguage"]
+    },
+    "Trip": {
+      "title": "Trip",
+      "description": "A planned trip for a family",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "location": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "familyId", "location", "startDate", "endDate"]
+    },
+    "MarketItem": {
+      "title": "Marketplace Item",
+      "description": "An item for sale or trade in the marketplace",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "title": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["Available", "Reserved", "Sold"] },
+        "reservedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "sellerId", "title", "price", "status", "createdAt"]
+    },
+    "LookingForRequest": {
+      "title": "Looking For Request",
+      "description": "A community request for help, playdates, or gear",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "familyName": { "type": "string" },
+        "location": { "type": "string" },
+        "category": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "familyName", "title", "createdAt"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "A conversation between families",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participantIds": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "relatedItemId": { "type": "string" }
+      },
+      "required": ["id", "participantIds"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single message in a chat",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "senderId", "text", "createdAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "A report against a user or item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "targetId": { "type": "string" },
+        "targetType": { "type": "string", "enum": ["User", "MarketItem", "Spot"] },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "reporterId", "targetId", "targetType", "reason", "createdAt"]
+    },
+    "Spot": {
+      "title": "Spot",
+      "description": "A family-friendly spot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string", "enum": ["Medical", "Workspace", "Playground", "Accommodation"] },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "rating": { "type": "number" },
+        "recommendedBy": { "type": "string" }
+      },
+      "required": ["id", "name", "category", "description"]
+    },
+    "CollabAsk": {
+      "title": "Collaboration Ask",
+      "description": "A request for professional collaboration or help",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "skillNeeded": { "type": "string" },
+        "description": { "type": "string" },
+        "locationSlug": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "skillNeeded", "description", "locationSlug", "createdAt"]
+    },
+    "CollabEndorsement": {
+      "title": "Professional Endorsement",
+      "description": "A professional vouch/endorsement for a skill",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "targetUserId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "skill": { "type": "string" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "targetUserId", "authorId", "skill", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "FamilyProfile",
+      "description": "Private user profiles"
+    },
+    "/trips/{tripId}": {
+      "schema": "Trip",
+      "description": "Public trip plans"
+    },
+    "/marketplace/{itemId}": {
+      "schema": "MarketItem",
+      "description": "Marketplace listings"
+    },
+    "/lookingFor/{requestId}": {
+      "schema": "LookingForRequest",
+      "description": "Community requests"
+    },
+    "/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Chat metadata"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a chat"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Community reports for moderation"
+    },
+    "/spots/{spotId}": {
+      "schema": "Spot",
+      "description": "Vetted community spots"
+    },
+    "/collabAsks/{askId}": {
+      "schema": "CollabAsk",
+      "description": "Professional collaboration requests"
+    },
+    "/collabEndorsements/{endorsementId}": {
+      "schema": "CollabEndorsement",
+      "description": "Professional endorsements for skills"
+    }
+  }
+}
