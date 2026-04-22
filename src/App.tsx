@@ -2108,28 +2108,16 @@ const CollabOpportunitySummary = ({ onUpgrade, stats }: { onUpgrade: () => void,
 };
 
 const ConnectView = ({ onPaywall }: { onPaywall: () => void }) => {
-  const { currentUser, profiles, conversations, messages, sendMessage, subscribeToMessages, connections, acceptConnection, cancelConnection, addToast, trips, collabMode } = useNomadStore();
+  const { currentUser, profiles, conversations, messages, sendMessage, subscribeToMessages, connections, acceptConnection, trips, collabMode } = useNomadStore();
   const [activeConvoId, setActiveConvoId] = useState<string | null>(null);
   const [messageText, setMessageText] = useState('');
   const [localCollabTab, setLocalCollabTab] = useState<'tribe' | 'collab'>(collabMode ? 'collab' : 'tribe');
   const [searchQuery, setSearchQuery] = useState('');
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const prevPendingCountRef = useRef(0);
 
   useEffect(() => {
     setLocalCollabTab(collabMode ? 'collab' : 'tribe');
   }, [collabMode]);
-
-  // Toast when a new incoming connection request arrives
-  useEffect(() => {
-    const incoming = connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending');
-    if (incoming.length > prevPendingCountRef.current) {
-      const newest = incoming[incoming.length - 1];
-      const requester = profiles.find(p => p.id === newest?.requesterId);
-      addToast(`${requester?.familyName || 'Iemand'} wil connecten! Open de chat om te accepteren.`, 'info');
-    }
-    prevPendingCountRef.current = incoming.length;
-  }, [connections, currentUser?.id]);
 
   useEffect(() => {
     if (activeConvoId) {
@@ -2238,67 +2226,23 @@ const ConnectView = ({ onPaywall }: { onPaywall: () => void }) => {
                   <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Nieuwe Verzoeken</h2>
                   {pendingConnections.map(conn => {
                     const family = profiles.find(p => p.id === conn.requesterId);
+                    if (!family) return null;
                     return (
                       <div key={conn.id} className="bg-primary/5 p-4 rounded-2xl border border-primary/10 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
-                            <img
-                              src={family?.photoUrl || `https://picsum.photos/seed/${conn.requesterId}/100/100`}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
+                          <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden">
+                            <img src={family.photoUrl || `https://picsum.photos/seed/${family.id}/100/100`} alt="" />
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-secondary">{family?.familyName || 'Tribe Member'}</p>
-                            <p className="text-[10px] text-primary font-black uppercase">Wil connecten</p>
+                            <p className="text-sm font-bold text-secondary">{family.familyName}</p>
+                            <p className="text-[10px] text-primary font-black uppercase">Verzoek</p>
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => acceptConnection(conn.id)}
-                            className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
-                          >
-                            Accepteer
-                          </button>
-                          <button
-                            onClick={() => cancelConnection(conn.id)}
-                            className="bg-slate-100 text-slate-500 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors"
-                            title="Weigeren"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {sentRequests.length > 0 && (
-                <div className="p-4 space-y-3">
-                  <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Verstuurd</h2>
-                  {sentRequests.map(conn => {
-                    const family = profiles.find(p => p.id === conn.recipientId);
-                    return (
-                      <div key={conn.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
-                            <img
-                              src={family?.photoUrl || `https://picsum.photos/seed/${conn.recipientId}/100/100`}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-secondary">{family?.familyName || 'Tribe Member'}</p>
-                            <p className="text-[10px] text-slate-400 font-black uppercase">Wacht op reactie…</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => cancelConnection(conn.id)}
-                          className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                        <button 
+                          onClick={() => acceptConnection(conn.id)}
+                          className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
                         >
-                          Intrekken
+                          Accepteer
                         </button>
                       </div>
                     );
@@ -2312,11 +2256,7 @@ const ConnectView = ({ onPaywall }: { onPaywall: () => void }) => {
                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-300">
                       <MessageSquare className="w-8 h-8" />
                     </div>
-                    {pendingConnections.length > 0 || sentRequests.length > 0 ? (
-                      <p className="text-slate-400 text-sm font-medium">Zodra een verzoek geaccepteerd is, start hier het gesprek.</p>
-                    ) : (
-                      <p className="text-slate-400 text-sm font-medium">Nog geen gesprekken. Stuur een "Say Hello" naar een familie!</p>
-                    )}
+                    <p className="text-slate-400 text-sm font-medium">Nog geen gesprekken. Maak contact met families!</p>
                   </div>
                 ) : filteredConversations.map((convo) => {
                   const conn = connections.find(c => c.id === convo.connectionId);
