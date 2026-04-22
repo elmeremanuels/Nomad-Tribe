@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { FamilyProfile, Trip, Spot, MarketItem, PopUpEvent, LookingForRequest, Kid, Connection, Conversation, Message, Activity, DestinationGuidance, SpotReview, AppSettings, AppNotification, CollabAsk, CollabCard, CollabEndorsement } from './types';
+import { FamilyProfile, Trip, Spot, MarketItem, PopUpEvent, LookingForRequest, Kid, Connection, Conversation, Message, Activity, DestinationGuidance, SpotReview, AppSettings, AppNotification, CollabAsk, CollabCard, CollabEndorsement, Report, BlockedUser, AdminAlert } from './types';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { 
   collection, 
@@ -15,7 +15,7 @@ import {
   serverTimestamp,
   orderBy
 } from 'firebase/firestore';
-import { onAuthStateChanged, getRedirectResult, User as FirebaseUser, setPersistence, browserSessionPersistence } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult, User as FirebaseUser, setPersistence, browserSessionPersistence, signOut } from 'firebase/auth';
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; // km
@@ -47,7 +47,8 @@ interface NomadStore {
   conversations: Conversation[];
   messages: Record<string, Message[]>;
   appSettings: AppSettings;
-  reports: any[];
+  reports: Report[];
+  blocks: BlockedUser[];
   notifications: AppNotification[];
   isAuthReady: boolean;
   collabMode: boolean;
@@ -82,9 +83,11 @@ interface NomadStore {
   requestConnection: (targetId: string) => Promise<void>;
   acceptConnection: (connectionId: string) => Promise<void>;
   cancelConnection: (connectionId: string) => Promise<void>;
+  blockUser: (targetUserId: string) => Promise<void>;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   subscribeToMessages: (conversationId: string) => () => void;
-  reportContent: (targetId: string, targetType: 'User' | 'MarketItem' | 'Spot', reason: string) => Promise<void>;
+  submitReport: (report: Omit<Report, 'id' | 'createdAt' | 'status'>) => Promise<void>;
+  reportContent: (targetId: string, targetType: 'User' | 'MarketItem' | 'Spot' | 'Message', reason: string) => Promise<void>;
   vote: (type: 'lookingFor' | 'marketplace' | 'spots', id: string, direction: 'up' | 'down') => Promise<void>;
   addSpot: (spot: Spot) => Promise<void>;
   removeSpot: (spotId: string) => Promise<void>;
@@ -107,6 +110,10 @@ interface NomadStore {
   updateAppSettings: (settings: Partial<AppSettings>) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   updateUserRole: (userId: string, role: FamilyProfile['role']) => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  moderateReport: (reportId: string, status: Report['status'], action?: string) => Promise<void>;
+  moderateUser: (userId: string, updates: Partial<FamilyProfile>) => Promise<void>;
+  completeOnboarding: (profileData: Partial<FamilyProfile>, trips: Trip[]) => Promise<void>;
 }
 
 export const useNomadStore = create<NomadStore>((set, get) => ({
@@ -132,6 +139,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     featuredDestinations: ['d1']
   },
   reports: [],
+  blocks: [],
   isAuthReady: false,
   collabMode: false,
   activeTab: 'tribe',
@@ -185,8 +193,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         }
       });
 
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
+    onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
         // Fetch app settings
         onSnapshot(doc(db, 'settings', 'global'), (doc) => {
           if (doc.exists()) {
@@ -195,10 +203,18 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         });
 
         // Fetch user profile with real-time updates
-        onSnapshot(doc(db, 'users', user.uid), async (snapshot) => {
+        onSnapshot(doc(db, 'users', firebaseUser.uid), async (snapshot) => {
           if (snapshot.exists()) {
             const data = snapshot.data() as FamilyProfile;
             
+            // Check for ban
+            if (data.isBanned) {
+              get().addToast("Your account has been suspended for violating our Community Guidelines.", "error");
+              await signOut(auth);
+              set({ currentUser: null, isAuthReady: true });
+              return;
+            }
+
             // Ensure all fields exist (migration/defensive)
             const updatedData: FamilyProfile = {
               ...data,
@@ -228,21 +244,28 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
             };
 
             // Ensure e.emanuels@gmail.com is SuperAdmin
-            if (user.email?.toLowerCase() === 'e.emanuels@gmail.com' && updatedData.role !== 'SuperAdmin') {
-              await setDoc(doc(db, 'users', user.uid), { role: 'SuperAdmin' }, { merge: true });
+            if (firebaseUser.email?.toLowerCase() === 'e.emanuels@gmail.com' && updatedData.role !== 'SuperAdmin') {
+              await setDoc(doc(db, 'users', firebaseUser.uid), { role: 'SuperAdmin' }, { merge: true });
               updatedData.role = 'SuperAdmin';
             }
             set({ currentUser: updatedData, isAuthReady: true });
+            
+            // Admin only listeners
+            if (updatedData.role === 'SuperAdmin') {
+              onSnapshot(collection(db, 'reports'), (snapshot) => {
+                set({ reports: snapshot.docs.map(d => d.data() as Report) });
+              });
+            }
           } else {
             // Create default profile if not exists
             const newProfile: FamilyProfile = {
-              id: user.uid,
-              familyName: user.displayName || 'New Nomad Family',
+              id: firebaseUser.uid,
+              familyName: '',
               bio: '',
               travelReason: '',
               nativeLanguage: 'English',
               spokenLanguages: ['English'],
-              parents: [{ id: `p-${Date.now()}`, name: user.displayName?.split(' ')[0] || 'Parent', role: 'Parent', interests: [] }],
+              parents: [{ id: `p-${Date.now()}`, name: firebaseUser.displayName?.split(' ')[0] || 'Parent', role: 'Parent', interests: [] }],
               kids: [],
               isPremium: false,
               premiumType: 'NONE',
@@ -250,7 +273,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               vouchedBy: [],
               badges: [],
               gamification: { hasClaimedPioneerBonus: false, totalSpotsAdded: 0 },
-              role: user.email === 'e.emanuels@gmail.com' ? 'SuperAdmin' : 'User',
+              role: firebaseUser.email === 'e.emanuels@gmail.com' ? 'SuperAdmin' : 'User',
               collabCard: { occupation: '', superpowers: [], currentMission: '', linkedInUrl: '' },
               openToCollabs: false,
               privacySettings: { isIncognito: false },
@@ -264,17 +287,21 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
                 }
               }
             };
-            await setDoc(doc(db, 'users', user.uid), newProfile);
+            await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
             set({ currentUser: newProfile, isAuthReady: true });
           }
-        }, (err) => handleFirestoreError(err, OperationType.GET, `users/${user.uid}`));
+        }, (err) => handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`));
 
         // Real-time listeners
+        onSnapshot(query(collection(db, 'blocks'), where('blockerId', '==', firebaseUser.uid)), (snapshot) => {
+          set({ blocks: snapshot.docs.map(d => d.data() as BlockedUser) });
+        });
+
         onSnapshot(collection(db, 'destinations'), (snapshot) => {
           set({ destinations: snapshot.docs.map(d => d.data() as DestinationGuidance) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'destinations'));
 
-        onSnapshot(query(collection(db, 'notifications'), where('userId', '==', user.uid)), (snapshot) => {
+        onSnapshot(query(collection(db, 'notifications'), where('userId', '==', firebaseUser.uid)), (snapshot) => {
           set({ notifications: snapshot.docs.map(d => d.data() as AppNotification) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'notifications'));
 
@@ -309,19 +336,19 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabEndorsements'));
 
         // Only admins can see reports
-        if (user.email?.toLowerCase() === 'e.emanuels@gmail.com') {
+        if (firebaseUser.email?.toLowerCase() === 'e.emanuels@gmail.com') {
           onSnapshot(collection(db, 'reports'), (snapshot) => {
-            set({ reports: snapshot.docs.map(d => d.data()) });
+            set({ reports: snapshot.docs.map(d => d.data() as Report) });
           }, (err) => handleFirestoreError(err, OperationType.LIST, 'reports'));
         }
 
         // Connections: Use array-contains for participantIds
-        onSnapshot(query(collection(db, 'connections'), where('participantIds', 'array-contains', user.uid)), (snapshot) => {
+        onSnapshot(query(collection(db, 'connections'), where('participantIds', 'array-contains', firebaseUser.uid)), (snapshot) => {
           set({ connections: snapshot.docs.map(d => d.data() as Connection) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'connections'));
 
         // Conversations: Use array-contains for participantIds
-        onSnapshot(query(collection(db, 'conversations'), where('participantIds', 'array-contains', user.uid)), (snapshot) => {
+        onSnapshot(query(collection(db, 'conversations'), where('participantIds', 'array-contains', firebaseUser.uid)), (snapshot) => {
           set({ conversations: snapshot.docs.map(d => d.data() as Conversation) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'conversations'));
 
@@ -826,8 +853,15 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   },
 
   subscribeToMessages: (conversationId) => {
+    const user = get().currentUser;
+    if (!user) return () => {};
     return onSnapshot(
-      query(collection(db, 'messages'), where('conversationId', '==', conversationId), orderBy('createdAt', 'asc')),
+      query(
+        collection(db, 'messages'), 
+        where('conversationId', '==', conversationId), 
+        where('participantIds', 'array-contains', user.id),
+        orderBy('createdAt', 'asc')
+      ),
       (snapshot) => {
         const msgs = snapshot.docs.map(d => d.data() as Message);
         set((state) => ({
@@ -1002,24 +1036,62 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     }
   },
 
+  blockUser: async (targetUserId) => {
+    const user = get().currentUser;
+    if (!user) return;
+    const blockId = `block_${user.id}_${targetUserId}`;
+    try {
+      await setDoc(doc(db, 'blocks', blockId), {
+        id: blockId,
+        blockerId: user.id,
+        blockedId: targetUserId,
+        createdAt: new Date().toISOString()
+      });
+      get().addToast("User blocked. They will no longer appear in your radar.", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'blocks');
+    }
+  },
+
+  submitReport: async (reportData) => {
+    const user = get().currentUser;
+    if (!user) return;
+    const reportId = `rep_${Date.now()}`;
+    const report: Report = {
+      ...reportData,
+      id: reportId,
+      createdAt: new Date().toISOString(),
+      status: 'Pending'
+    };
+    try {
+      await setDoc(doc(db, 'reports', reportId), report);
+      
+      // Create admin alert
+      const alertId = `alert_${Date.now()}`;
+      await setDoc(doc(db, 'adminAlerts', alertId), {
+        id: alertId,
+        type: report.category === 'IllegalContent' ? 'CRITICAL' : 'STANDARD',
+        reportId,
+        createdAt: new Date().toISOString(),
+        isRead: false
+      });
+
+      get().addToast("Report submitted. We'll review it within 48 hours.", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'reports');
+    }
+  },
+
   reportContent: async (targetId, targetType, reason) => {
     const user = get().currentUser;
     if (!user) return;
-
-    const reportId = `rep-${Date.now()}`;
-    try {
-      await setDoc(doc(db, 'reports', reportId), {
-        id: reportId,
-        reporterId: user.id,
-        targetId,
-        targetType,
-        reason,
-        status: 'pending',
-        createdAt: new Date().toISOString()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'reports');
-    }
+    await get().submitReport({
+      reporterId: user.id,
+      targetId,
+      targetType,
+      category: reason as any, // mapping simple reason to category for backward compat
+      description: `Quick report: ${reason}`
+    });
   },
 
   updateAppSettings: async (settings) => {
@@ -1041,6 +1113,134 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   updateUserRole: async (userId, role) => {
     try {
       await updateDoc(doc(db, 'users', userId), { role });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+    }
+  },
+
+  completeOnboarding: async (profileData, onboardingTrips) => {
+    const user = get().currentUser;
+    if (!user) return;
+
+    try {
+      // 1. Update Profile
+      const premiumUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const updatedProfile: Partial<FamilyProfile> = {
+        ...profileData,
+        isPremium: true,
+        premiumType: 'TRIAL',
+        premiumUntil,
+        verificationLevel: 1,
+        role: 'User',
+        badges: [],
+        vouchedBy: [],
+        gamification: { hasClaimedPioneerBonus: false, totalSpotsAdded: 0 },
+        privacySettings: { isIncognito: false },
+        preferences: {
+          language: (profileData.nativeLanguage as any) || 'EN',
+          showNextLocationSuggestions: true,
+          privacy: { 
+            showBioToNonConnects: true, 
+            showKidsToNonConnects: true, 
+            showTripsToNonConnects: true 
+          }
+        }
+      };
+
+      await setDoc(doc(db, 'users', user.id), updatedProfile, { merge: true });
+
+      // 2. Add Trips
+      for (const trip of onboardingTrips) {
+        await get().addTrip(trip);
+      }
+
+      // Update local state
+      set({ 
+        currentUser: { ...user, ...updatedProfile } as FamilyProfile,
+        activeTab: 'tribe'
+      });
+      
+      get().addToast("Welkom bij the Tribe! Je 30-daagse trial is geactiveerd.", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.id}`);
+      throw err;
+    }
+  },
+
+  deleteAccount: async () => {
+    const user = get().currentUser;
+    const firebaseUser = auth.currentUser;
+    if (!user || !firebaseUser) return;
+
+    try {
+      // 1. Save email for trial abuse prevention (45 days)
+      await setDoc(doc(db, 'deletedAccounts', user.id), {
+        email: firebaseUser.email,
+        deletedAt: new Date().toISOString(),
+        trialUsed: user.premiumType !== 'NONE'
+      });
+
+      // 2. Delete data (Sequential for safety in this env, normally would use server-side triggers or batched writes)
+      const deletePromises = [
+        deleteDoc(doc(db, 'users', user.id))
+      ];
+
+      // Clean up trips
+      get().trips.filter(t => t.familyId === user.id).forEach(t => {
+        deletePromises.push(deleteDoc(doc(db, 'trips', t.id)));
+      });
+
+      // Clean up marketplace
+      get().marketItems.filter(m => m.sellerId === user.id).forEach(m => {
+        deletePromises.push(deleteDoc(doc(db, 'marketplace', m.id)));
+      });
+
+      // Clean up reviews
+      get().reviews.filter(r => r.authorId === user.id).forEach(r => {
+        deletePromises.push(deleteDoc(doc(db, 'reviews', r.id)));
+      });
+
+      // Clean up activities
+      get().activities.filter(a => a.userId === user.id).forEach(a => {
+        deletePromises.push(deleteDoc(doc(db, 'activities', a.id)));
+      });
+
+      // Clean up notifications
+      get().notifications.filter(n => n.userId === user.id).forEach(n => {
+        deletePromises.push(deleteDoc(doc(db, 'notifications', n.id)));
+      });
+
+      await Promise.all(deletePromises);
+
+      // 3. Delete Auth account
+      await firebaseUser.delete();
+
+      // 4. Clear local state
+      set({ currentUser: null });
+      get().addToast("Account successfully deleted.", "info");
+    } catch (err) {
+      console.error("Scale-out deletion failed:", err);
+      get().addToast("Partial account deletion occurred. Please contact support.", "error");
+    }
+  },
+
+  moderateReport: async (reportId, status, action) => {
+    try {
+      await updateDoc(doc(db, 'reports', reportId), { 
+        status, 
+        action, 
+        resolvedAt: new Date().toISOString() 
+      });
+      get().addToast("Report updated.", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `reports/${reportId}`);
+    }
+  },
+
+  moderateUser: async (userId, updates) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), updates);
+      get().addToast("User moderation applied.", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
     }

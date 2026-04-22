@@ -12,7 +12,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SuperAdmin' ||
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SuperAdmin') ||
          (request.auth.token.email.lower() == "e.emanuels@gmail.com" && request.auth.token.email_verified == true));
     }
 
@@ -156,6 +156,26 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.authorId == request.auth.uid);
+    }
+
+    match /blocks/{blockId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.blockerId || isAdmin());
+      allow create: if isAuthenticated() && (request.auth.uid == request.resource.data.blockerId);
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.blockerId || isAdmin());
+    }
+
+    match /adminAlerts/{alertId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /deletedAccounts/{userId} {
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

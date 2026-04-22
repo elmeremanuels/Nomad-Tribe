@@ -34,6 +34,8 @@ export interface LookingForRequest {
   userId: string;
   familyName: string;
   location: string;
+  lat?: number;
+  lng?: number;
   category: 'Help' | 'Playdate' | 'Gear' | 'Advice' | 'Work';
   title: string;
   description: string;
@@ -138,6 +140,47 @@ export interface FamilyProfile {
       showTripsToNonConnects: boolean;
     };
   };
+  // Safety & Moderation
+  ugcPrivilegesRevoked?: boolean;
+  warnings?: { reason: string; issuedAt: string; issuedBy: string }[];
+  coolDownUntil?: string;       // ISO string, gebruiker is beperkt tot deze datum
+  isBanned?: boolean;
+}
+
+export interface Report {
+  id: string;
+  reporterId: string;
+  targetId: string;
+  targetType: 'User' | 'Message' | 'Spot' | 'MarketItem' | 'CollabAsk';
+  category: 'Harassment' | 'Spam' | 'IllegalContent' | 'FakeProfile' | 'DangerousLocation';
+  description?: string;
+  status: 'Pending' | 'Reviewed' | 'Resolved' | 'Dismissed';
+  createdAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  action?: string;
+}
+
+export interface BlockedUser {
+  id: string;
+  blockerId: string;
+  blockedId: string;
+  createdAt: string;
+}
+
+export interface DeletedAccount {
+  email: string;
+  deletedAt: string;
+  trialUsed: boolean;
+  // Auto-verwijderd na 45 dagen via Cloud Function
+}
+
+export interface AdminAlert {
+  id: string;
+  type: 'CRITICAL' | 'STANDARD' | 'UGC';
+  reportId: string;
+  createdAt: string;
+  isRead: boolean;
 }
 
 export interface City {

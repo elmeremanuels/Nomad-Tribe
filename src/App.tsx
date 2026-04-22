@@ -3,21 +3,111 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { OnboardingFlow } from './components/OnboardingFlow';
 import { TagInput } from './components/TagInput';
 import { SharedJourneyTimeline } from './components/SharedJourneyTimeline';
+import { LocationSelector } from './components/LocationSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import { standardizeInterest } from './lib/interestUtils';
-import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, Home } from 'lucide-react';
+import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, Home } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNomadStore } from './store';
-import { calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, DestinationGuidance, Parent, CollabAsk, CollabCard, CollabEndorsement } from './types';
+import { containsBlockedContent, cleanContent } from './lib/contentFilter';
+import { calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, DestinationGuidance, Parent, CollabAsk, CollabCard, CollabEndorsement, Report } from './types';
 import { format, parseISO } from 'date-fns';
 import { cn } from './lib/utils';
 import cities from './data/citiesSeed.json';
 import occupations from './data/occupationsSeed.json';
 import skillsSeed from './data/skillsSeed.json';
+
+const ReportModal = ({ isOpen, onClose, target }: { isOpen: boolean, onClose: () => void, target: { id: string, type: Report['targetType'] } | null }) => {
+  const { submitReport, currentUser } = useNomadStore();
+  const [category, setCategory] = useState<Report['category']>('Harassment');
+  const [description, setDescription] = useState('');
+  const [step, setStep] = useState(1);
+
+  if (!target || !currentUser) return null;
+
+  const categories: { id: Report['category'], label: string, icon: string }[] = [
+    { id: 'Harassment', label: 'Harassment or bullying', icon: '🚨' },
+    { id: 'Spam', label: 'Spam or unsolicited promotion', icon: '🚫' },
+    { id: 'IllegalContent', label: 'Illegal content or CSAM', icon: '⚠️' },
+    { id: 'FakeProfile', label: 'Fake profile', icon: '👤' },
+    { id: 'DangerousLocation', label: 'Dangerous or false location', icon: '📍' },
+  ];
+
+  const handleSubmit = async () => {
+    await submitReport({
+      reporterId: currentUser.id,
+      targetId: target.id,
+      targetType: target.type,
+      category,
+      description
+    });
+    onClose();
+    setStep(1);
+    setDescription('');
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Report Content">
+      <div className="space-y-6">
+        {step === 1 ? (
+          <>
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500 font-medium">Why are you reporting this?</p>
+              <div className="space-y-2">
+                {categories.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setCategory(cat.id)}
+                    className={cn(
+                      "w-full p-4 rounded-2xl border-2 transition-all flex items-center gap-3",
+                      category === cat.id ? "border-primary bg-primary/5 text-primary" : "border-slate-100 text-slate-600 hover:border-slate-200"
+                    )}
+                  >
+                    <span className="text-xl">{cat.icon}</span>
+                    <span className="font-bold text-sm">{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button 
+              onClick={() => setStep(2)}
+              className="w-full py-4 bg-primary text-white rounded-2xl font-black shadow-lg"
+            >
+              Continue
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Additional Details (Optional)</label>
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value.slice(0, 300))}
+                placeholder="Please describe the issue..."
+                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all font-medium min-h-[120px]"
+              />
+              <p className="text-right text-[10px] font-bold text-slate-400">{description.length}/300</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setStep(1)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold">Back</button>
+              <button 
+                onClick={handleSubmit}
+                className="flex-2 py-4 bg-red-500 text-white rounded-2xl font-black shadow-lg shadow-red-500/20"
+              >
+                Submit Report
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+};
 
 const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
   const { currentUser, updatePreferences, updateProfile } = useNomadStore();
@@ -99,6 +189,9 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
             <MapIcon className="w-5 h-5" />
             <h3 className="font-bold">Journey Suggestions</h3>
           </div>
+          <p className="text-[10px] leading-relaxed text-slate-400 font-medium bg-slate-50 p-3 rounded-xl border border-slate-100 italic">
+            "Your location is only used to show nearby families and destinations. Ghost Mode hides you completely from all radars. You can turn this on or off at any time."
+          </p>
           <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
             <div>
               <p className="text-sm font-bold text-secondary">Next Location Suggestions</p>
@@ -171,14 +264,54 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
             </button>
           </div>
         </div>
+
+        {/* Account Actions */}
+        <div className="pt-6 border-t border-slate-100 space-y-4">
+          <button 
+            onClick={async () => {
+               await useNomadStore.getState().addToast("Logging out...", "info");
+               const { signOut } = await import('firebase/auth');
+               const { auth } = await import('./firebase');
+               await signOut(auth);
+               onClose();
+            }}
+            className="w-full flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 text-slate-600 font-bold hover:bg-slate-100 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            Log Out
+          </button>
+          
+          <button 
+            onClick={() => {
+              if (window.confirm("Are you sure? This will permanently delete your profile, trips, messages, and all data. The only thing we keep is your email address for 45 days to prevent trial abuse. This cannot be undone.")) {
+                useNomadStore.getState().deleteAccount();
+              }
+            }}
+            className="w-full text-center py-2 text-xs font-bold text-red-400 hover:text-red-500 transition-colors uppercase tracking-widest"
+          >
+            Delete my account
+          </button>
+        </div>
       </div>
     </Modal>
   );
 };
 
 const AdminDashboard = () => {
-  const { appSettings, updateAppSettings, profiles, deleteUser, updateUserRole, marketItems, removeMarketItem, spots, removeSpot, reports } = useNomadStore() as any;
+  const { appSettings, updateAppSettings, profiles, deleteUser, updateUserRole, marketItems, removeMarketItem, spots, removeSpot, reports, moderateReport, moderateUser } = useNomadStore() as any;
   const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'content' | 'reports'>('settings');
+
+  const getReportSummary = (report: Report) => {
+    if (report.targetType === 'User') {
+      const user = profiles.find((p: FamilyProfile) => p.id === report.targetId);
+      return user ? `User: ${user.familyName}` : 'Unknown User';
+    }
+    if (report.targetType === 'Message') return 'Chat Message';
+    if (report.targetType === 'CollabAsk') {
+      return 'Collab Asset';
+    }
+    return report.targetType;
+  };
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-4 md:p-8 space-y-8 max-w-7xl mx-auto pb-32 md:pb-8">
@@ -335,16 +468,24 @@ const AdminDashboard = () => {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-5">
-                            <select 
-                              value={p.role}
-                              onChange={(e) => updateUserRole(p.id, e.target.value as any)}
-                              className="text-xs font-black bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                            >
-                              <option value="User">Standard User</option>
-                              <option value="UserPlus">User Plus</option>
-                              <option value="SuperAdmin">Super Admin</option>
-                            </select>
+                           <td className="px-6 py-5">
+                            <div className="flex flex-col gap-1">
+                              <select 
+                                value={p.role}
+                                onChange={(e) => updateUserRole(p.id, e.target.value as any)}
+                                className="text-xs font-black bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                              >
+                                <option value="User">Standard User</option>
+                                <option value="UserPlus">User Plus</option>
+                                <option value="SuperAdmin">Super Admin</option>
+                              </select>
+                              {p.isBanned && (
+                                <span className="text-[8px] font-black text-red-500 uppercase tracking-widest px-1">Banned</span>
+                              )}
+                              {p.ugcPrivilegesRevoked && (
+                                <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest px-1">UGC Revoked</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-5">
                             <div className={cn(
@@ -357,7 +498,23 @@ const AdminDashboard = () => {
                               {p.isPremium ? 'Premium' : 'Free'}
                             </div>
                           </td>
-                          <td className="px-6 py-5 text-right">
+                          <td className="px-6 py-5 text-right flex gap-1 justify-end">
+                            <button 
+                              onClick={() => {
+                                if (p.isBanned) {
+                                  moderateUser(p.id, { isBanned: false });
+                                } else if (confirm(`Ban ${p.familyName}?`)) {
+                                  moderateUser(p.id, { isBanned: true });
+                                }
+                              }}
+                              className={cn(
+                                "p-3 rounded-xl transition-all",
+                                p.isBanned ? "text-red-500 bg-red-50" : "text-slate-300 hover:text-red-500 hover:bg-red-50"
+                              )}
+                              title={p.isBanned ? "Unban User" : "Ban User"}
+                            >
+                              <Shield className="w-4 h-4" />
+                            </button>
                             <button 
                               onClick={() => {
                                 if (confirm(`Delete user ${p.familyName}? This action is irreversible.`)) deleteUser(p.id);
@@ -460,13 +617,23 @@ const AdminDashboard = () => {
                         <div className="flex justify-between items-start">
                           <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                              report.status === 'pending' ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'
+                              report.status === 'resolved' ? 'bg-green-50 text-green-500' :
+                              report.category === 'CSAM' || report.category === 'Harassment' ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-500'
                             }`}>
                               <Shield className="w-5 h-5" />
                             </div>
                             <div>
-                              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{report.targetType} Report</p>
-                              <p className="text-sm font-bold text-secondary">{report.reason}</p>
+                               <div className="flex items-center gap-2">
+                                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{report.category}</p>
+                                <span className={cn(
+                                  "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest",
+                                  report.targetType === 'User' ? "bg-purple-100 text-purple-600" :
+                                  report.targetType === 'Message' ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-600"
+                                )}>
+                                  {report.targetType}
+                                </span>
+                              </div>
+                              <p className="text-sm font-bold text-secondary">{getReportSummary(report)}</p>
                             </div>
                           </div>
                           <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${
@@ -475,18 +642,63 @@ const AdminDashboard = () => {
                             {report.status}
                           </span>
                         </div>
+
+                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 italic text-xs text-slate-500">
+                          "{report.description}"
+                        </div>
                         
                         <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
                           <p className="text-[10px] text-slate-400 font-medium">
-                            Reported on {new Date(report.createdAt).toLocaleDateString()}
+                            {new Date(report.createdAt).toLocaleDateString()}
                           </p>
                           <div className="flex gap-2">
-                            <button className="px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors">
-                              Dismiss
-                            </button>
-                            <button className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-colors">
-                              Take Action
-                            </button>
+                            {report.status === 'pending' && (
+                              <>
+                                <button 
+                                  onClick={() => moderateReport(report.id, 'resolved', 'Dismissed')}
+                                  className="px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors"
+                                >
+                                  Dismiss
+                                </button>
+                                <div className="relative group/actions">
+                                  <button className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-colors">
+                                    Take Action
+                                  </button>
+                                  <div className="absolute bottom-full right-0 mb-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 hidden group-hover/actions:block z-50">
+                                    <button 
+                                      onClick={() => {
+                                        moderateReport(report.id, 'resolved', 'Banned');
+                                        if (report.targetType === 'User') moderateUser(report.targetId, { isBanned: true });
+                                      }}
+                                      className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                                    >
+                                      Ban User
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        moderateReport(report.id, 'resolved', 'UGC_Revoked');
+                                        if (report.targetType === 'User') moderateUser(report.targetId, { ugcPrivilegesRevoked: true });
+                                      }}
+                                      className="w-full text-left px-4 py-2 hover:bg-amber-50 text-amber-600 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                                    >
+                                      Revoke UGC
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        moderateReport(report.id, 'resolved', 'Warned');
+                                        if (report.targetType === 'User') {
+                                          const user = profiles.find((p: any) => p.id === report.targetId);
+                                          moderateUser(report.targetId, { warnings: (user?.warnings || 0) + 1 });
+                                        }
+                                      }}
+                                      className="w-full text-left px-4 py-2 hover:bg-slate-50 text-secondary rounded-xl text-[10px] font-black uppercase tracking-widest"
+                                    >
+                                      Warning
+                                    </button>
+                                  </div>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -566,88 +778,7 @@ const ImageUpload = ({ onUpload, label }: { onUpload: (url: string) => void, lab
   );
 };
 
-const LocationAutocomplete = ({ value, onChange, placeholder, label }: { value: string, onChange: (val: string, lat?: number, lng?: number) => void, placeholder: string, label: string }) => {
-  const [query, setQuery] = useState(value);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
 
-  useEffect(() => {
-    setQuery(value);
-  }, [value]);
-
-  const searchLocations = async (text: string) => {
-    if (text.length < 3) {
-      setSuggestions([]);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&addressdetails=1&limit=5`);
-      const data = await response.json();
-      setSuggestions(data);
-    } catch (error) {
-      console.error("Location search error:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-1 relative">
-      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>
-      <div className="relative">
-        <input 
-          type="text" 
-          placeholder={placeholder}
-          className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold pr-12"
-          value={query}
-          onChange={e => {
-            setQuery(e.target.value);
-            searchLocations(e.target.value);
-            setShowSuggestions(true);
-            onChange(e.target.value); // Pass raw text to parent
-          }}
-          onFocus={() => setShowSuggestions(true)}
-        />
-        <div className="absolute right-4 top-1/2 -translate-y-1/2">
-          {isLoading ? <Loader2 className="w-5 h-5 text-slate-300 animate-spin" /> : <Search className="w-5 h-5 text-slate-300" />}
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {showSuggestions && suggestions.length > 0 && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute z-[110] left-0 right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden"
-          >
-            {suggestions.map((s, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => {
-                  const name = s.display_name.split(',').slice(0, 2).join(',').trim();
-                  onChange(name, parseFloat(s.lat), parseFloat(s.lon));
-                  setQuery(name);
-                  setShowSuggestions(false);
-                }}
-                className="w-full p-4 text-left hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 flex items-start gap-3"
-              >
-                <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-bold text-secondary">{s.display_name.split(',')[0]}</p>
-                  <p className="text-[10px] text-slate-400 truncate">{s.display_name.split(',').slice(1).join(',').trim()}</p>
-                </div>
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
 
 const Modal = ({ isOpen, onClose, title, children, dark }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode, dark?: boolean }) => (
   <AnimatePresence>
@@ -903,8 +1034,8 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
   const [isRequestItemOpen, setIsRequestItemOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
-  const [newItem, setNewItem] = useState({ title: '', price: 0, category: collabMode ? 'Professional Services' : 'Gear' as any, imageUrl: '' });
-  const [newRequest, setNewRequest] = useState({ title: '', description: '' });
+  const [newItem, setNewItem] = useState({ title: '', price: 0, category: collabMode ? 'Professional Services' : 'Gear' as any, imageUrl: '', locationName: '', lat: 0, lng: 0 });
+  const [newRequest, setNewRequest] = useState({ title: '', description: '', location: '', lat: 0, lng: 0 });
 
   const filteredItems = marketItems.filter(item => {
     // Mock distance check - stable based on item ID
@@ -1097,12 +1228,12 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
             price: newItem.price,
             category: newItem.category,
             imageUrl: newItem.imageUrl,
-            location: { name: 'Current Location', lat: 0, lng: 0 },
+            location: { name: newItem.locationName || 'Current Location', lat: newItem.lat || 0, lng: newItem.lng || 0 },
             status: 'Available',
             createdAt: new Date().toISOString()
           });
           setIsAddItemOpen(false);
-          setNewItem({ title: '', price: 0, category: 'Gear', imageUrl: '' });
+          setNewItem({ title: '', price: 0, category: 'Gear', imageUrl: '', locationName: '', lat: 0, lng: 0 });
           addToast("Item geplaatst!", "success");
         }}>
           <ImageUpload label="Item Photo" onUpload={(url) => setNewItem(prev => ({...prev, imageUrl: url}))} />
@@ -1119,6 +1250,12 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Price (€)</label>
             <input required type="number" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl" value={newItem.price} onChange={e => setNewItem({...newItem, price: parseInt(e.target.value)})} />
           </div>
+          <LocationSelector 
+            label="Location (Where is the item?)"
+            placeholder="Search city..."
+            value={newItem.locationName}
+            onChange={(val, coords) => setNewItem(prev => ({ ...prev, locationName: val, lat: coords?.lat || 0, lng: coords?.lng || 0 }))}
+          />
           <button type="submit" className="w-full bg-primary text-white py-4 rounded-2xl font-bold">List Item</button>
         </form>
       </Modal>
@@ -1130,13 +1267,16 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
             id: `lf-${Date.now()}`,
             userId: currentUser?.id || '',
             familyName: currentUser?.familyName || '',
-            location: 'Current Location',
+            location: newRequest.location || 'Current Location',
+            lat: newRequest.lat || 0,
+            lng: newRequest.lng || 0,
             category: 'Gear',
             title: newRequest.title,
             description: newRequest.description,
             createdAt: new Date().toISOString()
           });
           setIsRequestItemOpen(false);
+          setNewRequest({ title: '', description: '', location: '', lat: 0, lng: 0 });
           addToast("Verzoek geplaatst bij de tribe!", "success");
         }}>
           <div className="space-y-1">
@@ -1147,6 +1287,12 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Details</label>
             <textarea required rows={3} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl resize-none" value={newRequest.description} onChange={e => setNewRequest({...newRequest, description: e.target.value})} />
           </div>
+          <LocationSelector 
+            label="Location"
+            placeholder="Where do you need help?"
+            value={newRequest.location}
+            onChange={(val, coords) => setNewRequest(prev => ({ ...prev, location: val, lat: coords?.lat || 0, lng: coords?.lng || 0 }))}
+          />
           <button type="submit" className="w-full bg-secondary text-white py-4 rounded-2xl font-bold">Post Request</button>
         </form>
       </Modal>
@@ -1238,11 +1384,11 @@ const DealsView = ({ onBack, onPaywall }: { onBack: () => void, onPaywall: () =>
 };
 
 const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall }: { onViewAllMarketplace: () => void, onSayHello: (family: FamilyProfile, message?: string) => void, onSelectFamily: (family: FamilyProfile) => void, onPaywall: () => void }) => {
-  const { currentUser, trips, profiles, lookingFor, addLookingFor, removeLookingFor, marketItems, reserveItem, connections, requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, collabAsks, addCollabAsk, removeCollabAsk } = useNomadStore();
+  const { currentUser, trips, profiles, lookingFor, addLookingFor, removeLookingFor, marketItems, reserveItem, connections, requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, collabAsks, addCollabAsk, removeCollabAsk, blocks } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
   const [isCollabAskOpen, setIsCollabAskOpen] = useState(false);
-  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '' });
+  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0 });
   const [newCollabAsk, setNewCollabAsk] = useState({ skillNeeded: '', description: '' });
   const [activeLocationIndex, setActiveLocationIndex] = useState(0);
   const [tribeSearchQuery, setTribeSearchQuery] = useState('');
@@ -1295,6 +1441,19 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
 
   const currentMetrics = locationMetrics[activeLocationIndex] || locationMetrics[0];
 
+  const filteredProfiles = useMemo(() => {
+    if (!currentUser) return [];
+    return profiles.filter(p => {
+       // Filter out self
+       if (p.id === currentUser.id) return false;
+       // Filter out ghost mode users (unless it's us, but we already filtered self)
+       if (p.privacySettings?.isIncognito) return false;
+       // Filter out blocked/blocking users
+       if (blocks.some(b => (b.blockerId === currentUser.id && b.blockedId === p.id) || (b.blockerId === p.id && b.blockedId === currentUser.id))) return false;
+       return true;
+    });
+  }, [currentUser, profiles, blocks]);
+
   // --- Collab Mode Monetization Gating ---
   const isCollabGated = collabMode && !currentUser?.isPremium && currentUser?.premiumType !== 'TRIAL';
 
@@ -1311,20 +1470,28 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   const handleAddLookingFor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+
+    if (containsBlockedContent(newRequest.title) || containsBlockedContent(newRequest.description)) {
+      useNomadStore.getState().addToast("Your post contains inappropriate language. Please keep it family-friendly.", "error");
+      return;
+    }
+
     try {
       const request: LookingForRequest = {
         id: `lf-${Date.now()}`,
         userId: currentUser.id,
         familyName: currentUser.familyName,
         location: newRequest.location,
+        lat: newRequest.lat,
+        lng: newRequest.lng,
         category: newRequest.category,
-        title: newRequest.title,
-        description: newRequest.description,
+        title: cleanContent(newRequest.title),
+        description: cleanContent(newRequest.description),
         createdAt: new Date().toISOString()
       };
       await addLookingFor(request);
       setIsLookingForOpen(false);
-      setNewRequest({ title: '', description: '', category: 'Help', location: '' });
+      setNewRequest({ title: '', description: '', category: 'Help', location: '', lat: 0, lng: 0 });
     } catch (error) {
       console.error("Failed to add looking for request:", error);
     }
@@ -1333,12 +1500,18 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   const handleAddCollabAsk = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+
+    if (containsBlockedContent(newCollabAsk.description)) {
+      useNomadStore.getState().addToast("Your post contains inappropriate language.", "error");
+      return;
+    }
+
     try {
       const ask: CollabAsk = {
         id: `ask-${Date.now()}`,
         userId: currentUser.id,
         skillNeeded: newCollabAsk.skillNeeded,
-        description: newCollabAsk.description,
+        description: cleanContent(newCollabAsk.description),
         locationSlug: currentUser.currentLocation?.name || 'Global',
         createdAt: new Date().toISOString()
       };
@@ -1358,9 +1531,8 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
     const results = [];
     for (const uTrip of userTrips) {
       for (const oTrip of otherTrips) {
-        const otherProfile = profiles.find(p => p.id === oTrip.familyId);
-        // Level 3: Incognito check
-        if (otherProfile && !otherProfile.privacySettings?.isIncognito) {
+        const otherProfile = filteredProfiles.find(p => p.id === oTrip.familyId);
+        if (otherProfile) {
           // Collab Mode Filter
           if (collabMode && !otherProfile.openToCollabs) continue;
 
@@ -1378,7 +1550,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
       }
     }
     return results.sort((a, b) => b.score - a.score);
-  }, [currentUser, trips, profiles, collabMode]);
+  }, [currentUser, trips, filteredProfiles, collabMode]);
 
   return (
     <div className={cn(
@@ -1451,7 +1623,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
         
         <div className="flex items-center gap-4">
           <div className="flex -space-x-2">
-            {profiles.slice(0, 3).map(p => (
+            {filteredProfiles.slice(0, 3).map(p => (
               <div key={p.id} className={cn("w-10 h-10 rounded-full border-2 bg-slate-200 overflow-hidden", collabMode ? "border-[#006d77]" : "border-white")}>
                 <img 
                   src={p.photoUrl || `https://picsum.photos/seed/${p.id}/100/100`} 
@@ -1464,7 +1636,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
               </div>
             ))}
             <div className="w-10 h-10 rounded-full border-2 border-white bg-primary flex items-center justify-center text-[10px] font-bold text-white">
-              +{profiles.length > 3 ? profiles.length - 3 : 0}
+              +{filteredProfiles.length > 3 ? filteredProfiles.length - 3 : 0}
             </div>
           </div>
         </div>
@@ -1638,54 +1810,89 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
           </div>
         </div>
       </section>
-      
-      {/* Pending Connection Requests Visibility fix */}
-      {connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending').length > 0 && (
-        <section className="space-y-4">
-          <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
-            Nieuwe Verzoeken
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {connections
-              .filter(c => c.recipientId === currentUser?.id && c.status === 'pending')
-              .map(conn => {
-                const requester = profiles.find(p => p.id === conn.requesterId);
-                if (!requester) return null;
-                return (
-                   <div key={conn.id} className={cn(
-                     "p-4 rounded-[2rem] border flex items-center justify-between gap-4",
-                     collabMode ? "bg-white/5 border-white/10" : "bg-primary/5 border-primary/10 shadow-sm"
-                   )}>
-                     <div className="flex items-center gap-3">
-                       <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm">
-                         <img src={requester.photoUrl || `https://picsum.photos/seed/${requester.id}/200/200`} alt="" className="w-full h-full object-cover" />
-                       </div>
-                       <div>
-                         <p className={cn("font-bold", collabMode ? "text-white" : "text-secondary")}>{requester.familyName}</p>
-                         <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-primary")}>Wil connecten</p>
-                       </div>
-                     </div>
-                     <div className="flex gap-4">
-                       <button 
-                         onClick={() => acceptConnection(conn.id)}
-                         className="px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
-                       >
-                         Accepteer
-                       </button>
-                       <button 
-                         onClick={() => cancelConnection(conn.id)}
-                         className={cn("p-2 rounded-xl border transition-all text-slate-400 hover:text-red-500 hover:border-red-500/20", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100")}
-                       >
-                         <X className="w-5 h-5" />
-                       </button>
-                     </div>
-                   </div>
-                );
-              })}
-          </div>
-        </section>
-      )}
+         {/* Pending Connection Requests Visibility fix */}
+      {(() => {
+        const pendingConnections = connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending');
+        const nearbyHelpRequests = lookingFor.filter(r => r.userId !== currentUser?.id && currentUser?.currentLocation?.name && r.location === currentUser?.currentLocation?.name);
+        
+        if (pendingConnections.length === 0 && nearbyHelpRequests.length === 0) return null;
 
+        return (
+          <section className="space-y-4">
+            <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
+              New Requests
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {pendingConnections.map(conn => {
+                  const requester = profiles.find(p => p.id === conn.requesterId);
+                  if (!requester) return null;
+                  return (
+                     <div key={conn.id} className={cn(
+                       "p-4 rounded-[2rem] border flex items-center justify-between gap-4",
+                       collabMode ? "bg-white/5 border-white/10" : "bg-primary/5 border-primary/10 shadow-sm"
+                     )}>
+                       <div className="flex items-center gap-3">
+                         <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                           <img src={requester.photoUrl || `https://picsum.photos/seed/${requester.id}/200/200`} alt="" className="w-full h-full object-cover" />
+                         </div>
+                         <div>
+                           <p className={cn("font-bold", collabMode ? "text-white" : "text-secondary")}>{requester.familyName}</p>
+                           <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-primary")}>Wil connecten</p>
+                         </div>
+                       </div>
+                       <div className="flex gap-4">
+                         <button 
+                           onClick={() => acceptConnection(conn.id)}
+                           className="px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                         >
+                           Accepteer
+                         </button>
+                         <button 
+                           onClick={() => cancelConnection(conn.id)}
+                           className={cn("p-2 rounded-xl border transition-all text-slate-400 hover:text-red-500 hover:border-red-500/20", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100")}
+                         >
+                            <X className="w-5 h-5" />
+                         </button>
+                       </div>
+                     </div>
+                  );
+                })}
+
+                {nearbyHelpRequests.map(req => {
+                  const requester = profiles.find(p => p.id === req.userId);
+                  return (
+                    <div key={req.id} className={cn(
+                      "p-4 rounded-[2rem] border flex items-center justify-between gap-4",
+                      collabMode ? "bg-white/5 border-white/10" : "bg-accent/5 border-accent/10 shadow-sm"
+                    )}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm flex items-center justify-center bg-slate-100 shrink-0">
+                          {requester?.photoUrl ? (
+                            <img src={requester.photoUrl} alt="" className="w-full h-full object-cover" />
+                          ) : <User className="w-6 h-6 text-slate-400" />}
+                        </div>
+                        <div className="overflow-hidden">
+                          <p className={cn("font-bold truncate", collabMode ? "text-white" : "text-secondary")}>{req.title}</p>
+                          <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-accent")}>{req.category} verzoek van {req.familyName}</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          const itemFamily = profiles.find(p => p.id === req.userId);
+                          if (itemFamily) onSayHello(itemFamily, `Hoi ${itemFamily.familyName}, ik zag je verzoek voor '${req.title}' en wil graag helpen!`);
+                        }}
+                        className="px-4 py-2 bg-accent text-white rounded-xl text-xs font-bold shadow-lg shadow-accent/20 hover:scale-105 active:scale-95 transition-all shrink-0"
+                      >
+                        Help {collabMode ? 'Collab' : 'Tribe'}
+                      </button>
+                    </div>
+                  );
+                })}
+            </div>
+          </section>
+        );
+      })()}
+      
       {/* Matches & Overlaps */}
       <section className="space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -2107,17 +2314,27 @@ const CollabOpportunitySummary = ({ onUpgrade, stats }: { onUpgrade: () => void,
   );
 };
 
-const ConnectView = ({ onPaywall }: { onPaywall: () => void }) => {
-  const { currentUser, profiles, conversations, messages, sendMessage, subscribeToMessages, connections, acceptConnection, trips, collabMode } = useNomadStore();
+const ConnectView = ({ onPaywall, onSayHello }: { onPaywall: () => void, onSayHello: (family: FamilyProfile, msg: string) => void }) => {
+  const { currentUser, profiles, conversations, messages, sendMessage, subscribeToMessages, connections, acceptConnection, cancelConnection, addToast, trips, collabMode, notifications, markNotificationRead, lookingFor } = useNomadStore();
   const [activeConvoId, setActiveConvoId] = useState<string | null>(null);
+  const [activePortalTab, setActivePortalTab] = useState<'chat' | 'notifications'>('chat');
   const [messageText, setMessageText] = useState('');
   const [localCollabTab, setLocalCollabTab] = useState<'tribe' | 'collab'>(collabMode ? 'collab' : 'tribe');
   const [searchQuery, setSearchQuery] = useState('');
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const prevPendingCount = React.useRef(0);
 
   useEffect(() => {
-    setLocalCollabTab(collabMode ? 'collab' : 'tribe');
-  }, [collabMode]);
+    const pendingCount = connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending').length;
+    if (pendingCount > prevPendingCount.current) {
+      const latest = connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending').sort((a, b) => b.id.localeCompare(a.id))[0];
+      const requester = profiles.find(p => p.id === latest?.requesterId);
+      if (requester) {
+        addToast(`${requester.familyName} wil met je connecten! Klik op de chat om te accepteren.`, "info");
+      }
+    }
+    prevPendingCount.current = pendingCount;
+  }, [connections.length, currentUser?.id, profiles, addToast]);
 
   useEffect(() => {
     if (activeConvoId) {
@@ -2168,8 +2385,8 @@ const ConnectView = ({ onPaywall }: { onPaywall: () => void }) => {
   return (
     <div className="h-full relative overflow-hidden flex flex-col bg-slate-50">
       <AnimatePresence initial={false}>
-        {!activeConvoId ? (
-          <motion.div 
+        {!activeConvoId ?
+           <motion.div 
             key="list"
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
@@ -2218,45 +2435,182 @@ const ConnectView = ({ onPaywall }: { onPaywall: () => void }) => {
                   className="w-full bg-black/10 border-none rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder:text-white/30 focus:ring-1 focus:ring-white/20 outline-none transition-all"
                 />
               </div>
+
+              <div className="flex border-b border-white/10 mt-2">
+                <button 
+                  onClick={() => setActivePortalTab('chat')}
+                  className={cn(
+                    "flex-1 py-3 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative",
+                    activePortalTab === 'chat' ? "text-white" : "text-white/40 hover:text-white/60"
+                  )}
+                >
+                  Chat
+                  {activePortalTab === 'chat' && (
+                    <motion.div layoutId="portalTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
+                  )}
+                </button>
+                <button 
+                  onClick={() => setActivePortalTab('notifications')}
+                  className={cn(
+                    "flex-1 py-3 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative",
+                    activePortalTab === 'notifications' ? "text-white" : "text-white/40 hover:text-white/60"
+                  )}
+                >
+                  Notifications
+                  {notifications.filter(n => !n.isRead).length > 0 && (
+                    <span className="ml-1 w-2 h-2 bg-accent rounded-full inline-block" />
+                  )}
+                  {activePortalTab === 'notifications' && (
+                    <motion.div layoutId="portalTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
+                  )}
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-20">
-              {pendingConnections.length > 0 && (
-                <div className="p-4 space-y-3">
-                  <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Nieuwe Verzoeken</h2>
-                  {pendingConnections.map(conn => {
-                    const family = profiles.find(p => p.id === conn.requesterId);
-                    if (!family) return null;
+            <div className="flex-1 overflow-y-auto no-scrollbar pb-20 font-sans">
+              {activePortalTab === 'notifications' ?
+                <div className="p-4 space-y-4">
+                  {notifications.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-48 opacity-40">
+                      <BellOff className="w-12 h-12 mb-3" />
+                      <p className="text-xs font-bold uppercase tracking-widest">No notifications</p>
+                    </div>
+                  ) : notifications.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(n => (
+                    <div 
+                      key={n.id} 
+                      onClick={() => markNotificationRead(n.id)}
+                      className={cn(
+                        "p-4 rounded-2xl border transition-all cursor-pointer relative",
+                        n.isRead ? "bg-white border-slate-100 opacity-60" : "bg-white border-primary/20 shadow-sm shadow-primary/5"
+                      )}
+                    >
+                      {!n.isRead && <div className="absolute top-4 right-4 w-2 h-2 bg-accent rounded-full" />}
+                      <div className="flex gap-3">
+                         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", n.type === 'VibeCheck' ? "bg-amber-100 text-amber-600" : "bg-primary/10 text-primary")}>
+                           {n.type === 'VibeCheck' ? <MapIcon className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
+                         </div>
+                         <div>
+                            <p className="text-sm font-bold text-secondary">{n.title}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{n.message}</p>
+                            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-2">
+                               {format(new Date(n.createdAt), 'MMM d, HH:mm')}
+                            </p>
+                         </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              : 
+                <>
+                  {(() => {
+                    const pending = connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending');
+                    const nearbyLooking = lookingFor.filter(r => r.userId !== currentUser?.id && currentUser?.currentLocation?.name && r.location === currentUser?.currentLocation?.name);
+                    
+                    if (pending.length === 0 && nearbyLooking.length === 0) return null;
+
                     return (
-                      <div key={conn.id} className="bg-primary/5 p-4 rounded-2xl border border-primary/10 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden">
-                            <img src={family.photoUrl || `https://picsum.photos/seed/${family.id}/100/100`} alt="" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-secondary">{family.familyName}</p>
-                            <p className="text-[10px] text-primary font-black uppercase">Verzoek</p>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => acceptConnection(conn.id)}
-                          className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
-                        >
-                          Accepteer
-                        </button>
+                      <div className="p-4 space-y-3">
+                        <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">New Requests</h2>
+                        
+                        {pending.map(conn => {
+                          const family = profiles.find(p => p.id === conn.requesterId);
+                          if (!family) return null;
+                          return (
+                            <div key={conn.id} className="bg-primary/5 p-4 rounded-2xl border border-primary/10 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden">
+                                  <img src={family.photoUrl || `https://picsum.photos/seed/${family.id}/100/100`} alt="" />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-secondary">{family.familyName}</p>
+                                  <p className="text-[10px] text-primary font-black uppercase">Connect Verzoek</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => cancelConnection(conn.id)}
+                                  className="p-2 hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors rounded-xl"
+                                  title="Weigeren"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => acceptConnection(conn.id)}
+                                  className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
+                                >
+                                  Accepteer
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {nearbyLooking.map(req => {
+                          const family = profiles.find(p => p.id === req.userId);
+                          return (
+                            <div key={req.id} className="bg-accent/5 p-4 rounded-2xl border border-accent/10 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
+                                  {family?.photoUrl ? (
+                                    <img src={family.photoUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : <User className="w-5 h-5 text-slate-300" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-secondary truncate">{req.title}</p>
+                                  <p className="text-[10px] text-accent font-black uppercase truncate">{req.category} verzoek</p>
+                                </div>
+                              </div>
+                              <button 
+                                onClick={() => {
+                                   if (family) onSayHello(family, `Hoi ${family.familyName}, ik zag je verzoek voor '${req.title}' en wil graag helpen!`);
+                                }}
+                                className="bg-accent text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-accent/20 hover:scale-105 transition-transform shrink-0"
+                              >
+                                Help
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
-                  })}
-                </div>
-              )}
+                  })()}
 
-              <div className="divide-y divide-slate-50">
-                {filteredConversations.length === 0 ? (
+                  {sentRequests.length > 0 && (
+                    <div className="p-4 space-y-3">
+                      <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Sent Requests</h2>
+                      {sentRequests.map(conn => {
+                        const family = profiles.find(p => p.id === conn.recipientId);
+                        if (!family) return null;
+                        return (
+                          <div key={conn.id} className="p-4 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 bg-white opacity-80">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden opacity-50">
+                                <img src={family.photoUrl || `https://picsum.photos/seed/${family.id}/100/100`} alt="" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-secondary">{family.familyName}</p>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase">Waiting for acceptance...</p>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => cancelConnection(conn.id)}
+                              className="text-[10px] font-black text-slate-400 hover:text-red-500 uppercase tracking-widest transition-colors flex items-center gap-1"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="divide-y divide-slate-50">
+                {filteredConversations.length === 0 && pendingConnections.length === 0 && sentRequests.length === 0 ? (
                   <div className="p-12 text-center space-y-4">
                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-300">
                       <MessageSquare className="w-8 h-8" />
                     </div>
-                    <p className="text-slate-400 text-sm font-medium">Nog geen gesprekken. Maak contact met families!</p>
+                    <p className="text-slate-400 text-sm font-medium">Nog geen gesprekken of verzoeken. Maak contact met families!</p>
                   </div>
                 ) : filteredConversations.map((convo) => {
                   const conn = connections.find(c => c.id === convo.connectionId);
@@ -2307,9 +2661,11 @@ const ConnectView = ({ onPaywall }: { onPaywall: () => void }) => {
                   );
                 })}
               </div>
-            </div>
-          </motion.div>
-        ) : (
+            </>
+          }
+        </div>
+      </motion.div>
+        : 
           <motion.div 
             key="chat"
             initial={{ x: 20, opacity: 0 }}
@@ -2425,17 +2781,17 @@ const ConnectView = ({ onPaywall }: { onPaywall: () => void }) => {
               </button>
             </form>
           </motion.div>
-        )}
+        }
       </AnimatePresence>
     </div>
   );
 };
 
 const TribeNearbyView = ({ onPaywall, onViewAllDeals, onRecommendSpot, onViewAllMarketplace, onContactSeller, onSetLocation }: { onPaywall: () => void, onViewAllDeals: () => void, onRecommendSpot: () => void, onViewAllMarketplace: () => void, onContactSeller: (item: MarketItem) => void, onSetLocation: () => void }) => {
-  const { spots, destinations, currentUser, trips, marketItems, lookingFor, addLookingFor, removeLookingFor, removeMarketItem, removeSpot, reserveItem, reviews, profiles, collabMode } = useNomadStore();
+  const { spots, destinations, currentUser, trips, marketItems, lookingFor, addLookingFor, removeLookingFor, removeMarketItem, removeSpot, reserveItem, reviews, profiles, collabMode, blocks } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
-  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '' });
+  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0 });
   const [activeLocationIndex, setActiveLocationIndex] = useState(0);
 
   useEffect(() => {
@@ -2449,20 +2805,28 @@ const TribeNearbyView = ({ onPaywall, onViewAllDeals, onRecommendSpot, onViewAll
   const handleAddLookingFor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+
+    if (containsBlockedContent(newRequest.title) || containsBlockedContent(newRequest.description)) {
+      useNomadStore.getState().addToast("Your post contains inappropriate language. Please keep it family-friendly.", "error");
+      return;
+    }
+
     try {
       const request: LookingForRequest = {
         id: `lf-${Date.now()}`,
         userId: currentUser.id,
         familyName: currentUser.familyName,
         location: newRequest.location,
+        lat: newRequest.lat,
+        lng: newRequest.lng,
         category: newRequest.category,
-        title: newRequest.title,
-        description: newRequest.description,
+        title: cleanContent(newRequest.title),
+        description: cleanContent(newRequest.description),
         createdAt: new Date().toISOString()
       };
       await addLookingFor(request);
       setIsLookingForOpen(false);
-      setNewRequest({ title: '', description: '', category: 'Help', location: '' });
+      setNewRequest({ title: '', description: '', category: 'Help', location: '', lat: 0, lng: 0 });
     } catch (error) {
       console.error("Failed to add looking for request:", error);
     }
@@ -2508,6 +2872,34 @@ const TribeNearbyView = ({ onPaywall, onViewAllDeals, onRecommendSpot, onViewAll
   }, [destinations, activeLocation]);
 
   const totalLocations = locations.locs.length;
+
+  const filteredProfiles = useMemo(() => {
+    if (!currentUser) return [];
+    return profiles.filter(p => {
+       if (p.id === currentUser.id) return false;
+       if (p.privacySettings?.isIncognito) return false;
+       if (blocks.some(b => (b.blockerId === currentUser.id && b.blockedId === p.id) || (b.blockerId === p.id && b.blockedId === currentUser.id))) return false;
+       return true;
+    });
+  }, [currentUser, profiles, blocks]);
+
+  const filteredLookingFor = useMemo(() => {
+    if (!currentUser) return [];
+    return lookingFor.filter(r => {
+      // Filter out blocked users
+      if (blocks.some(b => (b.blockerId === currentUser.id && b.blockedId === r.userId) || (b.blockerId === r.userId && b.blockedId === currentUser.id))) return false;
+      return true;
+    });
+  }, [currentUser, lookingFor, blocks]);
+
+  const filteredMarketItems = useMemo(() => {
+    if (!currentUser) return [];
+    return marketItems.filter(i => {
+      // Filter out blocked users
+      if (blocks.some(b => (b.blockerId === currentUser.id && b.blockedId === i.sellerId) || (b.blockerId === i.sellerId && b.blockedId === currentUser.id))) return false;
+      return true;
+    });
+  }, [currentUser, marketItems, blocks]);
 
   return (
     <div className={cn(
@@ -2665,11 +3057,11 @@ const TribeNearbyView = ({ onPaywall, onViewAllDeals, onRecommendSpot, onViewAll
           </button>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-          {lookingFor.length === 0 ? (
+          {filteredLookingFor.length === 0 ? (
             <div className={cn("w-full py-12 rounded-3xl border border-dashed text-center", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
               <p className={cn("text-sm font-medium", collabMode ? "text-white/40" : "text-slate-400")}>No requests yet. Be the first!</p>
             </div>
-          ) : lookingFor.filter(r => !collabMode || r.category === 'Work').map((request) => (
+          ) : filteredLookingFor.filter(r => !collabMode || r.category === 'Work').map((request) => (
             <motion.div 
               key={request.id}
               className={cn(
@@ -2743,11 +3135,11 @@ const TribeNearbyView = ({ onPaywall, onViewAllDeals, onRecommendSpot, onViewAll
           </button>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-          {marketItems.length === 0 ? (
+          {filteredMarketItems.length === 0 ? (
             <div className={cn("w-full py-12 rounded-3xl border border-dashed text-center", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
               <p className={cn("text-sm font-medium", collabMode ? "text-white/40" : "text-slate-400")}>No items yet. List something!</p>
             </div>
-          ) : marketItems.slice(0, 5).map((item) => (
+          ) : filteredMarketItems.slice(0, 5).map((item) => (
             <motion.div 
               key={item.id}
               className={cn(
@@ -3009,19 +3401,11 @@ const TribeNearbyView = ({ onPaywall, onViewAllDeals, onRecommendSpot, onViewAll
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location</label>
-            <input 
-              required
-              type="text" 
-              placeholder="e.g. Chiang Mai" 
-              className={cn(
-                "w-full p-4 border rounded-2xl focus:outline-none focus:ring-2 transition-all",
-                collabMode 
-                  ? "bg-white/5 border-white/10 text-white focus:ring-white/20" 
-                  : "bg-slate-50 border-slate-100 focus:ring-primary/20"
-              )}
+            <LocationSelector 
+              label="Location"
+              placeholder="Search city..."
               value={newRequest.location}
-              onChange={e => setNewRequest({...newRequest, location: e.target.value})}
+              onChange={(val, coords) => setNewRequest(prev => ({ ...prev, location: val, lat: coords?.lat || 0, lng: coords?.lng || 0 }))}
             />
           </div>
           <button 
@@ -4467,11 +4851,11 @@ const EditLocationModal = ({
         </div>
 
         <form onSubmit={onManual} className="space-y-4">
-          <LocationAutocomplete 
+          <LocationSelector 
             label="Stad, Land"
             placeholder="Bijv. Lissabon, Portugal"
             value={manualLocation.name}
-            onChange={(val, lat, lng) => setManualLocation({ name: val, lat: lat || 0, lng: lng || 0 })}
+            onChange={(val, coords) => setManualLocation({ name: val, lat: coords?.lat || 0, lng: coords?.lng || 0 })}
           />
           <button type="submit" className="w-full bg-secondary text-white py-4 rounded-2xl font-bold shadow-lg shadow-secondary/20 active:scale-95 transition-transform">
             Set Location
@@ -4918,202 +5302,7 @@ import { auth, googleProvider, facebookProvider, appleProvider } from './firebas
 import { signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth';
 
 const WelcomeModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
-  const { currentUser, updateProfile, addToast } = useNomadStore();
-  const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
-    familyName: currentUser?.familyName || '',
-    occupation: currentUser?.collabCard?.occupation || '',
-    enableCollab: false,
-    parents: currentUser?.parents || [],
-    kids: currentUser?.kids || []
-  });
-
-  if (!currentUser) return null;
-
-  const handleNext = async () => {
-    if (step < 4) {
-      setStep(step + 1);
-    } else {
-      try {
-        await updateProfile({
-          familyName: formData.familyName,
-          openToCollabs: formData.enableCollab,
-          collabCard: {
-            ...currentUser.collabCard,
-            occupation: formData.occupation,
-            superpowers: currentUser.collabCard?.superpowers || [],
-            currentMission: currentUser.collabCard?.currentMission || '',
-            linkedInUrl: currentUser.collabCard?.linkedInUrl || ''
-          },
-          parents: formData.parents,
-          kids: formData.kids
-        });
-        addToast("Welkom bij de Tribe!", "success");
-        onClose();
-      } catch (error) {
-        addToast("Setup mislukt.", "error");
-      }
-    }
-  };
-
-  return (
-    <Modal isOpen={isOpen} onClose={() => {}} title={`Step ${step} of 4`}>
-       <div className="space-y-6">
-          {step === 1 && (
-            <div className="space-y-4">
-              <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto text-primary mb-6">
-                <Users className="w-10 h-10" />
-              </div>
-              <div className="text-center space-y-2">
-                <h3 className="text-2xl font-black text-secondary">The Family Name</h3>
-                <p className="text-sm text-slate-500">Every tribe starts with a name. What's yours?</p>
-              </div>
-              <input 
-                type="text"
-                placeholder="e.g. The Smiths, Miller Family"
-                className="w-full p-6 bg-slate-50 border border-slate-100 rounded-3xl font-bold text-center text-xl focus:ring-4 focus:ring-primary/10 transition-all outline-none"
-                value={formData.familyName}
-                onChange={e => setFormData({...formData, familyName: e.target.value})}
-              />
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-4 text-center">
-              <div className="w-20 h-20 bg-accent/10 rounded-3xl flex items-center justify-center mx-auto text-accent mb-6">
-                <Heart className="w-10 h-10" />
-              </div>
-              <h3 className="text-2xl font-black text-secondary uppercase tracking-tight">Who's in the tribe?</h3>
-              <p className="text-sm text-slate-500">How many little explorers are joining the journey?</p>
-              
-              <div className="flex justify-center gap-4 py-4">
-                {[1, 2, 3, 4].map(num => (
-                  <button 
-                    key={num}
-                    onClick={() => {
-                       const kids = Array.from({length: num}, (_, i) => ({
-                         id: `k-${Date.now()}-${i}`,
-                         name: `Explorer ${i+1}`,
-                         age: 5,
-                         gender: 'Other' as any,
-                         interests: []
-                       }));
-                       setFormData({...formData, kids});
-                    }}
-                    className={cn(
-                      "w-12 h-12 rounded-2xl flex items-center justify-center font-bold transition-all",
-                      formData.kids.length === num ? "bg-accent text-white scale-110 shadow-lg" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                    )}
-                  >
-                    {num}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-4 text-center">
-               <div className="w-20 h-20 bg-[#006d77]/10 rounded-3xl flex items-center justify-center mx-auto text-[#006d77] mb-6">
-                  <Globe className="w-10 h-10" />
-               </div>
-               <h3 className="text-2xl font-black text-secondary">Where are you now?</h3>
-               <p className="text-sm text-slate-500">Allow us to show you families nearby.</p>
-               <button 
-                 onClick={async () => {
-                   if (navigator.geolocation) {
-                     navigator.geolocation.getCurrentPosition(async (pos) => {
-                       // We'll just skip detailed geocoding here for brevity in onboarding
-                       await handleNext();
-                     });
-                   } else {
-                     setStep(4);
-                   }
-                 }}
-                 className="w-full py-6 bg-secondary text-white rounded-[2rem] font-bold shadow-xl shadow-secondary/20 flex items-center justify-center gap-3 active:scale-95 transition-transform"
-               >
-                 <MapPin className="w-6 h-6" />
-                 Share Current Location
-               </button>
-               <button onClick={() => setStep(4)} className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4">I'll do this later</button>
-            </div>
-          )}
-
-          {step === 4 && (
-             <div className="space-y-6 text-center">
-                <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto text-amber-600 mb-6 border-4 border-white shadow-xl">
-                    <Briefcase className="w-10 h-10" />
-                </div>
-                <div className="space-y-2">
-                    <h3 className="text-2xl font-black text-secondary uppercase tracking-tight">Professional Networking</h3>
-                    <p className="text-sm text-slate-500">Are you working while traveling? Enable Collab Mode to connect with other professional parents.</p>
-                </div>
-
-                <div className="space-y-4 text-left">
-                  <div className="space-y-2">
-                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Occupation</label>
-                     <select 
-                        className="w-full p-5 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-secondary outline-none focus:ring-4 focus:ring-amber-500/10 transition-all cursor-pointer"
-                        value={formData.occupation}
-                        onChange={e => setFormData({...formData, occupation: e.target.value})}
-                     >
-                        <option value="">Select your role</option>
-                        {occupations.map(occ => (
-                          <option key={occ.id} value={occ.name}>{occ.name}</option>
-                        ))}
-                     </select>
-                  </div>
-
-                  <button 
-                    onClick={() => setFormData({...formData, enableCollab: !formData.enableCollab})}
-                    className={cn(
-                      "w-full p-6 rounded-[2rem] border-2 transition-all flex items-center justify-between group",
-                      formData.enableCollab 
-                        ? "bg-amber-50 border-amber-500 text-amber-700" 
-                        : "bg-white border-slate-100 text-slate-600 hover:border-slate-300"
-                    )}
-                  >
-                    <div className="text-left">
-                       <p className="font-black uppercase tracking-widest text-[10px]">Enable Collab Mode</p>
-                       <p className="text-xs font-medium opacity-60">Visibility for B2B networking</p>
-                    </div>
-                    <div className={cn(
-                      "w-12 h-6 rounded-full transition-colors relative",
-                      formData.enableCollab ? "bg-amber-500" : "bg-slate-200"
-                    )}>
-                       <div className={cn(
-                         "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                         formData.enableCollab ? "left-7" : "left-1"
-                       )} />
-                    </div>
-                  </button>
-                </div>
-             </div>
-          )}
-
-          {step !== 3 && (
-            <button 
-              onClick={handleNext}
-              disabled={step === 1 && !formData.familyName}
-              className={cn(
-                "w-full py-6 rounded-[2rem] font-black text-white shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-3",
-                step === 4 ? "bg-accent shadow-accent/40" : "bg-primary shadow-primary/30",
-                step === 1 && !formData.familyName && "opacity-50 cursor-not-allowed grayscale"
-              )}
-            >
-              {step === 4 ? 'Finish Setup' : 'Continue'}
-              <ArrowRight className="w-6 h-6" />
-            </button>
-          )}
-
-          <div className="flex justify-center gap-2 pt-4">
-             {[1, 2, 3, 4].map(s => (
-               <div key={s} className={cn("w-2 h-2 rounded-full transition-all duration-500", s === step ? "bg-accent w-6" : s < step ? "bg-primary" : "bg-slate-200")} />
-             ))}
-          </div>
-       </div>
-    </Modal>
-  );
+  return null;
 };
 
 // ... existing code ...
@@ -5137,7 +5326,9 @@ export default function App() {
     collabEndorsements,
     conversations,
     isLocationModalOpen,
-    setIsLocationModalOpen
+    setIsLocationModalOpen,
+    cancelConnection,
+    profiles
   } = useNomadStore();
   const [activeTab, setActiveTab] = useState<'tribe' | 'connect' | 'tribe-nearby' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin'>('tribe');
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
@@ -5147,12 +5338,13 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedFamily, setSelectedFamily] = useState<FamilyProfile | null>(null);
   const [isRecommendSpotOpen, setIsRecommendSpotOpen] = useState(false);
-  const [newSpot, setNewSpot] = useState({ name: '', description: '', category: 'Playground' as any, imageUrl: '' });
+  const [newSpot, setNewSpot] = useState({ name: '', description: '', category: 'Playground' as any, imageUrl: '', locationName: '', lat: 0, lng: 0 });
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [manualLocation, setManualLocation] = useState({ name: '', lat: 0, lng: 0 });
 
   const [isAddTripOpen, setIsAddTripOpen] = useState(false);
   const [newTrip, setNewTrip] = useState({ id: '', location: '', startDate: '', endDate: '', lat: 0, lng: 0 });
+  const [reportingTarget, setReportingTarget] = useState<{ id: string, type: Report['targetType'] } | null>(null);
 
   const handleAddTrip = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -5181,18 +5373,48 @@ export default function App() {
     }
   };
 
-  const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
-
   useEffect(() => {
     init();
     calculateBadges();
   }, []);
 
+  // --- Real-time Notification Watcher ---
+  const prevNotificationsRef = useRef(notifications);
   useEffect(() => {
-    if (isAuthReady && currentUser && (!currentUser.familyName || currentUser.familyName === 'New Nomad Family')) {
-      setIsWelcomeOpen(true);
+    if (currentUser) {
+      const newNotifications = notifications.filter(n => 
+        !n.isRead && 
+        !prevNotificationsRef.current.some(prev => prev.id === n.id)
+      );
+      
+      newNotifications.forEach(n => {
+        addToast(n.message, "info");
+      });
+      
+      prevNotificationsRef.current = notifications;
     }
-  }, [isAuthReady, currentUser]);
+  }, [notifications, currentUser, addToast]);
+
+  // --- Connection Request Watcher ---
+  const prevConnectionsCount = useRef(connections.length);
+  useEffect(() => {
+    if (currentUser) {
+      const pendingIncoming = connections.filter(c => c.recipientId === currentUser.id && c.status === 'pending');
+      const prevPendingIncoming = prevNotificationsRef.current.filter((n: any) => n.type === 'ConnectionRequest').length; // Fallback or check count
+      
+      // If connections length increased and we have a new pending request from someone else
+      if (connections.length > prevConnectionsCount.current) {
+         const latest = pendingIncoming[0];
+         if (latest) {
+           const requester = profiles.find(p => p.id === latest.requesterId);
+           if (requester) {
+             addToast(`${requester.familyName} wil met je connecten! Klik op de chat om te accepteren.`, "info");
+           }
+         }
+      }
+      prevConnectionsCount.current = connections.length;
+    }
+  }, [connections.length, currentUser, profiles, addToast]);
 
   const handleLogin = async (provider: 'google' | 'facebook' | 'apple' = 'google') => {
     if (isLoggingIn) return;
@@ -5294,6 +5516,10 @@ export default function App() {
 
   if (isLoggingIn || !isAuthReady) {
     return <FullPageLoader message={!isAuthReady ? "Syncing with the Tribe..." : "Getting you in..."} />;
+  }
+
+  if (currentUser && !currentUser.familyName) {
+    return <OnboardingFlow />;
   }
 
   if (!currentUser) {
@@ -5726,9 +5952,40 @@ export default function App() {
 
       {/* Global Modals */}
       <ToastContainer />
+      <ReportModal isOpen={!!reportingTarget} onClose={() => setReportingTarget(null)} target={reportingTarget} />
+      
       <Modal isOpen={!!selectedFamily} onClose={() => setSelectedFamily(null)} title={selectedFamily?.familyName || ''}>
         {selectedFamily && (
           <div className="space-y-6">
+            <div className="flex justify-end -mt-2 -mr-2">
+              <div className="relative group/menu">
+                <button className="p-2 hover:bg-slate-50 rounded-full text-slate-400">
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 opacity-0 group-hover/menu:opacity-100 pointer-events-none group-hover/menu:pointer-events-auto transition-all z-[100] transform translate-y-2 group-hover/menu:translate-y-0">
+                  <button 
+                    onClick={() => {
+                      setReportingTarget({ id: selectedFamily.id, type: 'User' });
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                  >
+                    <Shield className="w-4 h-4" /> Report family
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      if (window.confirm(`Block ${selectedFamily.familyName}? They will no longer see you in their radar and vice versa.`)) {
+                        await useNomadStore.getState().blockUser(selectedFamily.id);
+                        setSelectedFamily(null);
+                      }
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm font-bold text-red-500 hover:bg-red-50 flex items-center gap-2"
+                  >
+                    <Lock className="w-4 h-4" /> Block family
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="flex items-center gap-6">
               <div className="w-20 h-20 rounded-2xl bg-slate-100 overflow-hidden">
                 <img 
@@ -5886,13 +6143,9 @@ export default function App() {
             {currentUser?.id !== selectedFamily.id && (
               <button 
                 onClick={() => {
-                  const reason = prompt("Waarom rapporteer je dit profiel?");
-                  if (reason) {
-                    useNomadStore.getState().reportContent(selectedFamily.id, 'User', reason);
-                    useNomadStore.getState().addToast("Bedankt voor je melding. Onze moderators zullen dit beoordelen.", "info");
-                  }
+                  setReportingTarget({ id: selectedFamily.id, type: 'User' });
                 }}
-                className="w-full text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-red-400 transition-colors pt-2"
+                className="w-full text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-red-400 transition-colors pt-2 underline underline-offset-4"
               >
                 Report this profile
               </button>
@@ -5905,11 +6158,16 @@ export default function App() {
         <form className="space-y-4" onSubmit={async (e) => { 
           e.preventDefault(); 
           if (!currentUser) return;
+
+          if (containsBlockedContent(newSpot.name) || containsBlockedContent(newSpot.description)) {
+            useNomadStore.getState().addToast("Your recommendation contains inappropriate language.", "error");
+            return;
+          }
           
           const spot: Spot = {
             id: `spot-${Date.now()}`,
-            name: newSpot.name,
-            description: newSpot.description,
+            name: cleanContent(newSpot.name),
+            description: cleanContent(newSpot.description),
             category: newSpot.category,
             imageUrl: newSpot.imageUrl,
             coordinates: { lat: 0, lng: 0 },
@@ -5920,7 +6178,7 @@ export default function App() {
           
           await useNomadStore.getState().addSpot(spot);
           setIsRecommendSpotOpen(false); 
-          setNewSpot({ name: '', description: '', category: 'Playground', imageUrl: '' });
+          setNewSpot({ name: '', description: '', category: 'Playground', imageUrl: '', locationName: '', lat: 0, lng: 0 });
           useNomadStore.getState().addToast("Bedankt voor je aanbeveling! Ons team zal het verifiëren.", "success"); 
         }}>
           <ImageUpload label="Spot Photo" onUpload={(url) => setNewSpot(prev => ({...prev, imageUrl: url}))} />
@@ -5992,10 +6250,13 @@ export default function App() {
                   <X className="w-4 h-4" />
                 </button>
                 
-                <ConnectView onPaywall={() => {
-                  setIsConnectOpen(false);
-                  setIsPaywallOpen(true);
-                }} />
+                <ConnectView 
+                  onPaywall={() => {
+                    setIsConnectOpen(false);
+                    setIsPaywallOpen(true);
+                  }} 
+                  onSayHello={handleSayHello}
+                />
               </div>
             </motion.div>
           )}
@@ -6048,15 +6309,15 @@ export default function App() {
         dark={collabMode}
       >
         <form onSubmit={handleAddTrip} className="space-y-6">
-          <LocationAutocomplete 
-            label="Bestemming"
-            placeholder="Bijv. Barcelona, Spanje"
+          <LocationSelector 
+            label="Location"
+            placeholder="Search city (e.g. Barcelona, Spanje)"
             value={newTrip.location}
-            onChange={(val, lat, lng) => setNewTrip(prev => ({ 
+            onChange={(val, coords) => setNewTrip(prev => ({ 
               ...prev, 
               location: val, 
-              lat: lat || prev.lat, 
-              lng: lng || prev.lng 
+              lat: coords?.lat || prev.lat, 
+              lng: coords?.lng || prev.lng 
             }))}
           />
           
@@ -6100,8 +6361,6 @@ export default function App() {
           </button>
         </form>
       </Modal>
-
-      <WelcomeModal isOpen={isWelcomeOpen} onClose={() => setIsWelcomeOpen(false)} />
     </div>
     </ErrorBoundary>
   );
