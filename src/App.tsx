@@ -6039,6 +6039,68 @@ export default function App() {
         manualLocation={manualLocation}
         setManualLocation={setManualLocation}
       />
+
+      {/* Add/Edit Trip Modal */}
+      <Modal 
+        isOpen={isAddTripOpen} 
+        onClose={() => setIsAddTripOpen(false)} 
+        title={newTrip.id ? "Edit Trip" : "Add Trip"}
+        dark={collabMode}
+      >
+        <form onSubmit={handleAddTrip} className="space-y-6">
+          <LocationAutocomplete 
+            label="Bestemming"
+            placeholder="Bijv. Barcelona, Spanje"
+            value={newTrip.location}
+            onChange={(val, lat, lng) => setNewTrip(prev => ({ 
+              ...prev, 
+              location: val, 
+              lat: lat || prev.lat, 
+              lng: lng || prev.lng 
+            }))}
+          />
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className={cn("text-xs font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Startdatum</label>
+              <input 
+                required
+                type="date" 
+                className={cn(
+                  "w-full p-4 rounded-2xl focus:outline-none focus:ring-2 transition-all font-bold",
+                  collabMode ? "bg-white/10 border-white/10 text-white focus:ring-white/20" : "bg-slate-50 border-slate-100 text-secondary focus:ring-primary/20"
+                )}
+                value={newTrip.startDate}
+                onChange={e => setNewTrip(prev => ({ ...prev, startDate: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className={cn("text-xs font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Einddatum</label>
+              <input 
+                required
+                type="date" 
+                className={cn(
+                  "w-full p-4 rounded-2xl focus:outline-none focus:ring-2 transition-all font-bold",
+                  collabMode ? "bg-white/10 border-white/10 text-white focus:ring-white/20" : "bg-slate-50 border-slate-100 text-secondary focus:ring-primary/20"
+                )}
+                value={newTrip.endDate}
+                onChange={e => setNewTrip(prev => ({ ...prev, endDate: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            className={cn(
+              "w-full py-4 rounded-[2rem] font-black shadow-xl transition-all active:scale-[0.98]",
+              collabMode ? "bg-[#e9c46a] text-[#264653]" : "bg-primary text-white shadow-primary/20"
+            )}
+          >
+            {newTrip.id ? "Update Trip" : "Reis Toevoegen"}
+          </button>
+        </form>
+      </Modal>
+
       <WelcomeModal isOpen={isWelcomeOpen} onClose={() => setIsWelcomeOpen(false)} />
     </div>
     </ErrorBoundary>
