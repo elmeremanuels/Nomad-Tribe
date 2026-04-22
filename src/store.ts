@@ -95,6 +95,7 @@ interface NomadStore {
   calculateBadges: () => Promise<void>;
   verifyCityData: (destId: string, category: string, price: number) => Promise<void>;
   updateCityVibe: (destId: string, vibeScore: number) => Promise<void>;
+  addNotification: (notification: Omit<AppNotification, 'id' | 'createdAt' | 'isRead'>) => Promise<void>;
   markNotificationRead: (notificationId: string) => Promise<void>;
   setActiveTab: (tab: 'tribe' | 'connect' | 'tribe-nearby' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin') => void;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -227,7 +228,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
             };
 
             // Ensure e.emanuels@gmail.com is SuperAdmin
-            if (user.email === 'e.emanuels@gmail.com' && updatedData.role !== 'SuperAdmin') {
+            if (user.email?.toLowerCase() === 'e.emanuels@gmail.com' && updatedData.role !== 'SuperAdmin') {
               await setDoc(doc(db, 'users', user.uid), { role: 'SuperAdmin' }, { merge: true });
               updatedData.role = 'SuperAdmin';
             }
@@ -290,7 +291,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'lookingFor'));
 
         onSnapshot(collection(db, 'users'), (snapshot) => {
-          set({ profiles: snapshot.docs.map(d => d.data() as FamilyProfile) });
+          const allProfiles = snapshot.docs.map(d => d.data() as FamilyProfile);
+          console.log(`[Admin] Loaded ${allProfiles.length} user profiles`);
+          set({ profiles: allProfiles });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
         onSnapshot(collection(db, 'spots'), (snapshot) => {
@@ -306,7 +309,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabEndorsements'));
 
         // Only admins can see reports
-        if (user.email === 'e.emanuels@gmail.com') {
+        if (user.email?.toLowerCase() === 'e.emanuels@gmail.com') {
           onSnapshot(collection(db, 'reports'), (snapshot) => {
             set({ reports: snapshot.docs.map(d => d.data()) });
           }, (err) => handleFirestoreError(err, OperationType.LIST, 'reports'));
@@ -496,6 +499,21 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       await updateDoc(doc(db, 'destinations', destId), { vibeScore });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `destinations/${destId}`);
+    }
+  },
+
+  addNotification: async (notification) => {
+    const id = `notif-${Date.now()}`;
+    const newNotif: AppNotification = {
+      ...notification,
+      id,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    };
+    try {
+      await setDoc(doc(db, 'notifications', id), newNotif);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `notifications`);
     }
   },
 
@@ -719,6 +737,16 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     };
     try {
       await setDoc(doc(db, 'connections', connectionId), connection);
+      
+      // Add notification for recipient
+      await get().addNotification({
+        userId: targetId,
+        title: 'Nieuw Connectie Verzoek',
+        message: `${user.familyName} wil met je connecten!`,
+        type: 'ConnectionRequest',
+        scheduledFor: new Date().toISOString(),
+        data: { connectionId, requesterId: user.id }
+      });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `connections`);
     }
@@ -731,6 +759,18 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       const connData = connDoc.data() as Connection;
 
       await updateDoc(doc(db, 'connections', connectionId), { status: 'accepted' });
+      
+      // Notify requester that connection was accepted
+      const user = get().currentUser;
+      await get().addNotification({
+        userId: connData.requesterId,
+        title: 'Connectie Geaccepteerd!',
+        message: `${user?.familyName || 'Een familie'} heeft je connectie verzoek geaccepteerd.`,
+        type: 'General',
+        scheduledFor: new Date().toISOString(),
+        data: { connectionId, acceptorId: user?.id }
+      });
+
       // Create conversation automatically
       const conversationId = `convo-${connectionId}`;
       const conversation: Conversation = {

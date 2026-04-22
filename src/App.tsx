@@ -606,6 +606,7 @@ const LocationAutocomplete = ({ value, onChange, placeholder, label }: { value: 
             setQuery(e.target.value);
             searchLocations(e.target.value);
             setShowSuggestions(true);
+            onChange(e.target.value); // Pass raw text to parent
           }}
           onFocus={() => setShowSuggestions(true)}
         />
@@ -779,7 +780,10 @@ const MultiTierPaywall = ({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
       <div className="space-y-6">
         <div className="text-center space-y-2">
           <p className="text-slate-500 font-medium text-sm">
-            Unlock the Match Center and connect with world-class remote professionals and founders.
+            Switch to Collab Focus, unlock the Professional Match Center and connect with world-class remote experts.
+          </p>
+          <p className="text-[10px] text-primary font-black uppercase tracking-widest">
+            Family Focus features are 100% free
           </p>
         </div>
 
@@ -860,8 +864,14 @@ const PremiumAction = ({
   isPremium: boolean,
   onPaywall: () => void 
 }) => {
+  const collabMode = useNomadStore(state => state.collabMode);
+  // Family Focus (collabMode is false) is always free
+  // Collab Focus (collabMode is true) requires premium
+  const effectivelyPremium = isPremium || collabMode === false;
+
   const handleClick = (e: React.MouseEvent) => {
-    if (!isPremium) {
+    console.log("PremiumAction clicked. collabMode:", collabMode, "isPremium:", isPremium, "effectivelyPremium:", effectivelyPremium);
+    if (!effectivelyPremium) {
       e.preventDefault();
       e.stopPropagation();
       onPaywall();
@@ -874,9 +884,9 @@ const PremiumAction = ({
     <div className={cn("relative group", className)}>
       {React.cloneElement(children, { 
         onClick: handleClick,
-        className: cn(children.props?.className, !isPremium && "pr-8 relative overflow-hidden")
+        className: cn(children.props?.className, !effectivelyPremium && "pr-8 relative overflow-hidden")
       } as any)}
-      {!isPremium && (
+      {!effectivelyPremium && (
         <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center justify-center bg-accent/20 text-accent p-1 rounded-lg pointer-events-none group-hover:scale-110 transition-transform">
           <Lock className="w-3 h-3" />
         </div>
@@ -1628,6 +1638,53 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
           </div>
         </div>
       </section>
+      
+      {/* Pending Connection Requests Visibility fix */}
+      {connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending').length > 0 && (
+        <section className="space-y-4">
+          <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
+            Nieuwe Verzoeken
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {connections
+              .filter(c => c.recipientId === currentUser?.id && c.status === 'pending')
+              .map(conn => {
+                const requester = profiles.find(p => p.id === conn.requesterId);
+                if (!requester) return null;
+                return (
+                   <div key={conn.id} className={cn(
+                     "p-4 rounded-[2rem] border flex items-center justify-between gap-4",
+                     collabMode ? "bg-white/5 border-white/10" : "bg-primary/5 border-primary/10 shadow-sm"
+                   )}>
+                     <div className="flex items-center gap-3">
+                       <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                         <img src={requester.photoUrl || `https://picsum.photos/seed/${requester.id}/200/200`} alt="" className="w-full h-full object-cover" />
+                       </div>
+                       <div>
+                         <p className={cn("font-bold", collabMode ? "text-white" : "text-secondary")}>{requester.familyName}</p>
+                         <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-primary")}>Wil connecten</p>
+                       </div>
+                     </div>
+                     <div className="flex gap-4">
+                       <button 
+                         onClick={() => acceptConnection(conn.id)}
+                         className="px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                       >
+                         Accepteer
+                       </button>
+                       <button 
+                         onClick={() => cancelConnection(conn.id)}
+                         className={cn("p-2 rounded-xl border transition-all text-slate-400 hover:text-red-500 hover:border-red-500/20", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100")}
+                       >
+                         <X className="w-5 h-5" />
+                       </button>
+                     </div>
+                   </div>
+                );
+              })}
+          </div>
+        </section>
+      )}
 
       {/* Matches & Overlaps */}
       <section className="space-y-6">
@@ -2880,15 +2937,16 @@ const TribeNearbyView = ({ onPaywall, onViewAllDeals, onRecommendSpot, onViewAll
                   </div>
                   <span className={cn("text-[10px] font-bold", collabMode ? "text-white/40" : "text-slate-400")}>3 families staying here</span>
                 </div>
-                <button 
-                  onClick={onPaywall}
-                  className={cn(
-                    "w-full mt-4 py-3 rounded-xl font-bold text-sm shadow-lg transition-all",
-                    collabMode ? "bg-white text-[#006d77] hover:bg-white/90" : "bg-accent text-white shadow-accent/20"
-                  )}
-                >
-                  Claim Deal
-                </button>
+                <PremiumAction isPremium={isPremium} onPaywall={onPaywall} onClick={() => alert("Deals are available in your user dashboard.")}>
+                  <button 
+                    className={cn(
+                      "w-full mt-4 py-3 rounded-xl font-bold text-sm shadow-lg transition-all",
+                      collabMode ? "bg-white text-[#006d77] hover:bg-white/90" : "bg-accent text-white shadow-accent/20"
+                    )}
+                  >
+                    Claim Deal
+                  </button>
+                </PremiumAction>
               </div>
             </div>
           ))}
@@ -4410,8 +4468,8 @@ const EditLocationModal = ({
 
         <form onSubmit={onManual} className="space-y-4">
           <LocationAutocomplete 
-            label="City, Country"
-            placeholder="e.g. Lisbon, Portugal"
+            label="Stad, Land"
+            placeholder="Bijv. Lissabon, Portugal"
             value={manualLocation.name}
             onChange={(val, lat, lng) => setManualLocation({ name: val, lat: lat || 0, lng: lng || 0 })}
           />
@@ -5077,6 +5135,7 @@ export default function App() {
     addToast,
     sendMessage,
     collabEndorsements,
+    conversations,
     isLocationModalOpen,
     setIsLocationModalOpen
   } = useNomadStore();
@@ -5397,6 +5456,7 @@ export default function App() {
       );
       case 'marketplace': return <MarketplaceView onBack={() => setActiveTab('tribe')} onContactSeller={handleContactSeller} collabMode={collabMode} onPaywall={() => setIsPaywallOpen(true)} />;
       case 'deals': return <DealsView onBack={() => setActiveTab('tribe-nearby')} onPaywall={() => setIsPaywallOpen(true)} />;
+      case 'admin': return <AdminDashboard />;
       default: return (
         <TribeView 
           onViewAllMarketplace={() => setActiveTab('marketplace')} 
@@ -5420,8 +5480,11 @@ export default function App() {
       try {
         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
         const data = await response.json();
-        const city = data.address.city || data.address.town || data.address.village || data.address.suburb || 'Unknown City';
-        const country = data.address.country || 'Unknown Country';
+        
+        // Robust address parsing
+        const addr = data.address || {};
+        const city = addr.city || addr.town || addr.village || addr.suburb || addr.municipality || addr.state_district || addr.state || 'Unknown City';
+        const country = addr.country || 'Unknown Country';
         
         const locationName = `${city}, ${country}`;
         await useNomadStore.getState().updateProfile({
@@ -5452,6 +5515,24 @@ export default function App() {
   const handleManualLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualLocation.name) return;
+    
+    let lat = manualLocation.lat;
+    let lng = manualLocation.lng;
+
+    // Fallback: If lat/lng are 0, try to geocode the name first
+    if (lat === 0 && lng === 0) {
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(manualLocation.name)}&limit=1`);
+        const data = await response.json();
+        if (data && data[0]) {
+          lat = parseFloat(data[0].lat);
+          lng = parseFloat(data[0].lon);
+        }
+      } catch (err) {
+        console.error("Manual geocoding fallback failed:", err);
+      }
+    }
+
     try {
       await useNomadStore.getState().updateProfile({
         currentLocation: {
@@ -5608,21 +5689,38 @@ export default function App() {
              <Home className="w-5 h-5" />
              <span className="text-[10px] font-black uppercase tracking-widest">Family Focus</span>
            </button>
-           <button 
-             onClick={() => {
-               setCollabMode(true);
-               setIsMenuOpen(false);
-             }}
-             className={cn(
-               "flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all",
-               collabMode 
-                 ? "bg-[#e9c46a] text-[#264653] border-[#e9c46a] shadow-lg shadow-[#e9c46a]/20" 
-                 : "bg-[#006d77]/5 border-[#006d77]/10 text-[#006d77]"
-             )}
-           >
-             <Briefcase className="w-5 h-5" />
-             <span className="text-[10px] font-black uppercase tracking-widest">Collab Focus</span>
-           </button>
+            <button 
+              onClick={() => {
+                setCollabMode(true);
+                setIsMenuOpen(false);
+              }}
+              className={cn(
+                "flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all",
+                collabMode 
+                  ? "bg-[#e9c46a] text-[#264653] border-[#e9c46a] shadow-lg shadow-[#e9c46a]/20" 
+                  : "bg-[#006d77]/5 border-[#006d77]/10 text-[#006d77]"
+              )}
+            >
+              <Briefcase className="w-5 h-5" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Collab Focus</span>
+            </button>
+            {currentUser?.role === 'SuperAdmin' && (
+              <button 
+                onClick={() => {
+                  setActiveTab('admin');
+                  setIsMenuOpen(false);
+                }}
+                className={cn(
+                  "col-span-2 flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all",
+                  activeTab === 'admin'
+                    ? "bg-secondary text-white border-secondary shadow-lg shadow-secondary/20"
+                    : "bg-slate-50 border-slate-100 text-slate-400"
+                )}
+              >
+                <Shield className="w-5 h-5" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Super Admin Panel</span>
+              </button>
+            )}
         </div>
       </nav>
 
@@ -5873,7 +5971,7 @@ export default function App() {
       </Modal>
 
       {/* Floating Connect Widget */}
-      <div className="fixed bottom-6 right-6 z-[120] flex flex-col items-end gap-4 pointer-events-none">
+      <div className="fixed bottom-24 right-6 md:bottom-8 md:right-8 z-[120] flex flex-col items-end gap-4 pointer-events-none">
         <AnimatePresence>
           {isConnectOpen && (
             <motion.div 
