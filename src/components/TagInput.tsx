@@ -8,9 +8,10 @@ interface TagInputProps {
   onChange: (tags: string[]) => void;
   placeholder?: string;
   maxTags?: number;
+  className?: string;
 }
 
-export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, placeholder = "Add interest...", maxTags = 10 }) => {
+export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, placeholder = "Add interest...", maxTags = 10, className }) => {
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -72,7 +73,7 @@ export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, placeholder 
   };
 
   return (
-    <div className="space-y-2" ref={containerRef}>
+    <div className={cn("space-y-2", className)} ref={containerRef}>
       <div className="flex flex-wrap gap-2 mb-2">
         {tags.map(tag => (
           <span 

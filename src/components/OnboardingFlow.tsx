@@ -20,9 +20,12 @@ export const OnboardingFlow: React.FC = () => {
     familyName: '',
     nativeLanguage: 'EN',
     spokenLanguages: [] as string[],
-    travelReason: '',
+    travelReasons: [] as string[],
     bio: '',
     kids: [] as Kid[],
+    parents: [
+      { id: 'parent_1', name: '', role: 'Parent', interests: [] }
+    ] as any[],
     trips: [
       {
         id: `trip_${Date.now()}`,
@@ -33,20 +36,21 @@ export const OnboardingFlow: React.FC = () => {
         endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
       }
     ] as Trip[],
-    openToCollabs: false,
+    openToCollabs: true, // Default to Yes
     collabCard: {
       occupation: '',
       superpowers: [] as string[],
       currentMission: '',
-      linkedInUrl: ''
-    } as CollabCard
+      linkedInUrl: '',
+      socialLinks: []
+    } as any
   });
 
   const updateField = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const updateCollabCard = (field: keyof CollabCard, value: any) => {
+  const updateCollabCard = (field: string, value: any) => {
     setFormData(prev => ({
       ...prev,
       collabCard: { ...prev.collabCard, [field]: value }
@@ -56,13 +60,18 @@ export const OnboardingFlow: React.FC = () => {
   const validateStep = () => {
     switch (step) {
       case 1:
-        return formData.familyName.length >= 2 && formData.familyName.length <= 40 && !!formData.nativeLanguage && !!formData.travelReason;
+        return formData.familyName.length >= 2 && 
+               formData.familyName.length <= 40 && 
+               !!formData.nativeLanguage && 
+               formData.travelReasons.length > 0 &&
+               formData.parents.some(p => p.name.length >= 2);
       case 2:
         return formData.kids.length === 0 || formData.kids.every(k => k.interests.length >= 1);
       case 3:
         return formData.trips.length > 0 && formData.trips.every(t => t.location.length >= 3 && !!t.startDate && !!t.endDate);
       case 4:
         if (formData.openToCollabs) {
+          // LinkedIn is no longer mandatory, but if present, must be valid
           const linkedInOk = !formData.collabCard.linkedInUrl || 
             (formData.collabCard.linkedInUrl.startsWith('https://linkedin.com') || 
              formData.collabCard.linkedInUrl.startsWith('https://www.linkedin.com'));
@@ -81,32 +90,35 @@ export const OnboardingFlow: React.FC = () => {
   };
 
   const handleBack = () => {
-    setStep(prev => prev - 1);
+    if (step > 1) {
+      setStep(prev => prev - 1);
+    }
   };
 
   const handleComplete = async () => {
     setIsLoading(true);
     try {
-      const profileData: Partial<FamilyProfile> = {
+      const filteredProfile: any = {
         familyName: formData.familyName,
         bio: formData.bio,
-        travelReason: formData.travelReason,
+        travelReasons: formData.travelReasons,
         nativeLanguage: formData.nativeLanguage,
         spokenLanguages: formData.spokenLanguages,
         kids: formData.kids,
         openToCollabs: formData.openToCollabs,
-        collabCard: formData.openToCollabs ? formData.collabCard : undefined,
-        parents: [{ 
-          id: currentUser?.id || '', 
-          name: currentUser?.familyName || 'Parent', 
-          role: 'Parent', 
-          interests: [] 
-        }]
+        parents: formData.parents.map(p => ({
+          ...p,
+          id: p.id === 'parent_1' ? (currentUser?.id || p.id) : p.id
+        }))
       };
+
+      if (formData.openToCollabs) {
+        filteredProfile.collabCard = formData.collabCard;
+      }
 
       const tripsWithId = formData.trips.map(t => ({ ...t, familyId: currentUser?.id || '' }));
       
-      await completeOnboarding(profileData, tripsWithId);
+      await completeOnboarding(filteredProfile, tripsWithId);
       setActiveTab('tribe');
     } catch (error) {
       console.error("Onboarding failed", error);

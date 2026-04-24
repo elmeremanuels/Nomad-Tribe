@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { cn } from '../../lib/utils';
-import { Briefcase, Search, Sparkles, Check, ChevronDown, Linkedin } from 'lucide-react';
+import { Briefcase, Search, Sparkles, Check, ChevronDown, Linkedin, Globe, Plus, X } from 'lucide-react';
 import { CollabCard } from '../../types';
 import occupationsSeed from '../../data/occupationsSeed.json';
 import skillsSeed from '../../data/skillsSeed.json';
@@ -218,23 +218,83 @@ export const Step4Collab: React.FC<Step4Props> = ({ openToCollabs, collabCard, o
                 />
               </div>
 
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5 px-1">
-                  <Linkedin className="w-3 h-3 text-slate-400" />
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">LinkedIn Profile</label>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-1.5">
+                    <Globe className="w-3 h-3 text-slate-400" />
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Social Media & Links</label>
+                  </div>
+                  <span className="text-[9px] font-black text-accent uppercase tracking-widest bg-accent/5 px-2 py-0.5 rounded-md">Badge + Level Up</span>
                 </div>
-                <input
-                  type="url"
-                  placeholder="https://linkedin.com/in/yourname"
-                  className={cn(
-                    "w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold text-secondary outline-none transition-all placeholder:text-slate-300",
-                    collabCard.linkedInUrl && !isValidLinkedIn(collabCard.linkedInUrl) ? "border-red-200 focus:border-red-300" : "focus:border-primary/20"
-                  )}
-                  value={collabCard.linkedInUrl}
-                  onChange={(e) => onCardChange('linkedInUrl', e.target.value)}
-                />
+                
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Linkedin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                    <input
+                      type="url"
+                      placeholder="LinkedIn URL (optional)"
+                      className={cn(
+                        "w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 pl-12 text-xs font-bold text-secondary outline-none transition-all placeholder:text-slate-300",
+                        collabCard.linkedInUrl && !isValidLinkedIn(collabCard.linkedInUrl) ? "border-red-200 focus:border-red-300" : "focus:border-primary/20"
+                      )}
+                      value={collabCard.linkedInUrl || ''}
+                      onChange={(e) => onCardChange('linkedInUrl', e.target.value)}
+                    />
+                  </div>
+
+                  {/* Dynamic Social Links */}
+                  {(collabCard as any).socialLinks?.map((link: any, index: number) => (
+                    <div key={index} className="flex gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <select 
+                        className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-xs font-bold text-secondary outline-none focus:border-primary/20"
+                        value={link.platform}
+                        onChange={(e) => {
+                          const newLinks = [...(collabCard as any).socialLinks];
+                          newLinks[index].platform = e.target.value;
+                          onCardChange('socialLinks', newLinks);
+                        }}
+                      >
+                        <option value="Instagram">Instagram</option>
+                        <option value="Twitter">X / Twitter</option>
+                        <option value="Facebook">Facebook</option>
+                        <option value="Website">Website</option>
+                      </select>
+                      <input
+                        type="url"
+                        placeholder="https://..."
+                        className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-xs font-bold text-secondary outline-none focus:border-primary/20 transition-all placeholder:text-slate-300"
+                        value={link.url}
+                        onChange={(e) => {
+                          const newLinks = [...(collabCard as any).socialLinks];
+                          newLinks[index].url = e.target.value;
+                          onCardChange('socialLinks', newLinks);
+                        }}
+                      />
+                      <button 
+                        onClick={() => {
+                          const newLinks = (collabCard as any).socialLinks.filter((_: any, i: number) => i !== index);
+                          onCardChange('socialLinks', newLinks);
+                        }}
+                        className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-slate-300 hover:text-red-400 hover:bg-slate-100 transition-all"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+
+                  <button 
+                    onClick={() => {
+                      const currentLinks = (collabCard as any).socialLinks || [];
+                      onCardChange('socialLinks', [...currentLinks, { platform: 'Instagram', url: '' }]);
+                    }}
+                    className="w-full py-3 bg-white border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-50 transition-all"
+                  >
+                    <Plus className="w-3 h-3" /> Add Social Media Link
+                  </button>
+                </div>
+                
                 {collabCard.linkedInUrl && !isValidLinkedIn(collabCard.linkedInUrl) && (
-                  <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest px-1">Must start with https://linkedin.com</p>
+                  <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest px-1">LinkedIn must start with https://linkedin.com</p>
                 )}
               </div>
             </div>

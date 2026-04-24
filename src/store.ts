@@ -70,6 +70,7 @@ interface NomadStore {
   addTrip: (trip: Trip) => Promise<void>;
   updateTrip: (trip: Trip) => Promise<void>;
   removeTrip: (tripId: string) => Promise<void>;
+  saveVibeCheck: (metrics: Record<string, number>) => Promise<void>;
   vouchForFamily: (vouchingId: string, targetId: string) => Promise<void>;
   reserveItem: (itemId: string, buyerId: string) => Promise<void>;
   addItem: (item: MarketItem) => Promise<void>;
@@ -232,6 +233,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               privacySettings: data.privacySettings || { isIncognito: false },
               collabCard: data.collabCard || (data as any).professional || { occupation: '', superpowers: [], currentMission: '', linkedInUrl: '' },
               openToCollabs: data.openToCollabs || (data as any).professional?.openToNetworking || false,
+              hasCompletedOnboarding: data.hasCompletedOnboarding ?? !!data.familyName,
               preferences: {
                 language: data.preferences?.language || 'EN',
                 showNextLocationSuggestions: data.preferences?.showNextLocationSuggestions ?? true,
@@ -262,7 +264,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               id: firebaseUser.uid,
               familyName: '',
               bio: '',
-              travelReason: '',
+              travelReasons: [],
               nativeLanguage: 'English',
               spokenLanguages: ['English'],
               parents: [{ id: `p-${Date.now()}`, name: firebaseUser.displayName?.split(' ')[0] || 'Parent', role: 'Parent', interests: [] }],
@@ -392,18 +394,22 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         const scheduledDate = new Date(now.getTime() + 36 * 60 * 60 * 1000);
         scheduledDate.setHours(14, 0, 0, 0);
         
-        const notification: AppNotification = {
-          id: `notif-${Date.now()}`,
-          userId,
-          title: 'Vibe Check! 🌍',
-          message: `Hey Pioneer! Is the vibe in ${profile.currentLocation.name} still as good as we think? Help the Tribe with a quick check!`,
-          type: 'VibeCheck',
-          data: { cityName: profile.currentLocation.name },
-          isRead: false,
-          scheduledFor: scheduledDate.toISOString(),
-          createdAt: now.toISOString()
-        };
-        await setDoc(doc(db, 'notifications', notification.id), notification);
+        try {
+          const notification: AppNotification = {
+            id: `notif-${Date.now()}`,
+            userId,
+            title: 'Vibe Check! 🌍',
+            message: `Hey Pioneer! Is the vibe in ${profile.currentLocation.name} still as good as we think? Help the Tribe with a quick check!`,
+            type: 'VibeCheck',
+            data: { cityName: profile.currentLocation.name },
+            isRead: false,
+            scheduledFor: scheduledDate.toISOString(),
+            createdAt: now.toISOString()
+          };
+          await setDoc(doc(db, 'notifications', notification.id), notification);
+        } catch (err) {
+          console.warn('Vibe check notification failed:', err);
+        }
       }
 
       // Update local state immediately for better UX
@@ -762,24 +768,38 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       status: 'pending',
       category: category as any
     };
+
     try {
       await setDoc(doc(db, 'connections', connectionId), connection);
-      
-      // Add notification for recipient
-      await get().addNotification({
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'connections');
+      return; // stop here if connection fails
+    }
+
+    // Notification separate from connection - failure here shouldn't break the flow
+    try {
+      const notifId = `notif-${Date.now()}`;
+      await setDoc(doc(db, 'notifications', notifId), {
+        id: notifId,
         userId: targetId,
-        title: 'Nieuw Connectie Verzoek',
-        message: `${user.familyName} wil met je connecten!`,
+        title: 'New Connection Request',
+        message: `${user.familyName} wants to connect with you!`,
         type: 'ConnectionRequest',
+        data: { connectionId, requesterId: user.id },
+        isRead: false,
         scheduledFor: new Date().toISOString(),
-        data: { connectionId, requesterId: user.id }
+        createdAt: new Date().toISOString()
       });
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, `connections`);
+      console.warn('Notification write failed (non-critical):', err);
+      // Connection is already created - recipient will see it via onSnapshot
     }
   },
 
   acceptConnection: async (connectionId) => {
+    const user = get().currentUser;
+    if (!user) return;
+
     try {
       const connDoc = await getDoc(doc(db, 'connections', connectionId));
       if (!connDoc.exists()) return;
@@ -787,16 +807,23 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
       await updateDoc(doc(db, 'connections', connectionId), { status: 'accepted' });
       
-      // Notify requester that connection was accepted
-      const user = get().currentUser;
-      await get().addNotification({
-        userId: connData.requesterId,
-        title: 'Connectie Geaccepteerd!',
-        message: `${user?.familyName || 'Een familie'} heeft je connectie verzoek geaccepteerd.`,
-        type: 'General',
-        scheduledFor: new Date().toISOString(),
-        data: { connectionId, acceptorId: user?.id }
-      });
+      // Notify requester that connection was accepted - non-blocking
+      try {
+        const notifId = `notif-${Date.now()}`;
+        await setDoc(doc(db, 'notifications', notifId), {
+          id: notifId,
+          userId: connData.requesterId,
+          title: 'Connection Accepted!',
+          message: `${user.familyName} accepted your connection request.`,
+          type: 'General',
+          data: { connectionId, acceptorId: user.id },
+          isRead: false,
+          scheduledFor: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Notification write failed (non-critical):', err);
+      }
 
       // Create conversation automatically
       const conversationId = `convo-${connectionId}`;
@@ -1125,15 +1152,28 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     try {
       // 1. Update Profile
       const premiumUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const badges = (profileData.badges || []) as string[];
+      let verificationLevel: 1 | 2 | 3 = 1;
+
+      // Award Social badge if they provided ANY social link
+      if (profileData.collabCard?.linkedInUrl || (profileData.collabCard?.socialLinks && profileData.collabCard.socialLinks.length > 0)) {
+        if (!badges.includes('Socially Connected')) {
+          badges.push('Socially Connected');
+        }
+        verificationLevel = 2;
+      }
+
       const updatedProfile: Partial<FamilyProfile> = {
         ...profileData,
         isPremium: true,
         premiumType: 'TRIAL',
         premiumUntil,
-        verificationLevel: 1,
+        hasCompletedOnboarding: true,
+        verificationLevel,
         role: 'User',
-        badges: [],
+        badges,
         vouchedBy: [],
+        travelReasons: profileData.travelReasons || [],
         gamification: { hasClaimedPioneerBonus: false, totalSpotsAdded: 0 },
         privacySettings: { isIncognito: false },
         preferences: {

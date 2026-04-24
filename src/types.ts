@@ -80,6 +80,8 @@ export interface CollabCard {
   superpowers: string[]; // Max 3 from skillsSeed.json (The "Offer")
   currentMission: string; // Short string: What they are working on
   linkedInUrl?: string;
+  socialLinks?: { platform: string; url: string }[];
+  isRemote?: boolean;
 }
 
 export interface CollabAsk {
@@ -104,7 +106,7 @@ export interface FamilyProfile {
   id: string;
   familyName: string;
   bio: string;
-  travelReason: string; // e.g., "Worldschooling", "Escaping the 9-5"
+  travelReasons: string[]; // Changed from travelReason: string
   nativeLanguage: string;
   spokenLanguages: string[];
   parents: Parent[];
@@ -127,6 +129,7 @@ export interface FamilyProfile {
     lng: number;
     updatedAt: string;
   };
+  hasCompletedOnboarding?: boolean; // Added
   role: 'User' | 'UserPlus' | 'SuperAdmin';
   collabCard?: CollabCard;
   openToCollabs: boolean;
@@ -290,6 +293,7 @@ export interface MarketItem {
   sellerName: string;
   location: { lat: number; lng: number; name: string };
   title: string;
+  description: string;
   category: 'Stroller' | 'Car Seat' | 'Toys' | 'Books' | 'Other' | 'Professional Services';
   price: number | 'Free';
   status: 'Available' | 'Reserved' | 'Sold';

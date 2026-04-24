@@ -50,7 +50,7 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
   }, [value]);
 
   const searchLocations = async (text: string) => {
-    if (text.length < 3) {
+    if (text.length < 2) {
       setResults([]);
       return;
     }
@@ -65,16 +65,17 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
         name: c.name,
         country: c.country,
         slug: c.slug,
-        lat: 0,
-        lng: 0
+        lat: c.lat || 0,
+        lng: c.lng || 0
       }));
 
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&addressdetails=1&limit=5`);
+      // OSM search (Nominatim) - improved query for better results
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&addressdetails=1&limit=8&featuretype=city&accept-language=en,nl`);
       const data = await response.json();
       
       const apiResults: City[] = data.map((item: any) => ({
         id: item.place_id.toString(),
-        name: item.display_name.split(',')[0],
+        name: item.address.city || item.address.town || item.address.village || item.display_name.split(',')[0],
         country: item.address.country || item.display_name.split(',').pop().trim(),
         slug: item.display_name.split(',')[0].toLowerCase().replace(/\s+/g, '-'),
         lat: parseFloat(item.lat),
@@ -89,7 +90,7 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
         }
       });
 
-      setResults(combined.slice(0, 6));
+      setResults(combined.slice(0, 8));
     } catch (error) {
       console.error("Location search error:", error);
     } finally {
@@ -102,6 +103,38 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
     onChange(locationStr, { lat: city.lat || 0, lng: city.lng || 0 });
     setSearchTerm(locationStr);
     setIsOpen(false);
+  };
+
+  const detectLocation = () => {
+    setIsLoading(true);
+    if (!navigator.geolocation) {
+      console.error("Geolocation is not supported");
+      setIsLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try {
+        const { latitude, longitude } = pos.coords;
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1&accept-language=en,nl`);
+        const data = await response.json();
+        
+        const cityName = data.address.city || data.address.town || data.address.village || "Current Location";
+        const country = data.address.country || "";
+        const locationStr = country ? `${cityName}, ${country}` : cityName;
+        
+        onChange(locationStr, { lat: latitude, lng: longitude });
+        setSearchTerm(locationStr);
+        setIsOpen(false);
+      } catch (err) {
+        console.error("Reverse geocode error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }, (err) => {
+      console.error("Geolocation error:", err);
+      setIsLoading(false);
+    });
   };
 
   return (
@@ -118,7 +151,7 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
           value={searchTerm}
           onFocus={() => {
             setIsOpen(true);
-            if (searchTerm.length >= 3) searchLocations(searchTerm);
+            if (searchTerm.length >= 2) searchLocations(searchTerm);
           }}
           onChange={(e) => {
             const val = e.target.value;
@@ -141,22 +174,41 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
             }
           }}
         />
-        {searchTerm && (
-          <button 
-            onClick={() => {
-              setSearchTerm('');
-              onChange('');
-              setResults([]);
-            }}
-            className="absolute right-4 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-slate-500"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        )}
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+           {searchTerm && (
+            <button 
+                onClick={(e) => {
+                e.stopPropagation();
+                setSearchTerm('');
+                onChange('');
+                setResults([]);
+                }}
+                className="p-1 text-slate-300 hover:text-slate-500"
+            >
+                <X className="w-3 h-3" />
+            </button>
+            )}
+            <button
+                type="button"
+                onClick={detectLocation}
+                className="p-2 bg-white rounded-xl text-primary hover:text-primary-dark transition-all shadow-sm border border-slate-100 active:scale-95"
+                title="Use my current location"
+            >
+                <MapPin className="w-3.5 h-3.5" />
+            </button>
+        </div>
       </div>
 
-      {isOpen && searchTerm.length >= 2 && results.length > 0 && (
-        <div className="absolute z-[100] w-full mt-2 bg-white border-2 border-slate-100 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+      {isOpen && (
+        <div className="absolute z-[100] w-full mt-2 bg-white border-2 border-slate-100 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 py-2">
+          {searchTerm.length < 2 && (
+             <button
+               onClick={detectLocation}
+               className="w-full p-4 flex items-center gap-3 hover:bg-slate-50 text-left transition-colors text-primary font-bold text-sm"
+             >
+               <MapPin className="w-4 h-4" /> Use my current location
+             </button>
+          )}
           {results.map(city => (
             <button
               key={city.id}
@@ -172,6 +224,11 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
               </div>
             </button>
           ))}
+          {isOpen && searchTerm.length >= 2 && results.length === 0 && !isLoading && (
+              <div className="p-4 text-center text-xs text-slate-400 font-medium">
+                  No cities found. Try checking your spelling.
+              </div>
+          )}
         </div>
       )}
     </div>
