@@ -1,5 +1,31 @@
 import { create } from 'zustand';
-import { FamilyProfile, Trip, Spot, MarketItem, PopUpEvent, LookingForRequest, Kid, Connection, Conversation, Message, Activity, DestinationGuidance, SpotReview, AppSettings, AppNotification, CollabAsk, CollabCard, CollabEndorsement, Report, BlockedUser, AdminAlert } from './types';
+import { 
+  FamilyProfile, 
+  Trip, 
+  Spot, 
+  MarketItem, 
+  PopUpEvent, 
+  LookingForRequest, 
+  Kid, 
+  Connection, 
+  Conversation, 
+  Message, 
+  Activity, 
+  SpotReview, 
+  AppSettings, 
+  AppNotification, 
+  CollabAsk, 
+  CollabCard, 
+  CollabEndorsement, 
+  Report, 
+  BlockedUser, 
+  AdminAlert,
+  CityProfile,
+  CityEvent,
+  SpotCategory,
+  EventCategory,
+  DestinationGuidance
+} from './types';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { 
   collection, 
@@ -13,7 +39,8 @@ import {
   deleteDoc,
   addDoc,
   serverTimestamp,
-  orderBy
+  orderBy,
+  writeBatch
 } from 'firebase/firestore';
 import { onAuthStateChanged, getRedirectResult, User as FirebaseUser, setPersistence, browserSessionPersistence, signOut } from 'firebase/auth';
 
@@ -46,6 +73,8 @@ interface NomadStore {
   connections: Connection[];
   conversations: Conversation[];
   messages: Record<string, Message[]>;
+  cities: CityProfile[];
+  cityEvents: CityEvent[];
   appSettings: AppSettings;
   reports: Report[];
   blocks: BlockedUser[];
@@ -96,6 +125,13 @@ interface NomadStore {
   addCollabAsk: (ask: CollabAsk) => Promise<void>;
   removeCollabAsk: (askId: string) => Promise<void>;
   addCollabEndorsement: (endorsement: CollabEndorsement) => Promise<void>;
+  
+  // Explore v2 Actions
+  addCity: (city: CityProfile) => Promise<void>;
+  updateCity: (cityId: string, updates: Partial<CityProfile>) => Promise<void>;
+  addCityEvent: (event: CityEvent) => Promise<void>;
+  rsvpToCityEvent: (eventId: string) => Promise<void>;
+
   calculateBadges: () => Promise<void>;
   verifyCityData: (destId: string, category: string, price: number) => Promise<void>;
   updateCityVibe: (destId: string, vibeScore: number) => Promise<void>;
@@ -128,6 +164,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   connections: [],
   conversations: [],
   activities: [],
+  cities: [],
+  cityEvents: [],
   destinations: [],
   notifications: [],
   reviews: [],
@@ -311,6 +349,14 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           set({ trips: snapshot.docs.map(d => d.data() as Trip) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'trips'));
 
+        onSnapshot(collection(db, 'cities'), (snapshot) => {
+          set({ cities: snapshot.docs.map(d => d.data() as CityProfile) });
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'cities'));
+
+        onSnapshot(collection(db, 'cityEvents'), (snapshot) => {
+          set({ cityEvents: snapshot.docs.map(d => d.data() as CityEvent) });
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'cityEvents'));
+
         onSnapshot(collection(db, 'marketplace'), (snapshot) => {
           set({ marketItems: snapshot.docs.map(d => d.data() as MarketItem) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'marketplace'));
@@ -365,6 +411,21 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   setCollabMode: (mode) => set({ collabMode: mode }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+
+  saveVibeCheck: async (metrics) => {
+    const user = get().currentUser;
+    if (!user) return;
+    try {
+      const userRef = doc(db, 'profiles', user.id);
+      await updateDoc(userRef, { 
+        vibeFamilyMetrics: metrics,
+        lastVibeCheck: new Date().toISOString()
+      });
+      get().addToast("Vibe preferences opgeslagen!", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `profiles/${user.id}`);
+    }
+  },
 
   updateProfile: async (profile) => {
     const user = get().currentUser;
@@ -906,25 +967,30 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     if (!user) return;
 
     try {
-      // Check if this is the first spot in this city (conceptually, we check our local state)
-      // For a more robust check, we'd query Firestore, but local state is usually synced
+      const cleanSpot = {
+        ...spot,
+        createdAt: spot.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isVetted: spot.isVetted ?? false,
+        isHidden: spot.isHidden ?? false,
+        reportCount: spot.reportCount ?? 0,
+        viewCount: spot.viewCount ?? 0,
+        saveCount: spot.saveCount ?? 0,
+        dataSource: spot.dataSource || 'ugc',
+        verifiedTags: spot.verifiedTags || []
+      };
+
       const spotsInCity = get().spots.filter(s => {
-        // Simple distance check or name check if we had city names on spots
-        // Since spots don't have city names, we'll assume the UI passes a spot with a city context if needed
-        // Or we can just check if there are ANY spots currently. 
-        // The prompt says "If a city has 0 spots in the database"
-        return calculateDistance(s.coordinates.lat, s.coordinates.lng, spot.coordinates.lat, spot.coordinates.lng) < 20;
+        return calculateDistance(s.coordinates.lat, s.coordinates.lng, cleanSpot.coordinates.lat, cleanSpot.coordinates.lng) < 20;
       });
 
-      await setDoc(doc(db, 'spots', spot.id), spot);
+      await setDoc(doc(db, 'spots', cleanSpot.id), cleanSpot);
       
-      // Update user gamification
       const newTotalSpots = (user.gamification?.totalSpotsAdded || 0) + 1;
       const updates: any = {
         'gamification.totalSpotsAdded': newTotalSpots
       };
 
-      // Pioneer Bonus Logic
       if (spotsInCity.length === 0 && !user.gamification?.hasClaimedPioneerBonus) {
         const premiumUntil = addDays(new Date(), 30).toISOString();
         updates.isPremium = true;
@@ -932,18 +998,17 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         updates.premiumUntil = premiumUntil;
         updates['gamification.hasClaimedPioneerBonus'] = true;
         
-        get().addToast("Pioneer Bonus Anticipeert! 30 dagen Tribe PRO ontvangen.", "success");
-        console.log("PIONEER BONUS UNLOCKED!");
+        get().addToast("Pioneer Bonus Ontgrendeld! 30 dagen Tribe PRO ontvangen.", "success");
       }
 
       await updateDoc(doc(db, 'users', user.id), updates);
 
       const newActivity: Activity = {
         id: `a-${Date.now()}`,
-        userId: spot.recommendedBy || 'Unknown',
+        userId: cleanSpot.recommendedBy || 'Unknown',
         familyName: user.familyName || 'Unknown',
         type: 'Spot',
-        content: `Recommended a new spot: ${spot.name}`,
+        content: `shared a new spot: ${cleanSpot.name}`,
         createdAt: new Date().toISOString()
       };
       await setDoc(doc(db, 'activities', newActivity.id), newActivity);
@@ -959,6 +1024,270 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       handleFirestoreError(err, OperationType.DELETE, `spots/${spotId}`);
     }
   },
+
+  addCity: async (city) => {
+    try {
+      await setDoc(doc(db, 'cities', city.id), city);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `cities/${city.id}`);
+    }
+  },
+
+  updateCity: async (cityId, updates) => {
+    try {
+      await updateDoc(doc(db, 'cities', cityId), updates);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `cities/${cityId}`);
+    }
+  },
+
+  addCityEvent: async (event) => {
+    try {
+      await setDoc(doc(db, 'cityEvents', event.id), event);
+      
+      const user = get().currentUser;
+      const newActivity: Activity = {
+        id: `a-${Date.now()}`,
+        userId: event.organizer.userId || 'system',
+        familyName: user?.familyName || event.organizer.name,
+        type: 'Event',
+        content: `organized a new event in ${event.citySlug}: ${event.title}`,
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, 'activities', newActivity.id), newActivity);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `cityEvents/${event.id}`);
+    }
+  },
+
+  rsvpToCityEvent: async (eventId) => {
+    const user = get().currentUser;
+    if (!user) return;
+    try {
+      const eventRef = doc(db, 'cityEvents', eventId);
+      const eventSnap = await getDoc(eventRef);
+      if (eventSnap.exists()) {
+        const data = eventSnap.data() as CityEvent;
+        const rsvps = Array.from(new Set([...(data.rsvps || []), user.id]));
+        await updateDoc(eventRef, { rsvps });
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `cityEvents/${eventId}`);
+    }
+  },
+
+  seedInitialData: async () => {
+    const existing = get().cities;
+    
+    // Canonical list of unique destinations based on Nomad List hubs
+    const baseCities = [
+      { id: 'bangkok-v2', name: 'Bangkok', country: 'Thailand', countryCode: 'TH', lat: 13.7563, lng: 100.5018, continent: 'Azië', preferredImgId: '1552423814-14d60fc900c7' },
+      { id: 'buenos-aires-v2', name: 'Buenos Aires', country: 'Argentinië', countryCode: 'AR', lat: -34.6037, lng: -58.3816, continent: 'Amerika', preferredImgId: '1555546258-f5424578e348' },
+      { id: 'chiang-mai-v2', name: 'Chiang Mai', country: 'Thailand', countryCode: 'TH', lat: 18.7883, lng: 98.9853, continent: 'Azië', preferredImgId: '1590001158193-7903d8e70514' },
+      { id: 'lissabon-v2', name: 'Lissabon', country: 'Portugal', countryCode: 'PT', lat: 38.7223, lng: -9.1393, continent: 'Europa', preferredImgId: '1512100356132-d323ad379893' },
+      { id: 'mexico-stad-v2', name: 'Mexico-Stad', country: 'Mexico', countryCode: 'MX', lat: 19.4326, lng: -99.1332, continent: 'Amerika', preferredImgId: '1512813195329-36a8ac68e29a' },
+      { id: 'medellin-v2', name: 'Medellin', country: 'Colombia', countryCode: 'CO', lat: 6.2442, lng: -75.5812, continent: 'Amerika', preferredImgId: '1533632359-03594f41065a' },
+      { id: 'ubud-v2', name: 'Ubud', country: 'Indonesië', countryCode: 'ID', lat: -8.5069, lng: 115.2625, continent: 'Azië', preferredImgId: '1537996194471-e657df975ab4' },
+      { id: 'berlijn-v2', name: 'Berlijn', country: 'Duitsland', countryCode: 'DE', lat: 52.5200, lng: 13.4050, continent: 'Europa', preferredImgId: '1528301721406-fc5a4686523c' },
+      { id: 'canggu-v2', name: 'Canggu', country: 'Indonesië', countryCode: 'ID', lat: -8.6478, lng: 115.1385, continent: 'Azië', preferredImgId: '1552670288-adc3d2ef6e4d' },
+      { id: 'taipei-v2', name: 'Taipei', country: 'Taiwan', countryCode: 'TW', lat: 25.0330, lng: 121.5654, continent: 'Azië', preferredImgId: '1470004922291-d3eeefeeb57f' },
+      { id: 'seoul-v2', name: 'Seoul', country: 'Zuid-Korea', countryCode: 'KR', lat: 37.5665, lng: 126.9780, continent: 'Azië', preferredImgId: '1538669715516-6469c47a55c2' },
+      { id: 'tokio-v2', name: 'Tokio', country: 'Japan', countryCode: 'JP', lat: 35.6895, lng: 139.6917, continent: 'Azië', preferredImgId: '1540959733332-eab4deabeeaf' },
+      { id: 'praag-v2', name: 'Praag', country: 'Tsjechië', countryCode: 'CZ', lat: 50.0755, lng: 14.4378, continent: 'Europa', preferredImgId: '1541849546122-45a1b32d207f' },
+      { id: 'da-nang-v2', name: 'Da Nang', country: 'Vietnam', countryCode: 'VN', lat: 16.0544, lng: 108.2022, continent: 'Azië', preferredImgId: '1559592442-7e18259f63cc' },
+      { id: 'ho-chi-minh-stad-v2', name: 'Ho Chi Minh-Stad', country: 'Vietnam', countryCode: 'VN', lat: 10.7627, lng: 106.6602, continent: 'Azië', preferredImgId: '1556064354-946f0475b75f' },
+      { id: 'bansko-v2', name: 'Bansko', country: 'Bulgarije', countryCode: 'BG', lat: 41.8333, lng: 23.4833, continent: 'Europa', preferredImgId: '1517400508447-f8dd518b86db' },
+      { id: 'kaapstad-v2', name: 'Kaapstad', country: 'Zuid-Afrika', countryCode: 'ZA', lat: -33.9249, lng: 18.4232, continent: 'Afrika', preferredImgId: '1580619305218-8423a7ef79b4' },
+      { id: 'kuala-lumpur-v2', name: 'Kuala Lumpur', country: 'Maleisië', countryCode: 'MY', lat: 3.1390, lng: 101.6869, continent: 'Azië', preferredImgId: '1512401223296-147e5b5d8487' },
+      { id: 'boedapest-v2', name: 'Boedapest', country: 'Hongarije', countryCode: 'HU', lat: 47.4979, lng: 19.0402, continent: 'Europa', preferredImgId: '1551884839-16695b2496a7' },
+      { id: 'warschau-v2', name: 'Warschau', country: 'Polen', countryCode: 'PL', lat: 52.2297, lng: 21.0122, continent: 'Europa', preferredImgId: '1519197924295-2f9c14ef1f30' },
+      { id: 'krakau-v2', name: 'Krakau', country: 'Polen', countryCode: 'PL', lat: 50.0647, lng: 19.9450, continent: 'Europa', preferredImgId: '1516167882417-09a27c7379d8' },
+      { id: 'tallinn-v2', name: 'Tallinn', country: 'Estland', countryCode: 'EE', lat: 59.4370, lng: 24.7536, continent: 'Europa', preferredImgId: '1559586612-3a3f00077523' },
+      { id: 'funchal-v2', name: 'Funchal', country: 'Portugal', countryCode: 'PT', lat: 32.6669, lng: -16.9241, continent: 'Europa', preferredImgId: '1534351590666-13c7f9681abb' },
+      { id: 'porto-v2', name: 'Porto', country: 'Portugal', countryCode: 'PT', lat: 41.1579, lng: -8.6291, continent: 'Europa', preferredImgId: '1555881400-74b7cb752229' },
+      { id: 'las-palmas-v2', name: 'Las Palmas', country: 'Spanje', countryCode: 'ES', lat: 28.1235, lng: -15.4363, continent: 'Europa', preferredImgId: '1536431311719-398b6704d4cc' },
+      { id: 'tenerife-v2', name: 'Tenerife', country: 'Spanje', countryCode: 'ES', lat: 28.2916, lng: -16.6291, continent: 'Europa', preferredImgId: '1540306145-6677ff0a2ec7' },
+      { id: 'valencia-v2', name: 'Valencia', country: 'Spanje', countryCode: 'ES', lat: 39.4699, lng: -0.3763, continent: 'Europa', preferredImgId: '1511527844068-d3964d03e33f' },
+      { id: 'barcelona-v2', name: 'Barcelona', country: 'Spanje', countryCode: 'ES', lat: 41.3851, lng: 2.1734, continent: 'Europa', preferredImgId: '1534351590666-13c7f9681abb' },
+      { id: 'athene-v2', name: 'Athene', country: 'Griekenland', countryCode: 'GR', lat: 37.9838, lng: 23.7275, continent: 'Europa', preferredImgId: '1513635269975-59663e0ac1ad' },
+      { id: 'istanbul-v2', name: 'Istanbul', country: 'Turkije', countryCode: 'TR', lat: 41.0082, lng: 28.9784, continent: 'Europa', preferredImgId: '1524231752111-3b69b02d245a' },
+      { id: 'tbilisi-v2', name: 'Tbilisi', country: 'Georgië', countryCode: 'GE', lat: 41.7151, lng: 44.8271, continent: 'Europa', preferredImgId: '1554562208-e4b2d5d852a3' },
+      { id: 'dubai-v2', name: 'Dubai', country: 'VA Emiraten', countryCode: 'AE', lat: 25.2048, lng: 55.2708, continent: 'Azië', preferredImgId: '1512453979798-5ea26dff827c' },
+      { id: 'singapore-v2', name: 'Singapore', country: 'Singapore', countryCode: 'SG', lat: 1.3521, lng: 103.8198, continent: 'Azië', preferredImgId: '1527443224151-c67de94709ed' },
+      { id: 'sydney-v2', name: 'Sydney', country: 'Australië', countryCode: 'AU', lat: -33.8688, lng: 151.2093, continent: 'Oceanië', preferredImgId: '150697333333-64903a2e3796' },
+      { id: 'melbourne-v2', name: 'Melbourne', country: 'Australië', countryCode: 'AU', lat: -37.8136, lng: 144.9631, continent: 'Oceanië', preferredImgId: '1520697333333-64903a2e3796' },
+      { id: 'auckland-v2', name: 'Auckland', country: 'Nieuw-Zeeland', countryCode: 'NZ', lat: -36.8485, lng: 174.7633, continent: 'Oceanië', preferredImgId: '1547924013511-28241270bc12' },
+      { id: 'new-york-v2', name: 'New York', country: 'USA', countryCode: 'US', lat: 40.7128, lng: -74.0060, continent: 'Amerika', preferredImgId: '1496442226666-8d48a60a175b' },
+      { id: 'san-francisco-v2', name: 'San Francisco', country: 'USA', countryCode: 'US', lat: 37.7749, lng: -122.4194, continent: 'Amerika', preferredImgId: '1501591122174-d88a443dd400' },
+      { id: 'miami-v2', name: 'Miami', country: 'USA', countryCode: 'US', lat: 25.7617, lng: -80.1918, continent: 'Amerika', preferredImgId: '1450612623062-db37a24e344d' },
+      { id: 'austin-v2', name: 'Austin', country: 'USA', countryCode: 'US', lat: 30.2672, lng: -97.7431, continent: 'Amerika', preferredImgId: '1531215509532-43c2e128ba70' },
+      { id: 'denver-v2', name: 'Denver', country: 'USA', countryCode: 'US', lat: 39.7392, lng: -104.9903, continent: 'Amerika', preferredImgId: '1523482580672-f109ba860be5' },
+      { id: 'florianopolis-v2', name: 'Florianopolis', country: 'Brazilië', countryCode: 'BR', lat: -27.5954, lng: -48.5480, continent: 'Amerika', preferredImgId: '1516962215312-d21a1b4e19d0' },
+      { id: 'sao-paulo-v2', name: 'Sao Paulo', country: 'Brazilië', countryCode: 'BR', lat: -23.5505, lng: -46.6333, continent: 'Amerika', preferredImgId: '1543976040374-85c8e92cae66' },
+      { id: 'rio-de-janeiro-v2', name: 'Rio de Janeiro', country: 'Brazilië', countryCode: 'BR', lat: -22.9068, lng: -43.1729, continent: 'Amerika', preferredImgId: '1483729553805-4c9100298d00' },
+      { id: 'santiago-v2', name: 'Santiago', country: 'Chili', countryCode: 'CL', lat: -33.4489, lng: -70.6693, continent: 'Amerika', preferredImgId: '1480714378408-67cf0d13bc1b' },
+      { id: 'lima-v2', name: 'Lima', country: 'Peru', countryCode: 'PE', lat: -12.0432, lng: -77.0282, continent: 'Amerika', preferredImgId: '1514565131-fce0801e5785' },
+      { id: 'cusco-v2', name: 'Cusco', country: 'Peru', countryCode: 'PE', lat: -13.5320, lng: -71.9675, continent: 'Amerika', preferredImgId: '1526392942-1e96261c3601' },
+      { id: 'antigua-v2', name: 'Antigua', country: 'Guatemala', countryCode: 'GT', lat: 14.5667, lng: -90.7333, continent: 'Amerika', preferredImgId: '1493397212122-2b85defc3095' },
+      { id: 'tulum-v2', name: 'Tulum', country: 'Mexico', countryCode: 'MX', lat: 20.2114, lng: -87.4654, continent: 'Amerika', preferredImgId: '1518548419973-706509ccc5c4' },
+      { id: 'sayulita-v2', name: 'Sayulita', country: 'Mexico', countryCode: 'MX', lat: 20.8689, lng: -105.4408, continent: 'Amerika', preferredImgId: '1510017803434-a899398421b3' },
+      { id: 'ericeira-v2', name: 'Ericeira', country: 'Portugal', countryCode: 'PT', lat: 38.9638, lng: -9.4184, continent: 'Europa', preferredImgId: '1529604164-904033b95af5' },
+      { id: 'santa-teresa-v2', name: 'Santa Teresa', country: 'Costa Rica', countryCode: 'CR', lat: 9.6429, lng: -85.1685, continent: 'Amerika', preferredImgId: '1537996194471-e657df975ab4' },
+      { id: 'monterrey-v2', name: 'Monterrey', country: 'Mexico', countryCode: 'MX', lat: 25.6866, lng: -100.3161, continent: 'Amerika', preferredImgId: '1512813195329-36a8ac68e29a' },
+      { id: 'split-v2', name: 'Split', country: 'Kroatië', countryCode: 'HR', lat: 43.5081, lng: 16.4402, continent: 'Europa', preferredImgId: '1555990548-641e4d35368a' },
+      { id: 'dubrovnik-v2', name: 'Dubrovnik', country: 'Kroatië', countryCode: 'HR', lat: 42.6507, lng: 18.0944, continent: 'Europa', preferredImgId: '1541849546122-45a1b32d207f' },
+      { id: 'siargao-v2', name: 'Siargao', country: 'Filipijnen', countryCode: 'PH', lat: 9.8500, lng: 126.0500, continent: 'Azië', preferredImgId: '1518391846015-55a9cb0008a6' },
+      { id: 'boracay-v2', name: 'Boracay', country: 'Filipijnen', countryCode: 'PH', lat: 11.9712, lng: 121.9213, continent: 'Azië', preferredImgId: '1540959733332-eab4deabeeaf' },
+      { id: 'belgrado-v2', name: 'Belgrado', country: 'Servië', countryCode: 'RS', lat: 44.7866, lng: 20.4489, continent: 'Europa', preferredImgId: '1513635269975-59663e0ac1ad' },
+      { id: 'nairobi-v2', name: 'Nairobi', country: 'Kenia', countryCode: 'KE', lat: -1.2921, lng: 36.8219, continent: 'Afrika', preferredImgId: '1559592442-7e18259f63cc' },
+      { id: 'marrakech-v2', name: 'Marrakech', country: 'Marokko', countryCode: 'MA', lat: 31.6295, lng: -7.9811, continent: 'Afrika', preferredImgId: '1580619305218-8423a7ef79b4' },
+      { id: 'tel-aviv-v2', name: 'Tel Aviv', country: 'Israel', countryCode: 'IL', lat: 32.0853, lng: 34.7818, continent: 'Azië', preferredImgId: '1512401223296-147e5b5d8487' },
+      { id: 'vancouver-v2', name: 'Vancouver', country: 'Canada', countryCode: 'CA', lat: 49.2827, lng: -123.1207, continent: 'Amerika', preferredImgId: '1496442226666-8d48a60a175b' },
+      { id: 'toronto-v2', name: 'Toronto', country: 'Canada', countryCode: 'CA', lat: 43.6532, lng: -79.3832, continent: 'Amerika', preferredImgId: '1523482580672-f109ba860be5' },
+      { id: 'montreal-v2', name: 'Montreal', country: 'Canada', countryCode: 'CA', lat: 45.5017, lng: -73.5673, continent: 'Amerika', preferredImgId: '1555881400-74b7cb752229' },
+      { id: 'mexico-city-condesa-v2', name: 'Condesa (CDMX)', country: 'Mexico', countryCode: 'MX', lat: 19.4121, lng: -99.1763, continent: 'Amerika', preferredImgId: '1510017803434-a899398421b3' },
+      { id: 'mexico-city-roma-v2', name: 'Roma Norte (CDMX)', country: 'Mexico', countryCode: 'MX', lat: 19.4141, lng: -99.1601, continent: 'Amerika', preferredImgId: '1512813195329-36a8ac68e29a' },
+      { id: 'guadalajara-v2', name: 'Guadalajara', country: 'Mexico', countryCode: 'MX', lat: 20.6597, lng: -103.3496, continent: 'Amerika', preferredImgId: '1531215509532-43c2e128ba70' },
+      { id: 'queretaro-v2', name: 'Queretaro', country: 'Mexico', countryCode: 'MX', lat: 20.5888, lng: -100.3899, continent: 'Amerika', preferredImgId: '1554562208-e4b2d5d852a3' },
+      { id: 'san-miguel-v2', name: 'San Miguel de Allende', country: 'Mexico', countryCode: 'MX', lat: 20.9142, lng: -100.7437, continent: 'Amerika', preferredImgId: '1512813195329-36a8ac68e29a' },
+      { id: 'merida-v2', name: 'Merida', country: 'Mexico', countryCode: 'MX', lat: 20.9674, lng: -89.5926, continent: 'Amerika', preferredImgId: '1559592442-7e18259f63cc' },
+      { id: 'puerto-escondido-v2', name: 'Puerto Escondido', country: 'Mexico', countryCode: 'MX', lat: 15.8631, lng: -97.0763, continent: 'Amerika', preferredImgId: '1518391846015-55a9cb0008a6' },
+      { id: 'oaxaca-v2', name: 'Oaxaca', country: 'Mexico', countryCode: 'MX', lat: 17.0732, lng: -96.7266, continent: 'Amerika', preferredImgId: '1502602898657-3e9172f29b78' },
+      { id: 'antigua-guatemala-v2', name: 'La Antigua', country: 'Guatemala', countryCode: 'GT', lat: 14.5667, lng: -90.7333, continent: 'Amerika', preferredImgId: '1493397212122-2b85defc3095' },
+      { id: 'panama-city-v2', name: 'Panama City', country: 'Panama', countryCode: 'PA', lat: 8.9833, lng: -79.5167, continent: 'Amerika', preferredImgId: '1512453979798-5ea26dff827c' },
+      { id: 'san-jose-v2', name: 'San Jose', country: 'Costa Rica', countryCode: 'CR', lat: 9.9281, lng: -84.0907, continent: 'Amerika', preferredImgId: '1555546258-f5424578e348' },
+      { id: 'krakow-city-v2', name: 'Krakow Center', country: 'Polen', countryCode: 'PL', lat: 50.0647, lng: 19.9450, continent: 'Europa', preferredImgId: '1516167882417-09a27c7379d8' },
+      { id: 'wroclaw-v2', name: 'Wroclaw', country: 'Polen', countryCode: 'PL', lat: 51.1079, lng: 17.0385, continent: 'Europa', preferredImgId: '1541849546122-45a1b32d207f' },
+      { id: 'gdansk-v2', name: 'Gdansk', country: 'Polen', countryCode: 'PL', lat: 54.3520, lng: 18.6466, continent: 'Europa', preferredImgId: '1512100356132-d323ad379893' },
+      { id: 'bucharest-v2', name: 'Boekarest', country: 'Roemenië', countryCode: 'RO', lat: 44.4268, lng: 26.1025, continent: 'Europa', preferredImgId: '1524231752111-3b69b02d245a' },
+      { id: 'cluj-v2', name: 'Cluj-Napoca', country: 'Roemenië', countryCode: 'RO', lat: 46.7712, lng: 23.6236, continent: 'Europa', preferredImgId: '1534351590666-13c7f9681abb' },
+      { id: 'sofia-v2', name: 'Sofia', country: 'Bulgarije', countryCode: 'BG', lat: 42.6977, lng: 23.3219, continent: 'Europa', preferredImgId: '1513635269975-59663e0ac1ad' },
+      { id: 'plovdiv-v2', name: 'Plovdiv', country: 'Bulgarije', countryCode: 'BG', lat: 42.1354, lng: 24.7453, continent: 'Europa', preferredImgId: '1554562208-e4b2d5d852a3' },
+      { id: 'varna-v2', name: 'Varna', country: 'Bulgarije', countryCode: 'BG', lat: 43.2141, lng: 27.9147, continent: 'Europa', preferredImgId: '1580619305218-8423a7ef79b4' },
+      { id: 'brasov-v2', name: 'Brasov', country: 'Roemenië', countryCode: 'RO', lat: 45.6427, lng: 25.5887, continent: 'Europa', preferredImgId: '1541849546122-45a1b32d207f' },
+      { id: 'porto-alegre-v2', name: 'Porto Alegre', country: 'Brazilië', countryCode: 'BR', lat: -30.0346, lng: -51.2177, continent: 'Amerika', preferredImgId: '1516962215312-d21a1b4e19d0' },
+      { id: 'curitiba-v2', name: 'Curitiba', country: 'Brazilië', countryCode: 'BR', lat: -25.4284, lng: -49.2733, continent: 'Amerika', preferredImgId: '1543976040374-85c8e92cae66' },
+      { id: 'belo-horizonte-v2', name: 'Belo Horizonte', country: 'Brazilië', countryCode: 'BR', lat: -19.9167, lng: -43.9345, continent: 'Amerika', preferredImgId: '1516962215312-d21a1b4e19d0' },
+      { id: 'salvador-v2', name: 'Salvador', country: 'Brazilië', countryCode: 'BR', lat: -12.9714, lng: -38.5014, continent: 'Amerika', preferredImgId: '1480714378408-67cf0d13bc1b' },
+      { id: 'montevideo-v2', name: 'Montevideo', country: 'Uruguay', countryCode: 'UY', lat: -34.9011, lng: -56.1645, continent: 'Amerika', preferredImgId: '1555881400-74b7cb752229' },
+      { id: 'asuncion-v2', name: 'Asuncion', country: 'Paraguay', countryCode: 'PY', lat: -25.2637, lng: -57.5759, continent: 'Amerika', preferredImgId: '1480714378408-67cf0d13bc1b' },
+      { id: 'cordoba-v2', name: 'Cordoba', country: 'Argentinië', countryCode: 'AR', lat: -31.4135, lng: -64.1811, continent: 'Amerika', preferredImgId: '1450612623062-db37a24e344d' },
+      { id: 'mendoza-v2', name: 'Mendoza', country: 'Argentinië', countryCode: 'AR', lat: -32.8895, lng: -68.8458, continent: 'Amerika', preferredImgId: '1540306145-6677ff0a2ec7' },
+      { id: 'valparaiso-v2', name: 'Valparaiso', country: 'Chili', countryCode: 'CL', lat: -33.0472, lng: -71.6127, continent: 'Amerika', preferredImgId: '1512401223296-147e5b5d8487' },
+      { id: 'vinya-del-mar-v2', name: 'Viña del Mar', country: 'Chili', countryCode: 'CL', lat: -33.0245, lng: -71.5518, continent: 'Amerika', preferredImgId: '1512453979798-5ea26dff827c' },
+    ];
+
+    const imgIds = [
+      '1473913084451-5d10ad052831', '1496560235248-b2a41f59a1bb', '1444723121867-7a241cacace9', 
+      '1514924013511-28241270bc12', '1502602898657-3e9172f29b78', '1513635269975-59663e0ac1ad',
+      '1518391846015-55a9cb0008a6', '1503899036084-c55cdd92da26', '1540959733332-eab4deabeeaf',
+      '1493397212122-2b85defc3095', '1480714378408-67cf0d13bc1b', '1514565131-fce0801e5785',
+      '1444084316824-dc26d6657664', '1512453979798-5ea26dff827c', '1512100356132-d323ad379893',
+      '1523482580672-f109ba860be5', '1493976040374-85c8e92cae66', '1537996194471-e657df975ab4',
+      '1510017803434-a899398421b3', '1559592442-7e18259f63cc'
+    ];
+
+    const finalCities: CityProfile[] = [];
+    
+    const generateStats = (name: string, i: number, preferredImgId?: string) => {
+      const random = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1) + min);
+      const randomFloat = (min: number, max: number) => parseFloat((Math.random() * (max - min) + min).toFixed(1));
+      
+      const imgId = preferredImgId || imgIds[i % imgIds.length];
+
+      return {
+        description: `${name} biedt een unieke mix van cultuur, uitstekende wifi en een actieve gemeenschap van digitale nomaden en gezinnen.`,
+        spotCount: random(20, 100),
+        vettedSpotCount: random(10, 40),
+        familyCount: random(30, 400),
+        eventCount: random(5, 25),
+        nomadScore: randomFloat(8.0, 9.8),
+        vibeScore: randomFloat(8.0, 9.8),
+        familyFriendlyScore: randomFloat(8.0, 9.8),
+        coverImageUrl: `https://images.unsplash.com/photo-${imgId}?q=80&w=1200&auto=format&fit=crop`,
+        costOfLiving: {
+          source: 'numbeo',
+          lastUpdated: new Date().toISOString(),
+          coffee: randomFloat(1.5, 6.0),
+          localMeal: randomFloat(3.0, 35.0),
+          pizza: randomFloat(8.0, 25.0),
+          beer: randomFloat(1.0, 10.0),
+          coworking: random(100, 450),
+          oneBedApartment: random(400, 4000),
+          internet50mbps: random(10, 120),
+          taxi1km: randomFloat(0.5, 7.0),
+          currency: i % 2 === 0 ? 'EUR' : 'USD',
+          exchangeRate: 1
+        },
+        airQuality: {
+          source: 'iqair',
+          lastUpdated: new Date().toISOString(),
+          aqi: random(5, 150),
+          status: 'Good' as any,
+          pm25: random(2, 50)
+        },
+        climate: {
+          currentTemp: random(10, 38),
+          condition: ['Zonnig', 'Bewolkt', 'Tropisch', 'Helder', 'Warm'][random(0,4)],
+          humidity: random(20, 90),
+          season: ['Zomer', 'Lente', 'Herfst', 'Winter'][random(0,3)]
+        },
+        safety: {
+          source: 'numbeo',
+          safetyIndex: random(30, 95),
+          crimeIndex: random(5, 70)
+        },
+        infrastructure: {
+          visaFree: ['Schengen', 'US', 'UK', 'E-Visa'],
+          electricityPlug: 'Type C/G',
+          drivingSide: random(0, 10) > 7 ? 'left' as any : 'right' as any,
+          timezone: `GMT+${random(-8, 12)}`
+        },
+        internationalSchools: [`${name} International School`, `${name} Global Academy`, `${name} Montessori`],
+        upcomingEventIds: [],
+        isPublished: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    };
+
+    baseCities.forEach((base, i) => {
+      finalCities.push({
+        id: base.id,
+        name: base.name,
+        country: base.country,
+        countryCode: base.countryCode,
+        continent: base.continent,
+        coordinates: { lat: base.lat, lng: base.lng },
+        ...generateStats(base.name, i, base.preferredImgId)
+      } as any);
+    });
+
+    const newIds = new Set(baseCities.map(c => c.id));
+    const batch = writeBatch(db);
+
+    // 1. Delete legacy entries that don't match our new unique set
+    existing.forEach(city => {
+      if (!newIds.has(city.id)) {
+        batch.delete(doc(db, 'cities', city.id));
+      }
+    });
+
+    // 2. Set new unique entries
+    finalCities.forEach(city => {
+      batch.set(doc(db, 'cities', city.id), city);
+    });
+
+    try {
+      await batch.commit();
+      set({ cities: finalCities });
+      get().addToast("Explore Hubs gesynchroniseerd met Tribe hubs v2.0", "success");
+    } catch (err) {
+      console.error("Error seeding large city data:", err);
+    }
+  },
+
+  setCities: (cities: CityProfile[]) => set({ cities }),
 
   addReview: async (review) => {
     try {

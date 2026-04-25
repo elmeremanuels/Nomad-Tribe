@@ -16,7 +16,7 @@ import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Us
 import { motion, AnimatePresence } from 'motion/react';
 import { useNomadStore } from './store';
 import { containsBlockedContent, cleanContent } from './lib/contentFilter';
-import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, DestinationGuidance, Parent, CollabAsk, CollabCard, CollabEndorsement, Report } from './types';
+import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance } from './types';
 import { format, parseISO } from 'date-fns';
 import { cn } from './lib/utils';
 import cities from './data/citiesSeed.json';
@@ -1390,7 +1390,7 @@ const DealsView = ({ onBack, onPaywall }: { onBack: () => void, onPaywall: () =>
 };
 
 const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall }: { onViewAllMarketplace: () => void, onSayHello: (family: FamilyProfile, message?: string) => void, onSelectFamily: (family: FamilyProfile) => void, onPaywall: () => void }) => {
-  const { currentUser, trips, profiles, lookingFor, addLookingFor, removeLookingFor, marketItems, reserveItem, connections, requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, collabAsks, addCollabAsk, removeCollabAsk, blocks } = useNomadStore();
+  const { currentUser, trips, profiles, lookingFor, addLookingFor, removeLookingFor, marketItems, reserveItem, connections, requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, collabAsks, addCollabAsk, removeCollabAsk, blocks, saveVibeCheck } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
   const [isCollabAskOpen, setIsCollabAskOpen] = useState(false);
@@ -3692,7 +3692,7 @@ const VibeCheckSection = ({ dest }: { dest: DestinationGuidance }) => {
   );
 };
 
-const NotificationCenter = ({ isOpen, onClose, onOpenConnect }: { isOpen: boolean, onClose: () => void, onOpenConnect: () => void }) => {
+const NotificationCenter = ({ isOpen, onClose, onOpenConnect, onOpenVibeCheck }: { isOpen: boolean, onClose: () => void, onOpenConnect: () => void, onOpenVibeCheck: () => void }) => {
   const { notifications, markNotificationRead, setActiveTab, currentUser } = useNomadStore();
   
   const unread = notifications.filter(n => !n.isRead && new Date(n.scheduledFor) <= new Date());
@@ -3759,7 +3759,7 @@ const NotificationCenter = ({ isOpen, onClose, onOpenConnect }: { isOpen: boolea
                     onOpenConnect();
                     onClose();
                   } else if (n.type === 'VibeCheck') {
-                    setIsVibeCheckOpen(true);
+                    onOpenVibeCheck();
                     onClose();
                   }
                 }}
@@ -3851,7 +3851,7 @@ const VibeCheckModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose:
 };
 
 const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificationCenterOpen, isNotificationCenterOpen, setIsConnectOpen, onSetLocation }: { onShare: () => void, onLogout: () => void, onAddTrip: () => void, onEditTrip: (trip: Trip) => void, setIsNotificationCenterOpen: (open: boolean) => void, isNotificationCenterOpen: boolean, setIsConnectOpen: (open: boolean) => void, onSetLocation: () => void }) => {
-  const { currentUser, trips, removeTrip, updateProfile, updateKids, reviews, marketItems, spots, destinations, notifications, addToast, collabMode, collabEndorsements } = useNomadStore();
+  const { currentUser, trips, removeTrip, updateProfile, updateKids, reviews, marketItems, spots, destinations, notifications, addToast, collabMode, collabEndorsements, setActiveTab } = useNomadStore();
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isEditTribeOpen, setIsEditTribeOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -4406,6 +4406,11 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
         isOpen={isNotificationCenterOpen} 
         onClose={() => setIsNotificationCenterOpen(false)} 
         onOpenConnect={() => setIsConnectOpen(true)}
+        onOpenVibeCheck={() => {
+          setActiveTab('tribe');
+          setIsNotificationCenterOpen(false);
+          // Assuming TribeView is rendered when activeTab is tribe
+        }}
       />
 
       <div className="space-y-8">
@@ -5142,71 +5147,48 @@ const EmptyStatePioneer = ({ cityName, onAddSpot }: { cityName: string, onAddSpo
     </div>
   );
 };
-
 const ExploreView = ({ onAddTrip }: { onAddTrip: (city: string) => void }) => {
-  const { spots, currentUser, destinations, collabMode } = useNomadStore();
+  const { spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent } = useNomadStore() as any;
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCity, setSelectedCity] = useState<any | null>(null);
-  const [isRecommendSpotOpen, setIsRecommendSpotOpen] = useState(false);
-  const [showCelebration, setShowCelebration] = useState(false);
+  const [selectedCity, setSelectedCity] = useState<CityProfile | null>(null);
+  const [activeContinent, setActiveContinent] = useState<'Alle' | 'Azië' | 'Europa' | 'Amerika' | 'Afrika' | 'Oceanië'>('Alle');
+
+  const continents = ['Alle', 'Azië', 'Europa', 'Amerika', 'Afrika', 'Oceanië'] as const;
 
   const filteredCities = useMemo(() => {
     if (!searchQuery) return [];
-    const seedCities = (cities as any[]).filter((c: any) => 
+    return cityProfiles.filter((c: any) => 
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
       c.country.toLowerCase().includes(searchQuery.toLowerCase())
+    ).slice(0, 5);
+  }, [searchQuery, cityProfiles]);
+
+  const dashboardCities = useMemo(() => {
+    let list = cityProfiles;
+    if (activeContinent !== 'Alle') {
+      list = list.filter((c: any) => c.continent === activeContinent);
+    }
+    return list;
+  }, [activeContinent, cityProfiles]);
+
+  if (selectedCity) {
+    return (
+      <CityPage 
+        city={selectedCity} 
+        onBack={() => setSelectedCity(null)}
+        onAddTrip={onAddTrip}
+      />
     );
-    const customCities = destinations.filter(d => 
-      d.cityName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      d.country.toLowerCase().includes(searchQuery.toLowerCase())
-    ).map(d => ({ id: d.id, name: d.cityName, country: d.country, slug: d.cityName.toLowerCase().replace(/\s+/g, '-') }));
-    
-    // Merge and unique by name
-    const all = [...seedCities, ...customCities];
-    const unique = Array.from(new Map(all.map(item => [item.name.toLowerCase(), item])).values());
-    return unique.slice(0, 5);
-  }, [searchQuery, destinations]);
-
-  const citySpots = useMemo(() => {
-    if (!selectedCity) return [];
-    return spots.filter(s => s.name.toLowerCase().includes(selectedCity.name.toLowerCase()) || (s as any).cityName === selectedCity.name);
-  }, [selectedCity, spots]);
-
-  const macroData = useMemo(() => {
-    if (!selectedCity) return null;
-    const dest = destinations.find(d => d.cityName.toLowerCase() === selectedCity.name.toLowerCase());
-    if (dest) return dest;
-    
-    // Fallback mock if not in destinations yet
-    return {
-      cityName: selectedCity.name,
-      country: selectedCity.country,
-      costIndex: { 
-        coffee: 2.5, 
-        localMeal: 12.00, 
-        pizza: 12.00, 
-        beer: 4.50, 
-        coworking: 210 
-      },
-      vibeScore: 7.8,
-      familyFriendlyScore: 8,
-      climate: { 
-        temp: '24°C', 
-        condition: 'Partly Cloudy', 
-        aqi: 42, 
-        aqiStatus: 'Good' 
-      }
-    };
-  }, [selectedCity, destinations]);
+  }
 
   return (
     <div className={cn(
       "p-4 md:p-8 space-y-8 max-w-5xl mx-auto pb-24 md:pb-8 transition-colors duration-500 min-h-full",
       collabMode ? "bg-[#006d77] text-white" : "text-slate-900"
     )}>
-      <header className="space-y-4">
+      <header className="space-y-6">
         <div>
-          <h1 className={cn("text-3xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Explore</h1>
+          <h1 className={cn("text-3xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Explore Hubs</h1>
           <p className={cn("font-medium", collabMode ? "text-white/60" : "text-slate-500")}>
             {collabMode ? "Identify your next professional hub" : "Research your next family adventure"}
           </p>
@@ -5217,9 +5199,9 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (city: string) => void }) => {
             <Search className={cn("absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5", collabMode ? "text-white/40" : "text-slate-400")} />
             <input 
               type="text"
-              placeholder="Search 100+ nomad hubs..."
+              placeholder="Zoek hubs..."
               className={cn(
-                "w-full pl-12 pr-4 py-4 rounded-[2rem] card-shadow focus:outline-none focus:ring-2 transition-all font-bold font-sans",
+                "w-full pl-12 pr-4 py-4 rounded-[2rem] card-shadow focus:outline-none focus:ring-2 transition-all font-bold",
                 collabMode 
                   ? "bg-white/10 border-white/10 text-white placeholder:text-white/30 focus:ring-white/20" 
                   : "bg-white border-slate-100 text-secondary focus:ring-primary/20"
@@ -5257,258 +5239,331 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (city: string) => void }) => {
             )}
           </AnimatePresence>
         </div>
+
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+          {continents.map(continent => (
+            <button
+              key={continent}
+              onClick={() => setActiveContinent(continent)}
+              className={cn(
+                "px-5 py-2.5 rounded-full font-black text-xs transition-all border whitespace-nowrap",
+                activeContinent === continent 
+                  ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" 
+                  : (collabMode ? "bg-white/5 border-white/10 text-white/60 hover:bg-white/10" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200")
+              )}
+            >
+              {continent}
+            </button>
+          ))}
+        </div>
       </header>
 
-      {selectedCity ? (
-        <div className="space-y-8">
-          <div className="flex flex-col md:flex-row justify-between items-start gap-4">
-            <div>
-              <h2 className="text-4xl font-black text-secondary">{selectedCity.name}</h2>
-              <p className="text-lg text-slate-400 font-bold">{selectedCity.country}</p>
-            </div>
-            <button 
-              onClick={() => onAddTrip(selectedCity.name)}
-              className="bg-primary text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-primary/20 flex items-center gap-2 active:scale-95 transition-transform"
-            >
-              <Calendar className="w-5 h-5" /> Plan Trip
-            </button>
+      {/* Recommended Hubs */}
+      <section className="space-y-6">
+        <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
+          {activeContinent === 'Alle' ? 'Recommended Hubs' : `${activeContinent} Hubs`}
+        </h2>
+        
+        {dashboardCities.length === 0 ? (
+          <div className="py-20 text-center space-y-4 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
+             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-slate-200 mx-auto shadow-sm">
+                <Globe className="w-10 h-10" />
+             </div>
+             <p className="text-slate-400 font-bold">Soon more hubs in this region!</p>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className={cn(
-              "p-6 rounded-[2.5rem] border space-y-4",
-              collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
-            )}>
-              <h3 className={cn("text-[10px] font-black uppercase tracking-widest flex items-center gap-2", collabMode ? "text-white/40" : "text-slate-400")}>
-                <ShoppingBag className="w-3 h-3" /> {collabMode ? 'Networking & Coworking' : 'Cost of Living'}
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                {collabMode ? (
-                  <>
-                    <div>
-                      <p className="text-[10px] opacity-40 font-bold uppercase">Coworking</p>
-                      <p className="font-black">€{macroData?.costIndex.coworking}/mo</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] opacity-40 font-bold uppercase">Coffee</p>
-                      <p className="font-black">€{macroData?.costIndex.coffee.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] opacity-40 font-bold uppercase">Internet</p>
-                      <p className="font-black">High Speed</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] opacity-40 font-bold uppercase">Network Hub</p>
-                      <p className="font-black">{macroData?.familyFriendlyScore > 7 ? 'Vibrant' : 'Growing'}</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Coffee</p>
-                      <p className="font-black text-secondary">€{macroData?.costIndex.coffee.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Pizza</p>
-                      <p className="font-black text-secondary">€{macroData?.costIndex.pizza.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Beer</p>
-                      <p className="font-black text-secondary">€{macroData?.costIndex.beer.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Coworking</p>
-                      <p className="font-black text-secondary">€{macroData?.costIndex.coworking}/mo</p>
-                    </div>
-                  </>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+            {dashboardCities.map((city: any) => (
+              <motion.div
+                key={city.id}
+                whileHover={{ y: -4 }}
+                onClick={() => setSelectedCity(city)}
+                className={cn(
+                  "rounded-[2.5rem] overflow-hidden border cursor-pointer transition-all flex flex-col h-full",
+                  collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
                 )}
-              </div>
-            </div>
-
-            <div className={cn(
-              "p-6 rounded-[2.5rem] border space-y-4",
-              collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
-            )}>
-              <h3 className={cn("text-[10px] font-black uppercase tracking-widest flex items-center gap-2", collabMode ? "text-white/40" : "text-slate-400")}>
-                <ShieldCheck className="w-3 h-3" /> {collabMode ? 'Collab Environment' : 'Safety & Vibe'}
-              </h3>
-              <div className="flex items-center gap-4">
-                <div className={cn(
-                  "w-16 h-16 rounded-2xl flex flex-col items-center justify-center border",
-                  collabMode ? "bg-white/10 border-white/10" : "bg-green-50 border-green-100"
-                )}>
-                  <p className={cn("text-xl font-black", collabMode ? "text-white" : "text-green-600")}>{macroData?.vibeScore}</p>
-                  <p className={cn("text-[8px] font-bold uppercase", collabMode ? "text-white/40" : "text-green-600/60")}>Score</p>
-                </div>
-                <div>
-                  <p className={cn("font-bold", collabMode ? "text-white" : "text-secondary")}>
-                    {collabMode ? 'Collaboration Potential' : 'Family Friendly'}
-                  </p>
-                  <p className={cn("text-xs", collabMode ? "text-white/60" : "text-slate-400")}>
-                    {macroData?.familyFriendlyScore > 7 ? 'High trust community' : 'Moderate trust community'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className={cn(
-              "p-6 rounded-[2.5rem] border space-y-4",
-              collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
-            )}>
-              <h3 className={cn("text-[10px] font-black uppercase tracking-widest flex items-center gap-2", collabMode ? "text-white/40" : "text-slate-400")}>
-                <Globe className="w-3 h-3" /> Climate & Connectivity
-              </h3>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={cn("text-2xl font-black", collabMode ? "text-white" : "text-secondary")}>{(macroData as any).climate?.temp || '24°C'}</p>
-                  <p className={cn("text-xs font-bold", collabMode ? "text-white/40" : "text-slate-400")}>{(macroData as any).climate?.condition || 'Sunny'}</p>
-                </div>
-                <div className="text-right">
-                  <p className={cn(
-                    "text-xs font-black px-2 py-1 rounded-lg inline-block",
-                    ((macroData as any).climate?.aqiStatus || 'Good') === 'Good' 
-                      ? "bg-green-500 text-white" 
-                      : "bg-orange-500 text-white"
-                  )}>
-                    AQI {(macroData as any).climate?.aqi || 42}
-                  </p>
-                  <p className={cn("text-[8px] font-bold uppercase mt-1", collabMode ? "text-white/40" : "text-slate-400")}>{(macroData as any).climate?.aqiStatus || 'Good'}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-black text-secondary">Kid-Friendly Spots</h3>
-              {citySpots.length > 0 && (
-                <button 
-                  onClick={() => setIsRecommendSpotOpen(true)}
-                  className="text-primary font-bold text-sm flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" /> Add Spot
-                </button>
-              )}
-            </div>
-
-            {citySpots.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {citySpots.map(spot => (
-                  <div key={spot.id} className="bg-white p-4 rounded-[2rem] border border-slate-100 card-shadow group cursor-pointer hover:scale-[1.02] transition-transform">
-                    <div className="aspect-video rounded-2xl bg-slate-100 overflow-hidden mb-4 relative">
-                      <img 
-                        src={spot.imageUrl || `https://picsum.photos/seed/${spot.id}/800/600`} 
-                        alt={spot.name}
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-xl flex items-center gap-1 shadow-sm">
-                        <Star className="w-3 h-3 text-yellow-400 fill-current" />
-                        <span className="text-[10px] font-black text-secondary">{spot.rating}</span>
-                      </div>
-                    </div>
-                    <h4 className="font-bold text-secondary">{spot.name}</h4>
-                    <p className="text-xs text-slate-500 line-clamp-2 mt-1">{spot.description}</p>
+              >
+                <div className="h-48 relative bg-slate-100">
+                  <img 
+                    src={city.coverImageUrl || `https://picsum.photos/seed/${city.id}/600/450`} 
+                    alt={city.name} 
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-black text-secondary">
+                    ⭐ {city.nomadScore}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyStatePioneer 
-                cityName={selectedCity.name} 
-                onAddSpot={() => setIsRecommendSpotOpen(true)} 
-              />
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-8">
-          <section className="space-y-4">
-            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Trending Destinations</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                { city: 'Da Nang', country: 'Vietnam', image: 'https://picsum.photos/seed/danang/400/300', families: 15 },
-                { city: 'Chiang Mai', country: 'Thailand', image: 'https://picsum.photos/seed/chiangmai/400/300', families: 22 },
-                { city: 'Bansko', country: 'Bulgaria', image: 'https://picsum.photos/seed/bansko/400/300', families: 8 },
-              ].map((dest, i) => (
-                <div 
-                  key={i}
-                  onClick={() => setSelectedCity({ name: dest.city, country: dest.country, id: `t-${i}` })}
-                  className="relative h-64 rounded-[2.5rem] overflow-hidden group cursor-pointer"
-                >
-                  <img src={dest.image} alt={dest.city} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" referrerPolicy="no-referrer" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-secondary/80 to-transparent" />
-                  <div className="absolute bottom-6 left-6 text-white">
-                    <p className="text-xs font-bold opacity-70">{dest.country}</p>
-                    <h4 className="text-xl font-black">{dest.city}</h4>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex -space-x-2">
-                        {[1, 2, 3].map(j => (
-                          <div key={j} className="w-6 h-6 rounded-full border-2 border-secondary bg-slate-200" />
-                        ))}
-                      </div>
-                      <span className="text-[10px] font-bold">{dest.families} Families there</span>
+                </div>
+                <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-black text-secondary">{city.name}</h3>
+                    <p className="text-xs text-slate-400 font-bold">{city.country}</p>
+                  </div>
+                  <div className="flex items-center gap-4 pt-4 border-t border-slate-50">
+                    <div className="flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-slate-300" />
+                      <span className="text-[10px] font-black text-slate-500">{city.familyCount}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-slate-300" />
+                      <span className="text-[10px] font-black text-slate-500">{city.spotCount}</span>
                     </div>
                   </div>
                 </div>
-              ))}
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+};
+
+const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () => void, onAddTrip: (city: string) => void }) => {
+  const { spots, cityEvents, rsvpToCityEvent, collabMode } = useNomadStore() as any;
+  const [activeFilter, setActiveFilter] = useState<'All' | SpotCategory>('All');
+  
+  const citySpots = useMemo(() => {
+    return spots.filter((s: Spot) => s.citySlug === city.id || s.name.toLowerCase().includes(city.name.toLowerCase()));
+  }, [city, spots]);
+
+  const filteredSpots = useMemo(() => {
+    if (activeFilter === 'All') return citySpots;
+    return citySpots.filter((s: Spot) => s.category === activeFilter);
+  }, [citySpots, activeFilter]);
+
+  const events = useMemo(() => {
+    return cityEvents.filter((e: CityEvent) => e.citySlug === city.id);
+  }, [city, cityEvents]);
+
+  return (
+    <div className={cn(
+      "min-h-full pb-24 md:pb-8 transition-colors duration-500",
+      collabMode ? "bg-[#006d77] text-white" : "bg-slate-50/50"
+    )}>
+      {/* Hero Banner */}
+      <div className="h-[350px] relative">
+        <img 
+          src={city.coverImageUrl || `https://picsum.photos/seed/${city.id}/1200/800`} 
+          alt={city.name}
+          className="w-full h-full object-cover"
+          referrerPolicy="no-referrer"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+        
+        <button 
+          onClick={onBack}
+          className="absolute top-8 left-8 p-3 bg-white/20 backdrop-blur-md rounded-2xl hover:bg-white/30 transition-all text-white border border-white/20 shadow-xl z-20"
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+
+        <div className="absolute bottom-12 left-8 md:left-12 right-8 md:right-12">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-3">
+                 <h1 className="text-5xl font-black text-white tracking-tight">{city.name}</h1>
+                 <div className="px-4 py-1.5 bg-primary text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl">
+                    ⭐ {city.nomadScore} Hub Score
+                 </div>
+              </div>
+              <p className="text-xl text-white/80 font-bold">{city.country} • {city.continent}</p>
             </div>
-          </section>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => onAddTrip(city.name)}
+                className="bg-primary text-white px-8 py-4 rounded-[1.5rem] font-black shadow-2xl shadow-primary/40 flex items-center gap-3 hover:scale-105 transition-transform"
+              >
+                <Calendar className="w-5 h-5" /> Plan Trip
+              </button>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
 
-      <Modal isOpen={isRecommendSpotOpen} onClose={() => setIsRecommendSpotOpen(false)} title={`Add Spot in ${selectedCity?.name}`}>
-        <form className="space-y-4" onSubmit={async (e) => { 
-          e.preventDefault(); 
-          if (!currentUser || !selectedCity) return;
-          
-          const formData = new FormData(e.currentTarget);
-          const spot: Spot = {
-            id: `spot-${Date.now()}`,
-            name: formData.get('name') as string,
-            description: formData.get('description') as string,
-            category: formData.get('category') as any,
-            imageUrl: (formData.get('imageUrl') as string) || `https://picsum.photos/seed/${Date.now()}/800/600`,
-            coordinates: { lat: 0, lng: 0 },
-            verifiedTags: ['Pioneer Recommended'],
-            rating: 5.0,
-            recommendedBy: currentUser.id,
-            cityName: selectedCity.name
-          } as any;
-          
-          const isFirstInCity = citySpots.length === 0;
-          await useNomadStore.getState().addSpot(spot);
-          
-          setIsRecommendSpotOpen(false);
-          if (isFirstInCity && !currentUser.gamification?.hasClaimedPioneerBonus) {
-            setShowCelebration(true);
-          } else {
-            alert("Thanks for your recommendation!");
-          }
-        }}>
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Spot Name</label>
-            <input name="name" required type="text" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all" placeholder="e.g. Best Playground Ever" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Category</label>
-            <select name="category" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all">
-              <option value="Playground">Playground</option>
-              <option value="Workspace">Workspace</option>
-              <option value="Medical">Medical</option>
-              <option value="Accommodation">Accommodation</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Why is it family friendly?</label>
-            <textarea name="description" required rows={3} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none" placeholder="Tell the tribe..." />
-          </div>
-          <button type="submit" className="w-full bg-primary text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/20">
-            Submit Recommendation
-          </button>
-        </form>
-      </Modal>
+      <div className="max-w-5xl mx-auto p-4 md:p-12 -mt-8 relative z-10 space-y-12">
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Goedkoop eten', value: `€${city.costOfLiving.localMeal.toFixed(0)} avg`, icon: Coffee, color: 'bg-amber-400' },
+            { label: 'Air Quality', value: `${city.airQuality.status} (${city.airQuality.aqi})`, icon: Globe, color: 'bg-green-500' },
+            { label: 'Vibe Score', value: `${city.vibeScore}/10`, icon: Zap, color: 'bg-indigo-500' },
+            { label: 'Families', value: `${city.familyCount} Tribers`, icon: Users, color: 'bg-primary' },
+          ].map((stat, i) => (
+            <div key={i} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl flex items-center gap-4 group">
+               <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center text-white transition-transform group-hover:scale-110", stat.color)}>
+                  <stat.icon className="w-6 h-6" />
+               </div>
+               <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
+                  <p className="text-sm font-black text-secondary">{stat.value}</p>
+               </div>
+            </div>
+          ))}
+        </div>
 
-      <PioneerCelebrationModal isOpen={showCelebration} onClose={() => setShowCelebration(false)} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+           <div className="lg:col-span-2 space-y-12">
+             <section className="space-y-6">
+                <h2 className="text-2xl font-black text-secondary tracking-tight">Neighborhood Guide</h2>
+                <div className="h-[400px] rounded-[3rem] overflow-hidden border border-slate-100 shadow-xl">
+                   <MapView center={city.coordinates} />
+                </div>
+             </section>
+
+             <section className="space-y-6">
+                <div className="flex justify-between items-center">
+                   <h2 className="text-2xl font-black text-secondary tracking-tight">Hub Calendar</h2>
+                </div>
+                {events.length === 0 ? (
+                  <div className="bg-white p-12 rounded-[3rem] border border-slate-100 text-center space-y-4">
+                     <p className="text-slate-500 font-bold italic">No events planned this week.</p>
+                     <button className="bg-primary text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">Become an Organizer</button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {events.map((event: any) => (
+                      <div key={event.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-between">
+                         <div className="space-y-3">
+                            <div className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest inline-block">
+                               {event.category}
+                            </div>
+                            <h3 className="text-lg font-black text-secondary leading-tight">{event.title}</h3>
+                            <p className="text-xs text-slate-400 font-bold">{event.time} • {event.recurrence.frequency}</p>
+                         </div>
+                         <button 
+                            onClick={() => rsvpToCityEvent(event.id)}
+                            className="mt-4 w-full py-3 bg-slate-50 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-primary hover:text-white transition-all"
+                         >
+                            Bijwonen ({event.rsvps?.length || 0})
+                         </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+             </section>
+
+             <section className="space-y-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                   <h2 className="text-2xl font-black text-secondary tracking-tight">Kindvriendelijke Plekken</h2>
+                   <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                      {['All', 'Playground', 'Cafe', 'Restaurant', 'Workspace'].map(f => (
+                        <button 
+                          key={f}
+                          onClick={() => setActiveFilter(f as any)}
+                          className={cn(
+                            "px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all",
+                            activeFilter === f ? "bg-secondary text-white border-secondary" : "bg-white text-slate-400 border-slate-100 hover:border-slate-200"
+                          )}
+                        >
+                          {f}
+                        </button>
+                      ))}
+                   </div>
+                </div>
+
+                {filteredSpots.length === 0 ? (
+                   <div className="bg-white p-12 rounded-[3rem] border border-slate-100 text-center">
+                      <p className="text-slate-400 font-bold">More geverifieerde spots binnenkort!</p>
+                   </div>
+                ) : (
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {filteredSpots.map((spot: Spot) => (
+                        <div key={spot.id} className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-lg transition-transform hover:scale-[1.02] group cursor-pointer">
+                           <div className="h-48 rounded-2xl overflow-hidden mb-4 relative bg-slate-100">
+                              <img src={spot.imageUrl || `https://picsum.photos/seed/${spot.id}/800/600`} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <div className="absolute top-4 right-4 px-2 py-1 bg-white/90 backdrop-blur rounded-lg text-[9px] font-black text-secondary">
+                                 ⭐ {spot.rating}
+                              </div>
+                           </div>
+                           <h3 className="font-black text-secondary px-2">{spot.name}</h3>
+                           <p className="text-[10px] text-slate-400 font-bold px-2 mb-2 uppercase tracking-widest">{spot.category}</p>
+                           <p className="text-xs text-slate-500 font-medium px-2 line-clamp-2">{spot.description}</p>
+                        </div>
+                      ))}
+                   </div>
+                )}
+             </section>
+           </div>
+
+           <div className="space-y-8">
+             <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-xl space-y-6">
+                <div className="flex items-center gap-3">
+                   <ShoppingBag className="w-5 h-5 text-amber-500" />
+                   <h3 className="text-[10px] font-black text-secondary uppercase tracking-widest">Kosten Gids</h3>
+                </div>
+                <div className="space-y-4">
+                   {[
+                     { label: 'Eenvoudige Maaltijd', value: `€${city.costOfLiving.localMeal.toFixed(2)}` },
+                     { label: 'Goede Cappuccino', value: `€${city.costOfLiving.coffee.toFixed(2)}` },
+                     { label: 'Grote Pizza', value: `€${city.costOfLiving.pizza.toFixed(2)}` },
+                     { label: 'Apt (1 slk)', value: `€${city.costOfLiving.oneBedApartment.toFixed(0)}` },
+                     { label: 'Internet', value: `€${city.costOfLiving.internet50mbps.toFixed(2)}` },
+                   ].map((item, i) => (
+                     <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50">
+                        <p className="text-[10px] font-bold text-slate-500">{item.label}</p>
+                        <p className="text-[10px] font-black text-secondary">{item.value}</p>
+                     </div>
+                   ))}
+                </div>
+             </div>
+
+             <div className="bg-secondary p-8 rounded-[3rem] border border-secondary/20 shadow-2xl text-white space-y-6">
+                <div className="flex items-center gap-3">
+                   <ShieldCheck className="w-5 h-5 text-amber-400" />
+                   <h3 className="text-[10px] font-black uppercase tracking-widest text-white/50">Safety & Infra</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
+                       <p className="text-[8px] text-white/40 font-black uppercase mb-1">Safety</p>
+                       <p className="text-lg font-black">{city.safety.safetyIndex}</p>
+                    </div>
+                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
+                       <p className="text-[8px] text-white/40 font-black uppercase mb-1">Crime</p>
+                       <p className="text-lg font-black">{city.safety.crimeIndex}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                       <Navigation className={cn("w-4 h-4", city.infrastructure.drivingSide === 'right' ? 'text-green-400' : 'text-amber-400')} />
+                       <p className="text-[10px] font-bold text-white/80">Driving on the {city.infrastructure.drivingSide}</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                       <Globe className="w-4 h-4 text-blue-400" />
+                       <p className="text-[10px] font-bold text-white/80">Timezone: {city.infrastructure.timezone}</p>
+                    </div>
+                  </div>
+                </div>
+             </div>
+
+             <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-xl space-y-6">
+                <div className="flex items-center gap-3">
+                   <BookOpen className="w-5 h-5 text-primary" />
+                   <h3 className="text-[10px] font-black text-secondary uppercase tracking-widest">Onderwijs</h3>
+                </div>
+                <div className="space-y-3">
+                   {(city.internationalSchools || []).length === 0 ? (
+                      <p className="text-[10px] text-slate-400 font-medium italic">No verified schools yet.</p>
+                   ) : (
+                     city.internationalSchools.map((s, i) => (
+                       <div key={i} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center gap-3 group hover:bg-slate-100 transition-colors cursor-pointer">
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                          <p className="text-[10px] font-black text-secondary truncate">{s}</p>
+                       </div>
+                     ))
+                   )}
+                </div>
+             </div>
+           </div>
+        </div>
+
+        <footer className="pt-12 border-t border-slate-200/60 pb-8 text-center space-y-2 opacity-50">
+           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Tribe Ecosystem Intelligence</p>
+        </footer>
+      </div>
     </div>
   );
 };
@@ -5595,6 +5650,8 @@ export default function App() {
   useEffect(() => {
     init();
     calculateBadges();
+    const { seedInitialData } = useNomadStore.getState() as any;
+    seedInitialData?.();
   }, []);
 
   // --- Real-time Notification Watcher ---
@@ -6392,10 +6449,21 @@ export default function App() {
             description: cleanContent(newSpot.description),
             category: newSpot.category,
             imageUrl: newSpot.imageUrl,
-            coordinates: { lat: 0, lng: 0 },
+            coordinates: { lat: newSpot.lat || 0, lng: newSpot.lng || 0 },
             verifiedTags: ['Community Recommended'],
+            tags: [],
             rating: 5.0,
-            recommendedBy: currentUser.id
+            recommendedBy: currentUser.id,
+            citySlug: 'unknown',
+            countryCode: 'XX',
+            isVetted: false,
+            reportCount: 0,
+            isHidden: false,
+            dataSource: 'ugc',
+            viewCount: 0,
+            saveCount: 0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
           };
           
           await useNomadStore.getState().addSpot(spot);

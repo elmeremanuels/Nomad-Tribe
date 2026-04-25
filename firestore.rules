@@ -173,6 +173,22 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    match /cities/{cityId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /cityEvents/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.organizer.userId == request.auth.uid || 
+        isAdmin() ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rsvps']))
+      );
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.organizer.userId == request.auth.uid);
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;

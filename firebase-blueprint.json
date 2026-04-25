@@ -145,6 +145,37 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "targetUserId", "authorId", "skill", "createdAt"]
+    },
+    "CityProfile": {
+      "title": "City Profile",
+      "description": "A profile for a nomad city hub",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "country": { "type": "string" },
+        "continent": { "type": "string" },
+        "coverImageUrl": { "type": "string" },
+        "nomadScore": { "type": "number" },
+        "vibeScore": { "type": "number" },
+        "familyCount": { "type": "number" },
+        "spotCount": { "type": "number" }
+      },
+      "required": ["id", "name", "country", "continent"]
+    },
+    "CityEvent": {
+      "title": "City Event",
+      "description": "An event happening in a city hub",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "citySlug": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "rsvps": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "citySlug", "title", "date"]
     }
   },
   "firestore": {
@@ -187,6 +218,14 @@
     "/collabEndorsements/{endorsementId}": {
       "schema": "CollabEndorsement",
       "description": "Professional endorsements for skills"
+    },
+    "/cities/{cityId}": {
+      "schema": "CityProfile",
+      "description": "City hub profiles and stats"
+    },
+    "/cityEvents/{eventId}": {
+      "schema": "CityEvent",
+      "description": "Local events in city hubs"
     }
   }
 }

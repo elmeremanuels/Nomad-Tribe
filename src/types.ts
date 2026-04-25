@@ -186,59 +186,223 @@ export interface AdminAlert {
   isRead: boolean;
 }
 
-export interface City {
-  id: string;
-  name: string;
-  country: string;
-  slug: string;
+export type SpotCategory = 
+  | 'Playground' 
+  | 'Workspace' 
+  | 'Medical' 
+  | 'Accommodation' 
+  | 'Cafe'
+  | 'Restaurant'
+  | 'School'
+  | 'Library'
+  | 'Beach'
+  | 'Park'
+  | 'Museum'
+  | 'Supermarket'
+  | 'Pharmacy'
+  | 'Gym'
+  | 'Pool'
+  | 'Event Venue';
+
+export interface OpeningHours {
+  monday?: string;
+  tuesday?: string;
+  wednesday?: string;
+  thursday?: string;
+  friday?: string;
+  saturday?: string;
+  sunday?: string;
+  isAlwaysOpen?: boolean;
 }
 
-export interface PriceSuggestion {
-  userId: string;
-  price: number;
-  timestamp: string;
+export interface Spot {
+  // --- EXISTING ---
+  id: string;
+  name: string;
+  category: SpotCategory;
+  description: string;
+  imageUrl?: string;
+  rating: number;
+  recommendedBy?: string;
+  votes?: { up: string[]; down: string[] };
+  monthlyDeal?: { title: string; discount: string; description: string };
+
+  // --- NEW: Locatie & Geo ---
+  coordinates: { lat: number; lng: number };
+  address?: string;
+  citySlug: string; 
+  countryCode: string; 
+  osmId?: string; 
+  googlePlaceId?: string;
+
+  // --- NEW: Kwaliteit & Moderatie ---
+  isVetted: boolean; 
+  vettedBy?: string; 
+  vettedAt?: string; 
+  reportCount: number; 
+  isHidden: boolean; 
+
+  // --- NEW: Rijke Content ---
+  tags: string[]; 
+  ageRange?: { min: number; max: number }; 
+  openingHours?: OpeningHours; 
+  priceLevel?: 0 | 1 | 2 | 3; 
+  website?: string;
+  phoneNumber?: string;
+  verifiedTags: string[]; 
+
+  // --- NEW: Data Source ---
+  dataSource: 'ugc' | 'osm_import' | 'numbeo' | 'admin_seed';
+  importedAt?: string;
+
+  // --- NEW: Statistieken ---
+  viewCount: number;
+  saveCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DestinationGuidance {
   id: string;
   cityName: string;
   country: string;
-  costIndex: { 
-    coffee: number; 
-    localMeal: number; 
-    pizza: number; 
-    beer: number; 
-    gasPerLiter: number; 
-    beachBed: number; 
-    coworking?: number;
-  };
-  suggestions?: {
-    coffee?: PriceSuggestion[];
-    pizza?: PriceSuggestion[];
-    beer?: PriceSuggestion[];
-    coworking?: PriceSuggestion[];
+  costIndex: {
+    coffee: number;
+    localMeal: number;
+    pizza: number;
+    beer: number;
+    gasPerLiter: number;
+    beachBed: number;
+    coworking: number;
   };
   vibeScore: number;
   familyFriendlyScore: number;
   internationalSchools: string[];
+  suggestions: Record<string, { userId: string; price: number; timestamp: string }[]>;
 }
 
-export interface Spot {
-  id: string;
+export interface CityProfile {
+  id: string; // citySlug
   name: string;
-  category: 'Medical' | 'Workspace' | 'Playground' | 'Accommodation';
+  country: string;
+  countryCode: string;
   coordinates: { lat: number; lng: number };
-  description: string;
-  imageUrl?: string;
-  verifiedTags: string[];
-  rating: number;
-  recommendedBy?: string;
-  votes?: { up: string[]; down: string[] };
-  monthlyDeal?: {
-    title: string;
-    discount: string;
-    description: string;
+  coverImageUrl?: string;
+  description?: string;
+  continent: 'Azië' | 'Europa' | 'Amerika' | 'Afrika' | 'Oceanië';
+
+  // --- Statistieken (auto-bijgewerkt) ---
+  spotCount: number;
+  vettedSpotCount: number;
+  familyCount: number; 
+  eventCount: number; 
+
+  // --- Externe Data (gecached) ---
+  costOfLiving: {
+    source: 'numbeo';
+    lastUpdated: string;
+    coffee: number;
+    localMeal: number;
+    pizza: number;
+    beer: number;
+    coworking: number;
+    oneBedApartment: number;
+    internet50mbps: number;
+    taxi1km: number;
+    currency: string;
+    exchangeRate: number;
   };
+
+  airQuality: {
+    source: 'iqair';
+    lastUpdated: string;
+    aqi: number;
+    status: 'Good' | 'Moderate' | 'Unhealthy' | 'Hazardous';
+    pm25: number;
+  };
+
+  climate: {
+    currentTemp: number;
+    condition: string;
+    humidity: number;
+    season: string;
+  };
+
+  safety: {
+    source: 'numbeo';
+    safetyIndex: number;
+    crimeIndex: number;
+  };
+
+  infrastructure: {
+    visaFree: string[];
+    electricityPlug: string;
+    drivingSide: 'left' | 'right';
+    timezone: string;
+  };
+
+  // --- Community Data ---
+  vibeScore: number;
+  familyFriendlyScore: number;
+  internationalSchools: string[];
+  nomadScore: number;
+
+  // --- Kalender ---
+  upcomingEventIds: string[];
+
+  isPublished: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type EventCategory = 
+  | 'Playdate'
+  | 'Workshop'
+  | 'Worldschooling'
+  | 'Language Exchange'
+  | 'Networking'
+  | 'Outdoor Activity'
+  | 'Cultural'
+  | 'Sports'
+  | 'Co-working Day'
+  | 'Market'
+  | 'Festival';
+
+export interface CityEvent {
+  id: string;
+  citySlug: string;
+  title: string;
+  description: string;
+  category: EventCategory;
+  tags: string[];
+  date: string;
+  endDate?: string;
+  startTime?: string;
+  endTime?: string;
+  location: {
+    name: string;
+    address: string;
+    coordinates: { lat: number; lng: number };
+    spotId?: string;
+  };
+  organizer: {
+    userId?: string;
+    name: string;
+    isVerified: boolean;
+  };
+  imageUrl?: string;
+  price: number | 'Free';
+  currency?: string;
+  maxParticipants?: number;
+  rsvps: string[];
+  isVetted: boolean;
+  dataSource: 'ugc' | 'eventbrite_import' | 'facebook_import' | 'admin_seed';
+  relevanceScore?: number;
+  isRecurring: boolean;
+  recurrencePattern?: 'weekly' | 'monthly';
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
 }
 
 export interface SpotReview {
