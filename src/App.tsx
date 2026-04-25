@@ -5650,9 +5650,13 @@ export default function App() {
   useEffect(() => {
     init();
     calculateBadges();
-    const { seedInitialData } = useNomadStore.getState() as any;
-    seedInitialData?.();
-  }, []);
+    
+    // Only superadmins should trigger initial data seeding/syncing
+    if (currentUser?.role === 'SuperAdmin') {
+      const { seedInitialData } = useNomadStore.getState() as any;
+      seedInitialData?.();
+    }
+  }, [currentUser?.role]);
 
   // --- Real-time Notification Watcher ---
   const prevNotificationsRef = useRef(notifications);
@@ -5712,10 +5716,8 @@ export default function App() {
       const result = await signInWithPopup(auth, authProvider);
       if (result.user) {
         addToast(`Welkom terug, ${result.user.displayName}!`, "success");
-        // Give a moment for the toast then force a clean reload for state consistency
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+        // No reload needed, store state clears automatically
+        setIsLoggingIn(false);
       } else {
         setIsLoggingIn(false);
       }
@@ -5763,7 +5765,9 @@ export default function App() {
   };
 
   const handleSayHello = async (family: FamilyProfile, message?: string) => {
-    const connectionId = `conn-${[currentUser?.id, family.id].sort().join('-')}`;
+    const cleanTargetId = family.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanUserId = (currentUser?.id || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const connectionId = `conn-${[cleanUserId, cleanTargetId].sort().join('-')}`;
     const existing = useNomadStore.getState().connections.find(c => c.id === connectionId);
 
     if (existing?.status === 'accepted') {
@@ -5819,17 +5823,17 @@ export default function App() {
           <button 
             onClick={() => handleLogin('google')}
             disabled={isLoggingIn}
-            className="w-full bg-white text-secondary py-4 rounded-2xl font-bold shadow-lg shadow-black/5 active:scale-95 transition-transform flex items-center justify-center gap-3 border border-slate-100"
+            className="w-full bg-white text-secondary py-4 rounded-2xl font-bold shadow-lg shadow-black/5 active:scale-95 transition-transform flex items-center justify-center gap-3 border border-slate-100 disabled:opacity-50"
           >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" className="w-5 h-5" />
-            Sign in with Google
+            {isLoggingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" className="w-5 h-5" />}
+            {isLoggingIn ? 'Even geduld...' : 'Sign in with Google'}
           </button>
           
           <div className="grid grid-cols-2 gap-3">
             <button 
               onClick={() => handleLogin('apple')}
               disabled={isLoggingIn}
-              className="bg-black text-white py-4 rounded-2xl font-bold shadow-lg shadow-black/5 active:scale-95 transition-transform flex items-center justify-center gap-3"
+              className="bg-black text-white py-4 rounded-2xl font-bold shadow-lg shadow-black/5 active:scale-95 transition-transform flex items-center justify-center gap-3 disabled:opacity-50"
             >
               <svg className="w-5 h-5" viewBox="0 0 384 512" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
               Apple
@@ -5837,14 +5841,14 @@ export default function App() {
             <button 
               onClick={() => handleLogin('facebook')}
               disabled={isLoggingIn}
-              className="bg-[#1877F2] text-white py-4 rounded-2xl font-bold shadow-lg shadow-black/5 active:scale-95 transition-transform flex items-center justify-center gap-3"
+              className="bg-[#1877F2] text-white py-4 rounded-2xl font-bold shadow-lg shadow-black/5 active:scale-95 transition-transform flex items-center justify-center gap-3 disabled:opacity-50"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
               Facebook
             </button>
           </div>
-          <p className="text-[9px] text-slate-400 mt-4 px-6 text-center leading-tight">
-            Let op: Facebook & Apple login vereisen handmatige configuratie van App ID's in de Firebase Console.
+          <p className="text-[10px] text-slate-400 mt-4 px-6 text-center leading-tight font-medium">
+            Problemen met inloggen? Open de app in een <a href={window.location.href} target="_blank" rel="noopener noreferrer" className="text-primary font-bold hover:underline">nieuw tabblad</a>.
           </p>
         </div>
 

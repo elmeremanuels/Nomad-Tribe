@@ -42,7 +42,7 @@ import {
   orderBy,
   writeBatch
 } from 'firebase/firestore';
-import { onAuthStateChanged, getRedirectResult, User as FirebaseUser, setPersistence, browserSessionPersistence, signOut } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult, User as FirebaseUser, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth';
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; // km
@@ -206,8 +206,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   },
 
   init: () => {
-    // Force browser session persistence
-    setPersistence(auth, browserSessionPersistence).catch(console.error);
+    // Force browser local persistence
+    setPersistence(auth, browserLocalPersistence).catch(console.error);
 
     // Handle redirect result for mobile/iframe login
     getRedirectResult(auth)
@@ -254,6 +254,12 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               return;
             }
 
+            console.log(`[Auth] User profile loaded for ${firebaseUser.uid}:`, {
+              hasCompletedOnboarding: data.hasCompletedOnboarding,
+              familyName: data.familyName,
+              role: data.role
+            });
+
             // Ensure all fields exist (migration/defensive)
             const updatedData: FamilyProfile = {
               ...data,
@@ -271,7 +277,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               privacySettings: data.privacySettings || { isIncognito: false },
               collabCard: data.collabCard || (data as any).professional || { occupation: '', superpowers: [], currentMission: '', linkedInUrl: '' },
               openToCollabs: data.openToCollabs || (data as any).professional?.openToNetworking || false,
-              hasCompletedOnboarding: data.hasCompletedOnboarding ?? !!data.familyName,
+              hasCompletedOnboarding: data.hasCompletedOnboarding === true || (data.familyName ? data.familyName.length >= 2 : false),
               preferences: {
                 language: data.preferences?.language || 'EN',
                 showNextLocationSuggestions: data.preferences?.showNextLocationSuggestions ?? true,
@@ -416,7 +422,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     const user = get().currentUser;
     if (!user) return;
     try {
-      const userRef = doc(db, 'profiles', user.id);
+      const userRef = doc(db, 'users', user.id);
       await updateDoc(userRef, { 
         vibeFamilyMetrics: metrics,
         lastVibeCheck: new Date().toISOString()
@@ -815,7 +821,14 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   requestConnection: async (targetId, category = 'tribe') => {
     const user = get().currentUser;
     if (!user) return;
-    const connectionId = `conn-${[user.id, targetId].sort().join('-')}`;
+    
+    // Sanitize targetId to prevent invalid characters in document paths
+    // Firestore IDs cannot contain / and shouldn't contain //
+    // If targetId is accidentally a URL or contains special chars, we slugify it
+    const cleanTargetId = targetId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanUserId = user.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+    
+    const connectionId = `conn-${[cleanUserId, cleanTargetId].sort().join('-')}`;
     
     // Check if connection already exists
     const existing = get().connections.find(c => c.id === connectionId);
@@ -1476,7 +1489,12 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   completeOnboarding: async (profileData, onboardingTrips) => {
     const user = get().currentUser;
-    if (!user) return;
+    if (!user) {
+      console.error("[Onboarding] No current user found to complete onboarding for");
+      return;
+    }
+
+    console.log(`[Onboarding] Completing for ${user.id}...`);
 
     try {
       // 1. Update Profile

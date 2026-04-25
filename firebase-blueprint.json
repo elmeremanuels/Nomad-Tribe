@@ -15,7 +15,8 @@
         "verificationLevel": { "type": "number" },
         "vouchedBy": { "type": "array", "items": { "type": "string" } },
         "badges": { "type": "array", "items": { "type": "string" } },
-        "askUsAbout": { "type": "string" }
+        "askUsAbout": { "type": "string" },
+        "hasCompletedOnboarding": { "type": "boolean" }
       },
       "required": ["id", "familyName", "nativeLanguage"]
     },
