@@ -1,0 +1,44 @@
+[
+  {
+    "id": "amsterdam-vondelpark",
+    "name": "Vondelpark",
+    "city": "amsterdam",
+    "country": "Netherlands",
+    "category": "Outdoor",
+    "coordinates": { "lat": 52.3582, "lng": 4.8686 },
+    "rating": 4.9,
+    "description": "The most famous urban park in the Netherlands.",
+    "tags": ["Nature", "Picknic", "Kids"],
+    "isFamilyFriendly": true,
+    "recommendedBy": "system",
+    "createdAt": "2025-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "tokyo-tsukiji",
+    "name": "Tsukiji Outer Market",
+    "city": "tokyo",
+    "country": "Japan",
+    "category": "Food",
+    "coordinates": { "lat": 35.6655, "lng": 139.7702 },
+    "rating": 4.7,
+    "description": "Historic seafood market with endless food stalls.",
+    "tags": ["Food", "Market", "Seafood"],
+    "isFamilyFriendly": true,
+    "recommendedBy": "system",
+    "createdAt": "2025-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "bangkok-lumphini",
+    "name": "Lumphini Park",
+    "city": "bangkok",
+    "country": "Thailand",
+    "category": "Outdoor",
+    "coordinates": { "lat": 13.7313, "lng": 100.5417 },
+    "rating": 4.6,
+    "description": "A green oasis in the heart of Bangkok.",
+    "tags": ["Nature", "Running", "Lizards"],
+    "isFamilyFriendly": true,
+    "recommendedBy": "system",
+    "createdAt": "2025-01-01T00:00:00.000Z"
+  }
+]

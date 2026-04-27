@@ -1,0 +1,17 @@
+[
+  {
+    "id": "lisbon-lx-factory",
+    "name": "LX Factory",
+    "city": "lisbon",
+    "country": "Portugal",
+    "category": "Workspace",
+    "coordinates": { "lat": 38.7032, "lng": -9.1789 },
+    "rating": 4.8,
+    "description": "Hip industrial complex with cafes, shops and workspace.",
+    "tags": ["Workspace", "Design", "Food"],
+    "isFamilyFriendly": true,
+    "recommendedBy": "system",
+    "createdAt": "2025-01-01T00:00:00.000Z"
+  }
+]
+

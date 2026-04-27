@@ -1,0 +1,134 @@
+import React, { useState } from 'react';
+import { Database, Play, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { runFullSeed } from '../../lib/seedDatabase';
+import { useNomadStore } from '../../store';
+import { cn } from '../../lib/utils';
+
+const AdminSeedTab: React.FC = () => {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [loadingStep, setLoadingStep] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [seedResult, setSeedResult] = useState<{citiesSeeded: number, spotsSeeded: number} | null>(null);
+  const { addToast } = useNomadStore();
+
+  const handleSeed = async () => {
+    if (!confirmed) {
+      addToast('Bevestig eerst dat je wilt seeden', 'error');
+      return;
+    }
+    setStatus('loading');
+    setLoadingStep('Initialiseren...');
+    setError(null);
+    setSeedResult(null);
+    
+    try {
+      setLoadingStep('Bestanden laden...');
+      const result = await runFullSeed((msg) => {
+        setLoadingStep(msg);
+        console.log('[Seed Progress]:', msg);
+      }) as any;
+      setSeedResult({
+        citiesSeeded: result.citiesSeeded || 0,
+        spotsSeeded: result.spotsSeeded || 0
+      });
+      setStatus('success');
+      addToast('Database succesvol geseed!', 'success');
+    } catch (err: any) {
+      console.error('Seeding error:', err);
+      setStatus('error');
+      setError(err.message || 'Onbekende fout tijdens seeding. Check de console.');
+      addToast('Seeding mislukt', 'error');
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+      <div className="flex items-center gap-4 mb-6">
+        <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+          <Database size={24} />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-secondary">Database Seed</h2>
+          <p className="text-slate-500 text-sm">Importeer 530 steden en 629 spots in Firestore</p>
+        </div>
+      </div>
+
+      <div className="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100">
+        <h3 className="font-bold text-secondary mb-2 flex items-center gap-2">
+          <AlertCircle size={18} className="text-amber-500" />
+          Belangrijke informatie
+        </h3>
+        <ul className="text-sm text-slate-600 space-y-2 list-disc ml-5">
+          <li>Dit proces kan enkele minuten duren voor 1000+ records.</li>
+          <li>Data wordt verdeeld in chunks van 400 om Firestore limieten te respecteren.</li>
+          <li>Bestaande steden met dezelfde ID worden bijgewerkt (merge).</li>
+          <li>Open de browser console (F12) om gedetailleerde logs te zien.</li>
+        </ul>
+      </div>
+
+      {status === 'loading' ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+          <p className="font-bold text-secondary">{loadingStep}</p>
+          <p className="text-slate-500 text-sm mt-1">Steden en spots worden geüpload naar Firestore</p>
+        </div>
+      ) : status === 'success' ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
+            <CheckCircle2 size={32} />
+          </div>
+          <h3 className="text-xl font-bold text-secondary mb-2">Seed Voltooid!</h3>
+          <p className="text-slate-500 max-w-xs mx-auto mb-4">
+            {seedResult?.citiesSeeded} steden en {seedResult?.spotsSeeded} spots zijn succesvol geüpload naar Firestore.
+          </p>
+          <p className="text-slate-500 text-sm max-w-xs mx-auto">Alle data staat nu in Firestore. Je kunt de steden bekijken in de Explore tab.</p>
+          <button 
+            onClick={() => setStatus('idle')}
+            className="mt-6 text-primary font-bold hover:underline"
+          >
+            Nogmaals uitvoeren
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {status === 'error' && (
+            <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm border border-red-100 flex gap-3">
+              <AlertCircle size={18} className="shrink-0" />
+              <p><strong>Fout:</strong> {error}</p>
+            </div>
+          )}
+          
+          <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <input 
+              type="checkbox" 
+              id="confirm-seed" 
+              checked={confirmed} 
+              onChange={(e) => setConfirmed(e.target.checked)}
+              className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+            <label htmlFor="confirm-seed" className="text-sm font-medium text-slate-600 cursor-pointer">
+              Ik begrijp dat dit bestaande data kan overschrijven en wil doorgaan.
+            </label>
+          </div>
+
+          <button
+            onClick={handleSeed}
+            disabled={!confirmed}
+            className={cn(
+              "w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95",
+              confirmed 
+                ? "bg-primary text-white hover:bg-primary/90 shadow-primary/20" 
+                : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+            )}
+          >
+            <Play size={20} fill="currentColor" />
+            Run Database Seed
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminSeedTab;

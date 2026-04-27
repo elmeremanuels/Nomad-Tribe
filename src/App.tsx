@@ -12,14 +12,13 @@ import { MapView } from './components/MapView';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import { standardizeInterest } from './lib/interestUtils';
-import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, Home } from 'lucide-react';
+import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, Home, ShieldAlert, ArrowUp, ArrowDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNomadStore } from './store';
 import { containsBlockedContent, cleanContent } from './lib/contentFilter';
 import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance } from './types';
 import { format, parseISO } from 'date-fns';
 import { cn } from './lib/utils';
-import cities from './data/citiesSeed.json';
 import occupations from './data/occupationsSeed.json';
 import skillsSeed from './data/skillsSeed.json';
 
@@ -298,9 +297,11 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
   );
 };
 
+import AdminSeedTab from './components/admin/AdminSeedTab';
+
 const AdminDashboard = () => {
   const { appSettings, updateAppSettings, profiles, deleteUser, updateUserRole, marketItems, removeMarketItem, spots, removeSpot, reports, moderateReport, moderateUser } = useNomadStore() as any;
-  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'content' | 'reports'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'content' | 'reports' | 'seed'>('settings');
 
   const getReportSummary = (report: Report) => {
     if (report.targetType === 'User') {
@@ -355,7 +356,8 @@ const AdminDashboard = () => {
           { id: 'settings', label: 'App Settings', icon: Hammer },
           { id: 'users', label: 'User Management', icon: Users },
           { id: 'content', label: 'Content Control', icon: ShoppingBag },
-          { id: 'reports', label: 'Safety Reports', icon: ShieldCheck }
+          { id: 'reports', label: 'Safety Reports', icon: ShieldCheck },
+          { id: 'seed', label: 'Seed Database', icon: Database }
         ].map(tab => (
           <button
             key={tab.id}
@@ -708,6 +710,7 @@ const AdminDashboard = () => {
                 )}
               </div>
             )}
+            {activeTab === 'seed' && <AdminSeedTab />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -781,10 +784,10 @@ const ImageUpload = ({ onUpload, label }: { onUpload: (url: string) => void, lab
 
 
 
-const Modal = ({ isOpen, onClose, title, children, dark }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode, dark?: boolean }) => (
+const Modal = ({ isOpen, onClose, title, children, dark, fullScreen }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode, dark?: boolean, fullScreen?: boolean }) => (
   <AnimatePresence>
     {isOpen && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className={cn("fixed inset-0 z-[100] flex items-center justify-center", fullScreen ? "p-0" : "p-4")}>
         <motion.div 
           initial={{ opacity: 0 }} 
           animate={{ opacity: 1 }} 
@@ -793,16 +796,18 @@ const Modal = ({ isOpen, onClose, title, children, dark }: { isOpen: boolean, on
           className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
         />
         <motion.div 
-          initial={{ opacity: 0, scale: 0.95, y: 20 }} 
-          animate={{ opacity: 1, scale: 1, y: 0 }} 
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          initial={fullScreen ? { y: '100%' } : { opacity: 0, scale: 0.95, y: 20 }} 
+          animate={fullScreen ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }} 
+          exit={fullScreen ? { y: '100%' } : { opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           className={cn(
-            "relative w-full max-w-md rounded-3xl overflow-hidden card-shadow",
+            "relative w-full overflow-hidden transition-colors flex flex-col",
+            fullScreen ? "h-full max-w-full rounded-none" : "max-w-md rounded-3xl card-shadow",
             dark ? "bg-[#004d55] text-white" : "bg-white text-secondary"
           )}
         >
           <div className={cn(
-            "p-6 border-b flex justify-between items-center",
+            "p-6 border-b flex justify-between items-center shrink-0",
             dark ? "border-white/10" : "border-slate-100"
           )}>
             <h2 className={cn("text-xl font-bold", dark ? "text-white" : "text-secondary")}>{title}</h2>
@@ -813,7 +818,10 @@ const Modal = ({ isOpen, onClose, title, children, dark }: { isOpen: boolean, on
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="p-6 max-h-[70vh] overflow-y-auto no-scrollbar">
+          <div className={cn(
+            "overflow-y-auto no-scrollbar",
+            fullScreen ? "p-4 md:p-8 flex-1" : "p-6 max-h-[70vh]"
+          )}>
             {children}
           </div>
         </motion.div>
@@ -1027,6 +1035,41 @@ const PremiumAction = ({
   );
 };
 
+const VoteControls = ({ post, collection, dark }: { post: any, collection: 'marketplace' | 'lookingFor' | 'events', dark?: boolean }) => {
+  const { currentUser, voteOnPost } = useNomadStore();
+  const upvotes = post.upvotes || [];
+  const downvotes = post.downvotes || [];
+  const score = upvotes.length - downvotes.length;
+  const hasUpvoted = currentUser ? upvotes.includes(currentUser.id) : false;
+  const hasDownvoted = currentUser ? downvotes.includes(currentUser.id) : false;
+
+  return (
+    <div className="flex items-center gap-1">
+      <button 
+        onClick={(e) => { e.stopPropagation(); voteOnPost(post.id, collection, 1); }}
+        className={cn(
+          "p-2 rounded-xl transition-all",
+          hasUpvoted ? "bg-primary text-white" : (dark ? "bg-white/5 text-white/40 hover:bg-white/10" : "bg-slate-50 text-slate-400 hover:bg-slate-100")
+        )}
+      >
+        <ArrowUp className="w-3 h-3" />
+      </button>
+      <span className={cn("text-[10px] font-black min-w-[1.5rem] text-center", dark ? "text-white/60" : "text-slate-600")}>
+        {score > 0 ? `+${score}` : score}
+      </span>
+      <button 
+        onClick={(e) => { e.stopPropagation(); voteOnPost(post.id, collection, -1); }}
+        className={cn(
+          "p-2 rounded-xl transition-all",
+          hasDownvoted ? "bg-red-500 text-white" : (dark ? "bg-white/5 text-white/40 hover:bg-white/10" : "bg-slate-50 text-slate-400 hover:bg-slate-100")
+        )}
+      >
+        <ArrowDown className="w-3 h-3" />
+      </button>
+    </div>
+  );
+};
+
 const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { onBack: () => void, onContactSeller: (item: MarketItem) => void, collabMode?: boolean, onPaywall: () => void }) => {
   const { marketItems, currentUser, reserveItem, cancelReservation, addItem, addLookingFor, processPayment, addToast } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
@@ -1035,8 +1078,8 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
   const [isRequestItemOpen, setIsRequestItemOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
-  const [newItem, setNewItem] = useState({ title: '', description: '', price: 0, category: collabMode ? 'Professional Services' : 'Gear' as any, imageUrl: '', locationName: '', lat: 0, lng: 0 });
-  const [newRequest, setNewRequest] = useState({ title: '', description: '', location: '', lat: 0, lng: 0 });
+  const [newItem, setNewItem] = useState({ title: '', description: '', price: 0, category: collabMode ? 'Professional Services' : 'Gear' as any, mode: 'Sell' as 'Sell' | 'Swap', imageUrl: '', locationName: '', lat: 0, lng: 0 });
+  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0, date: '' });
 
   const filteredItems = marketItems.filter(item => {
     // Mock distance check - stable based on item ID
@@ -1183,7 +1226,7 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
                         const reason = prompt("Why are you reporting this item?");
                         if (reason) {
                           useNomadStore.getState().reportContent(item.id, 'MarketItem', reason);
-                          addToast("Melding verzonden.", "info");
+                          addToast("Report sent.", "info");
                         }
                       }}
                       className={cn(
@@ -1211,7 +1254,7 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
                 )}
               </div>
               <div className="flex justify-end mt-2">
-                <VoteButtons type="marketplace" id={item.id} votes={item.votes} />
+                <VoteControls post={item} collection="marketplace" dark={collabMode} />
               </div>
             </div>
           </div>
@@ -1229,19 +1272,20 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
             description: newItem.description,
             price: newItem.price,
             category: newItem.category,
+            mode: 'Sell',
             imageUrl: newItem.imageUrl,
             location: { name: newItem.locationName || 'Current Location', lat: newItem.lat || 0, lng: newItem.lng || 0 },
             status: 'Available',
             createdAt: new Date().toISOString()
           });
           setIsAddItemOpen(false);
-          setNewItem({ title: '', description: '', price: 0, category: 'Gear', imageUrl: '', locationName: '', lat: 0, lng: 0 });
+          setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', locationName: '', lat: 0, lng: 0 });
           addToast("Item geplaatst!", "success");
         }}>
           <ImageUpload label="Item Photo" onUpload={(url) => setNewItem(prev => ({...prev, imageUrl: url}))} />
           {newItem.imageUrl && (
             <div className="w-full h-32 rounded-2xl overflow-hidden">
-              <img src={newItem.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+              <img src={newItem.imageUrl || null} alt="Preview" className="w-full h-full object-cover" />
             </div>
           )}
           <div className="space-y-1">
@@ -1282,8 +1326,8 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
             createdAt: new Date().toISOString()
           });
           setIsRequestItemOpen(false);
-          setNewRequest({ title: '', description: '', location: '', lat: 0, lng: 0 });
-          addToast("Verzoek geplaatst bij de tribe!", "success");
+          setNewRequest({ title: '', description: '', category: 'Help', location: '', lat: 0, lng: 0, date: '' });
+          addToast("Request posted to the tribe!", "success");
         }}>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">What do you need?</label>
@@ -1390,25 +1434,22 @@ const DealsView = ({ onBack, onPaywall }: { onBack: () => void, onPaywall: () =>
 };
 
 const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall }: { onViewAllMarketplace: () => void, onSayHello: (family: FamilyProfile, message?: string) => void, onSelectFamily: (family: FamilyProfile) => void, onPaywall: () => void }) => {
-  const { currentUser, trips, profiles, lookingFor, addLookingFor, removeLookingFor, marketItems, reserveItem, connections, requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, collabAsks, addCollabAsk, removeCollabAsk, blocks, saveVibeCheck } = useNomadStore();
+  const { currentUser, trips, cities: hubCities, profiles, lookingFor, addLookingFor, removeLookingFor, marketItems, removeMarketItem, reserveItem, connections, requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, collabAsks, addCollabAsk, removeCollabAsk, blocks, saveVibeCheck, spots, events, addEvent, removeEvent, tribeRadius, setTribeRadius } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
   const [isCollabAskOpen, setIsCollabAskOpen] = useState(false);
-  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0 });
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [isAddEventOpen, setIsAddEventOpen] = useState(false);
+  const [isMyPostsOpen, setIsMyPostsOpen] = useState(false);
+  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0, date: '' });
   const [newCollabAsk, setNewCollabAsk] = useState({ skillNeeded: '', description: '' });
+  const [newItem, setNewItem] = useState({ title: '', description: '', price: 0, category: 'Gear' as any, mode: 'Sell' as 'Sell' | 'Swap', imageUrl: '', locationName: '', lat: 0, lng: 0 });
+  const [newEvent, setNewEvent] = useState({ title: '', description: '', date: '', time: '', category: 'Social' as any, imageUrl: '', location: '', maxParticipants: 10 });
+  const [isLocalFeedOpen, setIsLocalFeedOpen] = useState(false);
   const [isVibeCheckOpen, setIsVibeCheckOpen] = useState(false);
-  const [vibeMetrics, setVibeMetrics] = useState({ 
-    kindvriendelijkheid: 5, 
-    veiligheid: 5, 
-    voorzieningen: 5, 
-    community: 5, 
-    betaalbaarheid: 5, 
-    internet: 5, 
-    gezondheidszorg: 5 
-  });
-  const [activeLocationIndex, setActiveLocationIndex] = useState(0);
   const [tribeSearchQuery, setTribeSearchQuery] = useState('');
   const [professionalOnly, setProfessionalOnly] = useState(false);
+  const [activeLocationIndex, setActiveLocationIndex] = useState(0);
 
   const getConnection = (otherId: string) => {
     return connections.find(c => 
@@ -1417,91 +1458,147 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
     );
   };
 
-  const locationMetrics = useMemo(() => {
-    const metrics = [];
-    if (currentUser?.currentLocation) {
-      metrics.push({
-        location: currentUser.currentLocation.name,
-        weather: 'Local',
-        emergency: '112',
-        date: format(new Date(), 'EEEE, MMM do'),
-        families: profiles.filter(p => 
-          p.currentLocation && 
-          calculateDistance(currentUser.currentLocation!.lat, currentUser.currentLocation!.lng, p.currentLocation.lat, p.currentLocation.lng) <= 50
-        ).length
+  const locations = useMemo(() => {
+    const locs: { name: string; type: 'current' | 'planned' | 'default'; lat: number; lng: number, continent?: string }[] = [];
+    if (currentUser?.currentLocation?.name) {
+      const hub = hubCities.find(c => c.name.toLowerCase() === currentUser.currentLocation?.name.toLowerCase());
+      locs.push({ 
+        name: currentUser.currentLocation.name, 
+        type: 'current',
+        lat: currentUser.currentLocation.lat,
+        lng: currentUser.currentLocation.lng,
+        continent: hub?.continent
       });
     }
-    
-    const userTrips = trips.filter(t => t.familyId === currentUser?.id);
-    userTrips.forEach(trip => {
-      metrics.push({
-        location: trip.location,
-        weather: 'Upcoming',
-        emergency: '112',
-        date: format(parseISO(trip.startDate), 'MMM d, yyyy'),
-        families: profiles.filter(p => 
-          p.currentLocation?.name === trip.location || 
-          trips.some(t => t.familyId === p.id && t.location === trip.location)
-        ).length
-      });
+    const userTrips = trips
+      .filter(t => t.familyId === currentUser?.id)
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    userTrips.forEach(t => {
+      if (!locs.some(l => l.name === t.location)) {
+        const hub = hubCities.find(c => t.location.toLowerCase().includes(c.name.toLowerCase()));
+        locs.push({ 
+          name: t.location, 
+          type: 'planned',
+          lat: t.coordinates.lat,
+          lng: t.coordinates.lng,
+          continent: hub?.continent
+        });
+      }
     });
-
-    if (metrics.length === 0) {
-      return [{ 
-        location: 'Global Tribe', 
-        weather: 'Varies', 
-        emergency: '112', 
-        date: format(new Date(), 'EEEE, MMM do'),
-        families: profiles.length
-      }];
+    if (locs.length === 0) {
+      locs.push({ name: 'Global Tribe', type: 'default', lat: 18.7883, lng: 98.9853, continent: 'Global' });
     }
-    return metrics;
-  }, [currentUser, trips, profiles]);
+    return locs;
+  }, [currentUser?.currentLocation, trips, currentUser?.id, hubCities]);
 
-  const currentMetrics = locationMetrics[activeLocationIndex] || locationMetrics[0];
+  const activeLocation = useMemo(() => {
+    const safeIndex = activeLocationIndex % locations.length;
+    return locations[safeIndex];
+  }, [locations, activeLocationIndex]);
+
+  const currentMetrics = useMemo(() => {
+    const loc = activeLocation;
+    return {
+      location: loc.name,
+      weather: loc.type === 'current' ? 'Local' : 'Planned',
+      emergency: '112',
+      date: format(new Date(), 'EEEE, MMM do'),
+      families: profiles.filter(p => 
+        p.currentLocation && 
+        calculateDistance(loc.lat, loc.lng, p.currentLocation.lat, p.currentLocation.lng) <= 50
+      ).length
+    };
+  }, [activeLocation, profiles]);
 
   const filteredProfiles = useMemo(() => {
     if (!currentUser) return [];
     return profiles.filter(p => {
-       // Filter out self
        if (p.id === currentUser.id) return false;
-       // Filter out ghost mode users (unless it's us, but we already filtered self)
        if (p.privacySettings?.isIncognito) return false;
-       // Filter out blocked/blocking users
        if (blocks.some(b => (b.blockerId === currentUser.id && b.blockedId === p.id) || (b.blockerId === p.id && b.blockedId === currentUser.id))) return false;
-       
-       // Remote Worker Global Visibility
-       if (collabMode && p.collabCard?.isRemote) return true;
-
-       // Distance filter (50km radius for families)
-       if (p.currentLocation && currentUser.currentLocation) {
-         const dist = calculateDistance(currentUser.currentLocation.lat, currentUser.currentLocation.lng, p.currentLocation.lat, p.currentLocation.lng);
-         return dist <= 50;
+       if (p.currentLocation && activeLocation.lat && activeLocation.lng) {
+         const dist = calculateDistance(activeLocation.lat, activeLocation.lng, p.currentLocation.lat, p.currentLocation.lng);
+         return dist <= tribeRadius;
        }
-
        return true;
     });
-  }, [currentUser, profiles, blocks, collabMode]);
+  }, [currentUser, profiles, blocks, activeLocation, tribeRadius]);
+
+  const filteredSpots = useMemo(() => {
+    return spots.filter(spot => {
+      // Allow vetted spots and monthly deals to show even in collabMode
+      const isSpeciallyFeatured = spot.isVetted || !!spot.monthlyDeal;
+      if (collabMode && !isSpeciallyFeatured && (spot.category !== 'Workspace' && spot.category !== 'Accommodation')) return false;
+      
+      if (spot.coordinates && activeLocation.lat && activeLocation.lng) {
+        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, spot.coordinates.lat, spot.coordinates.lng);
+        return dist <= tribeRadius;
+      }
+      return true;
+    });
+  }, [spots, collabMode, activeLocation, tribeRadius]);
+
+  const filteredDeals = useMemo(() => {
+    return filteredSpots.filter(s => s.monthlyDeal);
+  }, [filteredSpots]);
+
+  const localEvents = useMemo(() => {
+    return events.filter(e => {
+       if (e.location?.lat && e.location?.lng && activeLocation.lat && activeLocation.lng) {
+         return calculateDistance(activeLocation.lat, activeLocation.lng, e.location.lat, e.location.lng) <= tribeRadius;
+       }
+       return e.location?.name === activeLocation.name;
+    });
+  }, [activeLocation, events, tribeRadius]);
+
+  const localMarketItems = useMemo(() => {
+    return marketItems.filter(item => {
+       if (item.location?.lat && item.location?.lng && activeLocation.lat && activeLocation.lng) {
+         return calculateDistance(activeLocation.lat, activeLocation.lng, item.location.lat, item.location.lng) <= tribeRadius;
+       }
+       return item.location?.name === activeLocation.name;
+    });
+  }, [activeLocation, marketItems, tribeRadius]);
+
+  const localRequests = useMemo(() => {
+    return lookingFor.filter(r => {
+      if (r.lat && r.lng && activeLocation.lat && activeLocation.lng) {
+        return calculateDistance(activeLocation.lat, activeLocation.lng, r.lat, r.lng) <= tribeRadius;
+      }
+      return r.location === activeLocation.name;
+    });
+  }, [activeLocation, lookingFor, tribeRadius]);
 
   // --- Collab Mode Monetization Gating ---
-  const isCollabGated = collabMode && !currentUser?.isPremium && currentUser?.premiumType !== 'TRIAL' && currentUser?.premiumType !== 'ANNUAL' && currentUser?.premiumType !== 'MONTHLY' && currentUser?.premiumType !== 'LIFETIME';
+  const isCollabGated = collabMode && 
+    currentUser?.role !== 'SuperAdmin' &&
+    !currentUser?.isPremium && 
+    currentUser?.premiumType !== 'TRIAL' && 
+    currentUser?.premiumType !== 'ANNUAL' && 
+    currentUser?.premiumType !== 'MONTHLY' && 
+    currentUser?.premiumType !== 'LIFETIME';
 
   const anonymize = (name: string, isGated: boolean) => {
     if (!isGated) return name;
     return `Digital Nomad ${name.split(' ').pop() || ''}`.trim();
   };
 
-  const anonymizePhoto = (photoUrl: string | undefined, isGated: boolean, seed: string) => {
-    if (!isGated) return photoUrl || `https://picsum.photos/seed/${seed}/200/200`;
-    return `https://picsum.photos/seed/${seed}/200/200?blur=10`;
+  const anonymizePhoto = (photoUrl: string | undefined, isGated: boolean) => {
+    if (isGated || !photoUrl) return undefined;
+    return photoUrl;
   };
 
   const handleAddLookingFor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
 
+    if (newRequest.category === 'Playdate' && !newRequest.date) {
+      useNomadStore.getState().addToast("Voer aub een datum in voor de playdate.", "error");
+      return;
+    }
+
     if (containsBlockedContent(newRequest.title) || containsBlockedContent(newRequest.description)) {
-      useNomadStore.getState().addToast("Your post contains inappropriate language. Please keep it family-friendly.", "error");
+      useNomadStore.getState().addToast("Je bericht bevat ongepast taalgebruik.", "error");
       return;
     }
 
@@ -1510,17 +1607,18 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
         id: `lf-${Date.now()}`,
         userId: currentUser.id,
         familyName: currentUser.familyName,
-        location: newRequest.location,
-        lat: newRequest.lat,
-        lng: newRequest.lng,
+        location: activeLocation.name,
+        lat: activeLocation.lat,
+        lng: activeLocation.lng,
         category: newRequest.category,
         title: cleanContent(newRequest.title),
         description: cleanContent(newRequest.description),
+        date: newRequest.category === 'Playdate' ? newRequest.date : undefined,
         createdAt: new Date().toISOString()
       };
       await addLookingFor(request);
       setIsLookingForOpen(false);
-      setNewRequest({ title: '', description: '', category: 'Help', location: '', lat: 0, lng: 0 });
+      setNewRequest({ title: '', description: '', category: 'Help', location: '', lat: 0, lng: 0, date: '' });
     } catch (error) {
       console.error("Failed to add looking for request:", error);
     }
@@ -1550,6 +1648,63 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
     } catch (error) {
       console.error("Failed to add collab ask:", error);
     }
+  };
+
+  const handleAddMarketItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    const { addItem } = useNomadStore.getState();
+    const item: MarketItem = {
+      id: `m-${Date.now()}`,
+      sellerId: currentUser.id,
+      sellerName: currentUser.familyName,
+      title: newItem.title,
+      description: newItem.description,
+      price: newItem.price,
+      category: newItem.category,
+      mode: newItem.mode || 'Sell',
+      imageUrl: newItem.imageUrl || '',
+      status: 'Available',
+      location: { 
+        lat: activeLocation.lat, 
+        lng: activeLocation.lng, 
+        name: activeLocation.name 
+      },
+      createdAt: new Date().toISOString()
+    };
+    await addItem(item);
+    setIsAddItemOpen(false);
+    setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', locationName: '', lat: 0, lng: 0 });
+  };
+
+  const handleAddEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    const { addEvent } = useNomadStore.getState();
+    const event: PopUpEvent = {
+      id: `e-${Date.now()}`,
+      organizerId: currentUser.id,
+      organizerName: currentUser.familyName,
+      title: newEvent.title,
+      description: newEvent.description,
+      date: newEvent.date,
+      time: newEvent.time,
+      location: {
+        lat: activeLocation.lat, // For now keeping activeLocation lat/lng unless we add coords to newEvent
+        lng: activeLocation.lng,
+        name: newEvent.location || activeLocation.name
+      },
+      category: newEvent.category,
+      imageUrl: newEvent.imageUrl || '',
+      participants: [currentUser.id],
+      waitlist: [],
+      maxParticipants: newEvent.maxParticipants,
+      isVerified: false,
+      isCollaborative: collabMode
+    };
+    await addEvent(event);
+    setIsAddEventOpen(false);
+    setNewEvent({ title: '', description: '', date: '', time: '', category: 'Social', imageUrl: '', location: '', maxParticipants: 10 });
   };
 
   const matches = useMemo(() => {
@@ -1583,7 +1738,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
 
   return (
     <div className={cn(
-      "p-4 md:p-8 space-y-8 max-w-5xl mx-auto pb-24 md:pb-8 transition-colors duration-500 min-h-full",
+      "p-4 md:p-8 space-y-12 max-w-5xl mx-auto pb-32 md:pb-12 transition-colors duration-500 min-h-full",
       collabMode ? "bg-[#006d77] text-white" : "text-slate-900"
     )}>
       {isCollabGated ? (
@@ -1596,699 +1751,1120 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
         />
       ) : (
         <>
-          {/* Collab Ask Modal */}
-      <Modal isOpen={isCollabAskOpen} onClose={() => setIsCollabAskOpen(false)} title="Post a Collab Ask" dark={collabMode}>
-        <form onSubmit={handleAddCollabAsk} className="space-y-6">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-white/40 mb-2">Skill Needed</label>
-              <select 
-                value={newCollabAsk.skillNeeded}
-                onChange={(e) => setNewCollabAsk(prev => ({ ...prev, skillNeeded: e.target.value }))}
-                className={cn(
-                  "w-full rounded-2xl px-5 py-3 text-sm font-medium focus:outline-none focus:ring-2 transition-all",
-                  collabMode 
-                    ? "bg-white/10 border-white/10 text-white placeholder:text-white/30 focus:ring-white/20" 
-                    : "bg-slate-50 border-slate-100 text-secondary placeholder:text-slate-400 focus:ring-primary/20"
-                )}
-                required
-              >
-                <option value="" className="text-secondary">Select Skill</option>
-                {skillsSeed.map(skill => (
-                  <option key={skill} value={skill} className="text-secondary">{skill}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-white/40 mb-2">Description (Max 150 chars)</label>
-              <textarea 
-                maxLength={150}
-                value={newCollabAsk.description}
-                onChange={(e) => setNewCollabAsk(prev => ({ ...prev, description: e.target.value }))}
-                className={cn(
-                  "w-full rounded-2xl px-5 py-3 text-sm font-medium focus:outline-none focus:ring-2 transition-all h-32",
-                  collabMode 
-                    ? "bg-white/10 border-white/10 text-white placeholder:text-white/30 focus:ring-white/20" 
-                    : "bg-slate-50 border-slate-100 text-secondary placeholder:text-slate-400 focus:ring-primary/20"
-                )}
-                placeholder="I need help with... (e.g., setting up Meta Ads for my e-commerce brand)"
-                required
-              />
-            </div>
-          </div>
-          <button type="submit" className="w-full bg-[#e9c46a] text-[#264653] py-4 rounded-3xl font-black text-sm shadow-xl shadow-black/20 active:scale-[0.98] transition-all">
-            Post Locally
-          </button>
-        </form>
-      </Modal>
-
-      <header className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <div>
-          <h1 className={cn("text-3xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>
-            {collabMode ? 'Collab Focus' : 'Your Tribe'}
-          </h1>
-          <p className={cn("font-medium", collabMode ? "text-white/60" : "text-slate-500")}>Families nearby and on your future route.</p>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="flex -space-x-2">
-            {filteredProfiles.slice(0, 3).map(p => (
-              <div key={p.id} className={cn("w-10 h-10 rounded-full border-2 bg-slate-200 overflow-hidden", collabMode ? "border-[#006d77]" : "border-white")}>
-                <img 
-                  src={p.photoUrl || `https://picsum.photos/seed/${p.id}/100/100`} 
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${p.id}/100/100`;
-                  }}
-                  alt="" 
-                  className="w-full h-full object-cover" 
-                />
-              </div>
-            ))}
-            <div className="w-10 h-10 rounded-full border-2 border-white bg-primary flex items-center justify-center text-[10px] font-bold text-white">
-              +{filteredProfiles.length > 3 ? filteredProfiles.length - 3 : 0}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {collabMode && (
-        <section className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Collab Match Center</h2>
-            {!collabAsks.some(a => a.userId === currentUser?.id) && (
-              <button 
-                onClick={() => setIsCollabAskOpen(true)}
-                className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2"
-              >
-                <Plus className="w-3 h-3" />
-                Post New Ask
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* My Active Ask */}
-            <div className="bg-white/10 border border-white/10 rounded-[2rem] p-6 text-white overflow-hidden relative">
-              <div className="absolute top-0 right-0 p-4 opacity-10">
-                <Tag className="w-16 h-16" />
-              </div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">My Active Ask</p>
-              {collabAsks.find(a => a.userId === currentUser?.id) ? (
-                <div className="space-y-4">
-                  <div>
-                    <span className="bg-[#e9c46a] text-[#264653] px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest">
-                      Looking For: {collabAsks.find(a => a.userId === currentUser?.id)?.skillNeeded}
+          {/* Header & Location Management */}
+          <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <h1 className={cn("text-3xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>
+                  {activeLocation.name} 
+                  {activeLocation.continent && (
+                    <span className={cn("ml-2 text-sm font-bold opacity-30", collabMode ? "text-white" : "text-secondary")}>
+                      • {activeLocation.continent}
                     </span>
-                    <p className="mt-3 text-sm font-medium leading-relaxed italic">
-                      "{collabAsks.find(a => a.userId === currentUser?.id)?.description}"
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => removeCollabAsk(collabAsks.find(a => a.userId === currentUser?.id)!.id)}
-                    className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors"
-                  >
-                    Delete & Post New
-                  </button>
-                </div>
-              ) : (
-                <div className="py-4 text-center space-y-4">
-                  <p className="text-sm text-white/60">What do you need help with in this location?</p>
-                  <button 
-                    onClick={() => setIsCollabAskOpen(true)}
-                    className="bg-white text-[#006d77] px-6 py-2 rounded-xl font-bold text-xs"
-                  >
-                    Post 1st Ask
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Local Collabs Feed */}
-            <div className="md:col-span-1 space-y-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Local Collabs</p>
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 no-scrollbar">
-                {collabAsks
-                  .filter(a => a.userId !== currentUser?.id && a.locationSlug === currentUser?.currentLocation?.name)
-                  .map(ask => {
-                    const family = profiles.find(p => p.id === ask.userId);
-                    const hasMySkill = currentUser?.collabCard?.superpowers.includes(ask.skillNeeded);
-                    
-                    if (!family) return null;
-
-                    return (
-                      <div key={ask.id} className={cn(
-                        "p-4 rounded-2xl border transition-all",
-                        hasMySkill ? "bg-white text-[#006d77] border-white shadow-xl scale-[1.02]" : "bg-white/5 border-white/10"
-                      )}>
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-3">
-                            <img src={family.photoUrl} className="w-8 h-8 rounded-xl object-cover" alt="" />
-                            <div>
-                              <p className="text-sm font-bold">{family.familyName}</p>
-                              <p className={cn("text-[9px] font-bold uppercase", hasMySkill ? "text-[#006d77]/60" : "text-white/40")}>{ask.skillNeeded}</p>
-                            </div>
-                          </div>
-                          {hasMySkill && (
-                            <div className="bg-[#e9c46a] text-[#264653] px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest">
-                              Perfect Match
-                            </div>
-                          )}
-                        </div>
-                        <p className={cn("text-xs leading-relaxed line-clamp-2 italic", hasMySkill ? "text-[#006d77]" : "text-white/80")}>
-                          "{ask.description}"
-                        </p>
-                        <PremiumAction
-                          isPremium={isPremium}
-                          onPaywall={onPaywall}
-                          onClick={() => onSayHello(family, `Hey ${family.familyName.split(' ')[0]}, I saw your Collab Ask about ${ask.skillNeeded}. I'm an expert in that! Want to grab a coffee here in ${currentUser?.currentLocation?.name}?`)}
-                        >
-                          <button 
-                            className={cn(
-                              "w-full mt-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                              hasMySkill ? "bg-[#006d77] text-white" : "bg-white/10 text-white hover:bg-white/20"
-                            )}
-                          >
-                            Schedule Coffee
-                          </button>
-                        </PremiumAction>
-                      </div>
-                    );
-                  })}
-                {collabAsks.filter(a => a.userId !== currentUser?.id && a.locationSlug === currentUser?.currentLocation?.name).length === 0 && (
-                  <div className="py-8 text-center bg-white/5 rounded-2xl border border-white/5">
-                    <Coffee className="w-8 h-8 text-white/20 mx-auto mb-2" />
-                    <p className="text-xs text-white/40">No other asks in this city yet.</p>
-                  </div>
+                  )}
+                </h1>
+                {activeLocation.type === 'current' && (
+                  <span className="bg-accent text-white text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-widest">Current</span>
+                )}
+                {activeLocation.type === 'planned' && (
+                  <span className="bg-primary text-white text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-widest">Planned</span>
                 )}
               </div>
+              <p className={cn("font-medium", collabMode ? "text-white/60" : "text-slate-500")}>
+                {activeLocation.type === 'current' ? 'Explore your neighborhood and connect with the tribe.' : 'Checking the vibes for your upcoming adventure.'}
+              </p>
             </div>
-          </div>
-        </section>
-      )}
+            
+            <div className="flex items-center gap-2">
+               <div className="flex gap-1 mr-2">
+                 {locations.map((_, i) => (
+                   <div 
+                     key={i} 
+                     className={cn(
+                       "w-1.5 h-1.5 rounded-full transition-all",
+                       activeLocationIndex === i ? (collabMode ? "bg-white w-4" : "bg-primary w-4") : (collabMode ? "bg-white/20" : "bg-slate-200")
+                     )} 
+                   />
+                 ))}
+               </div>
+               <button 
+                onClick={() => setActiveLocationIndex(prev => (prev === 0 ? locations.length - 1 : prev - 1))}
+                className={cn("p-3 rounded-2xl transition-all", collabMode ? "bg-white/10 hover:bg-white/20" : "bg-white border border-slate-100 card-shadow hover:bg-slate-50")}
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={() => setActiveLocationIndex(prev => (prev === locations.length - 1 ? 0 : prev + 1))}
+                className={cn("p-3 rounded-2xl transition-all", collabMode ? "bg-white/10 hover:bg-white/20" : "bg-white border border-slate-100 card-shadow hover:bg-slate-50")}
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          </header>
 
-      {/* Location Metrics Slider */}
-      <section className="relative group">
-        <div className={cn(
-          "p-6 rounded-[2.5rem] border flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden transition-colors",
-          collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 card-shadow"
-        )}>
-          <AnimatePresence mode="wait">
-            <motion.div 
-              key={activeLocationIndex}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="flex flex-col md:flex-row items-center gap-8 w-full"
-            >
-              <div className="flex-1 space-y-1 text-center md:text-left">
-                <p className={cn("text-[10px] font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-primary")}>Current Location</p>
-                <h2 className={cn("text-2xl font-black", collabMode ? "text-white" : "text-secondary")}>{currentMetrics.location}</h2>
-                <p className={cn("text-xs font-bold", collabMode ? "text-white/40" : "text-slate-400")}>{currentMetrics.date}</p>
+          {/* Location Context Bar (Merged Info) */}
+          <section className={cn(
+            "p-6 rounded-[2.5rem] border flex flex-wrap items-center justify-between gap-6 transition-colors",
+            collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 card-shadow"
+          )}>
+            <div className="flex items-center gap-4">
+               <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-primary/10 text-primary")}>
+                 <Calendar className="w-6 h-6" />
+               </div>
+               <div>
+                 <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Local Date</p>
+                 <p className="text-sm font-bold">{currentMetrics.date}</p>
+               </div>
+            </div>
+            <div className="flex items-center gap-4">
+               <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-amber-100 text-amber-600")}>
+                 <ShieldAlert className="w-6 h-6" />
+               </div>
+               <div>
+                 <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Emergency</p>
+                 <p className="text-sm font-bold text-red-500">{currentMetrics.emergency}</p>
+               </div>
+            </div>
+            <div className="flex items-center gap-4">
+               <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-primary/10 text-primary")}>
+                 <Users className="w-6 h-6" />
+               </div>
+               <div>
+                 <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Active Tribe</p>
+                 <p className="text-sm font-bold">{currentMetrics.families} families • {tribeRadius}km</p>
+               </div>
+            </div>
+            
+            {/* Radius Slider */}
+            <div className="flex items-center gap-4 px-4 py-2 bg-slate-50/50 rounded-2xl border border-slate-100/50">
+              <div className="flex flex-col">
+                <p className={cn("text-[8px] font-black uppercase tracking-widest leading-none mb-1", collabMode ? "text-white/40" : "text-slate-400")}>Search Radius</p>
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="100" 
+                    value={tribeRadius} 
+                    onChange={(e) => setTribeRadius(parseInt(e.target.value))}
+                    className="w-24 accent-primary cursor-pointer"
+                  />
+                  <span className="text-xs font-black text-primary">{tribeRadius}km</span>
+                </div>
               </div>
-              
-              <div className="grid grid-cols-3 gap-8 flex-1">
-                <div className="text-center">
-                  <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", collabMode ? "text-white/20" : "text-slate-300")}>Weather</p>
-                  <p className="text-sm font-bold">{currentMetrics.weather}</p>
-                </div>
-                <div className="text-center">
-                  <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", collabMode ? "text-white/20" : "text-slate-300")}>Emergency</p>
-                  <p className="text-sm font-bold text-red-500">{currentMetrics.emergency}</p>
-                </div>
-                <div className="text-center">
-                  <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", collabMode ? "text-white/20" : "text-slate-300")}>Tribe</p>
-                  <p className="text-sm font-bold">{currentMetrics.families} Families</p>
-                </div>
-              </div>
-            </motion.div>
-          </AnimatePresence>
-
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setActiveLocationIndex(prev => (prev === 0 ? locationMetrics.length - 1 : prev - 1))}
-              className={cn("p-3 rounded-2xl transition-colors", collabMode ? "bg-white/10 hover:bg-white/20" : "bg-slate-50 hover:bg-slate-100")}
-            >
-              <ChevronLeft className={cn("w-5 h-5", collabMode ? "text-white" : "text-secondary")} />
-            </button>
-            <button 
-              onClick={() => setActiveLocationIndex(prev => (prev === locationMetrics.length - 1 ? 0 : prev + 1))}
-              className={cn("p-3 rounded-2xl transition-colors", collabMode ? "bg-white/10 hover:bg-white/20" : "bg-slate-50 hover:bg-slate-100")}
-            >
-              <ChevronRight className={cn("w-5 h-5", collabMode ? "text-white" : "text-secondary")} />
-            </button>
-          </div>
-        </div>
-      </section>
-         {/* Pending Connection Requests Visibility fix */}
-      {(() => {
-        const pendingConnections = connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending');
-        const nearbyHelpRequests = lookingFor.filter(r => r.userId !== currentUser?.id && currentUser?.currentLocation?.name && r.location === currentUser?.currentLocation?.name);
-        
-        if (pendingConnections.length === 0 && nearbyHelpRequests.length === 0) return null;
-
-        return (
-          <section className="space-y-4">
-            <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
-              New Requests
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {pendingConnections.map(conn => {
-                  const requester = profiles.find(p => p.id === conn.requesterId);
-                  if (!requester) return null;
-                  return (
-                     <div key={conn.id} className={cn(
-                       "p-4 rounded-[2rem] border flex items-center justify-between gap-4",
-                       collabMode ? "bg-white/5 border-white/10" : "bg-primary/5 border-primary/10 shadow-sm"
-                     )}>
-                       <div className="flex items-center gap-3">
-                         <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm">
-                           <img src={requester.photoUrl || `https://picsum.photos/seed/${requester.id}/200/200`} alt="" className="w-full h-full object-cover" />
-                         </div>
-                         <div>
-                           <p className={cn("font-bold", collabMode ? "text-white" : "text-secondary")}>{requester.familyName}</p>
-                           <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-primary")}>Wil connecten</p>
-                         </div>
-                       </div>
-                       <div className="flex gap-4">
-                         <button 
-                           onClick={() => acceptConnection(conn.id)}
-                           className="px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
-                         >
-                           Accepteer
-                         </button>
-                         <button 
-                           onClick={() => cancelConnection(conn.id)}
-                           className={cn("p-2 rounded-xl border transition-all text-slate-400 hover:text-red-500 hover:border-red-500/20", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100")}
-                         >
-                            <X className="w-5 h-5" />
-                         </button>
-                       </div>
-                     </div>
-                  );
-                })}
-
-                {nearbyHelpRequests.map(req => {
-                  const requester = profiles.find(p => p.id === req.userId);
-                  return (
-                    <div key={req.id} className={cn(
-                      "p-4 rounded-[2rem] border flex items-center justify-between gap-4",
-                      collabMode ? "bg-white/5 border-white/10" : "bg-accent/5 border-accent/10 shadow-sm"
-                    )}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm flex items-center justify-center bg-slate-100 shrink-0">
-                          {requester?.photoUrl ? (
-                            <img src={requester.photoUrl} alt="" className="w-full h-full object-cover" />
-                          ) : <User className="w-6 h-6 text-slate-400" />}
-                        </div>
-                        <div className="overflow-hidden">
-                          <p className={cn("font-bold truncate", collabMode ? "text-white" : "text-secondary")}>{req.title}</p>
-                          <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-accent")}>{req.category} verzoek van {req.familyName}</p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          const itemFamily = profiles.find(p => p.id === req.userId);
-                          if (itemFamily) onSayHello(itemFamily, `Hoi ${itemFamily.familyName}, ik zag je verzoek voor '${req.title}' en wil graag helpen!`);
-                        }}
-                        className="px-4 py-2 bg-accent text-white rounded-xl text-xs font-bold shadow-lg shadow-accent/20 hover:scale-105 active:scale-95 transition-all shrink-0"
-                      >
-                        Help {collabMode ? 'Collab' : 'Tribe'}
-                      </button>
-                    </div>
-                  );
-                })}
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setIsMyPostsOpen(true)}
+                className={cn("px-6 py-3 rounded-2xl text-xs font-bold transition-all border", collabMode ? "bg-white/10 border-white/10 hover:bg-white/20" : "bg-white border-slate-100 hover:bg-slate-50")}
+              >
+                My Posts
+              </button>
+              <button 
+                onClick={() => setIsVibeCheckOpen(true)}
+                className={cn("px-6 py-3 rounded-2xl text-xs font-bold transition-all border", collabMode ? "bg-white/10 border-white/10 hover:bg-white/20" : "bg-slate-50 border-slate-100 hover:bg-slate-100")}
+              >
+                Vibe Check
+              </button>
             </div>
           </section>
-        );
-      })()}
-      
-      {/* Matches & Overlaps */}
-      <section className="space-y-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Matches & Overlaps</h2>
-          
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className={cn("relative flex-1 md:w-64", collabMode ? "text-white/40" : "text-slate-400")}>
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" />
-              <input 
-                type="text"
-                placeholder={collabMode ? "Search skill or role..." : "Search interests..."}
-                value={tribeSearchQuery}
-                onChange={(e) => setTribeSearchQuery(e.target.value)}
-                className={cn(
-                  "w-full pl-10 pr-4 py-3 rounded-2xl text-xs font-bold transition-all outline-none",
-                  collabMode 
-                    ? "bg-white/5 border border-white/10 text-white placeholder:text-white/20 focus:bg-white/10" 
-                    : "bg-white border border-slate-100 text-secondary card-shadow focus:border-primary/20"
-                )}
-              />
-            </div>
 
-            {collabMode && (
-              <button 
-                onClick={() => setProfessionalOnly(!professionalOnly)}
-                className={cn(
-                  "px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-2",
-                  professionalOnly
-                    ? "bg-amber-400 border-amber-400 text-[#264653]"
-                    : "bg-white/5 border-white/10 text-white/60"
-                )}
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span className="hidden sm:inline">Pro Only</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {matches
-            .filter(match => {
-              if (professionalOnly && !match.family.collabCard?.occupation) return false;
-              if (tribeSearchQuery) {
-                const query = tribeSearchQuery.toLowerCase();
-                const interests = [
-                  ...match.family.parents.flatMap(p => p.interests),
-                  ...match.family.kids.flatMap(k => k.interests)
-                ].join(' ').toLowerCase();
-                const bio = match.family.bio.toLowerCase();
-                const familyName = match.family.familyName.toLowerCase();
-                const occupation = match.family.collabCard?.occupation.toLowerCase() || '';
-                const mission = match.family.collabCard?.currentMission.toLowerCase() || '';
-                const superpowers = match.family.collabCard?.superpowers.join(' ').toLowerCase() || '';
-
-                return interests.includes(query) || bio.includes(query) || familyName.includes(query) || occupation.includes(query) || mission.includes(query) || superpowers.includes(query);
-              }
-              return true;
-            })
-            .map((match) => {
-            const connection = getConnection(match.family.id);
-            const isConnected = connection?.status === 'accepted';
-            const isReceived = connection?.status === 'pending' && connection.recipientId === currentUser?.id;
-            const isSent = connection?.status === 'pending' && connection.requesterId === currentUser?.id;
-            
-            return (
-              <motion.div 
-                key={match.id}
-                whileHover={{ y: -4 }}
-                className={cn(
-                  "rounded-[2rem] p-6 border flex flex-col transition-colors",
-                  collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 card-shadow"
-                )}
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex gap-4">
-                    <div className={cn("w-16 h-16 rounded-2xl overflow-hidden border-2", collabMode ? "bg-white/10 border-white/10" : "bg-slate-100 border-slate-50")}>
-                      <img 
-                        src={anonymizePhoto(match.family.photoUrl, isCollabGated, match.family.id)} 
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${match.family.id}/200/200?blur=10`;
-                        }}
-                        alt="" 
-                        className="w-full h-full object-cover" 
-                      />
-                    </div>
-                    <div>
-                      <h3 className={cn("font-bold text-xl", collabMode ? "text-white" : "text-secondary")}>
-                        {anonymize(match.family.familyName, isCollabGated)}
-                      </h3>
-                      {collabMode ? (
-                        <div className="flex items-center text-xs text-white/60 font-black uppercase tracking-widest mt-0.5">
-                          <Briefcase className="w-3 h-3 mr-1.5 text-white/40" />
-                          {match.family.collabCard?.occupation || 'Digital Nomad'}
-                        </div>
-                      ) : (
-                        <div className="flex items-center text-sm text-slate-500 font-medium">
-                          <MapPin className="w-3 h-3 mr-1 text-primary" />
-                          {isConnected ? match.trip.location : `${match.trip.location} in ${format(parseISO(match.trip.startDate), 'MMMM')}`}
-                        </div>
-                      )}
-                      {isConnected && !collabMode && (
-                        <p className="text-[10px] font-black text-primary uppercase tracking-widest mt-1">
-                          {format(parseISO(match.trip.startDate), 'MMM d')} - {format(parseISO(match.trip.endDate), 'MMM d')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className={cn("px-3 py-1 rounded-full text-xs font-black", collabMode ? "bg-white/20 text-white" : "bg-accent/10 text-accent")}>
-                    {match.score}% Match
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mb-6">
-                  <span className={cn("text-[10px] px-2 py-1 rounded-lg font-bold", collabMode ? "bg-white/10 text-white/80" : "bg-primary/10 text-primary")}>
-                    {match.family.nativeLanguage}
-                  </span>
-                  {(collabMode ? match.family.collabCard?.superpowers || [] : Array.from(new Set([
-                    ...match.family.parents.flatMap(p => p.interests),
-                    ...match.family.kids.flatMap(k => k.interests)
-                  ]))).slice(0, 4).map((tag, i) => (
-                    <span key={i} className={cn("text-[10px] px-2 py-1 rounded-lg font-bold flex items-center gap-1", collabMode ? "bg-[#e9c46a]/10 text-[#e9c46a]" : "bg-slate-100 text-slate-600")}>
-                      {collabMode && <Award className="w-2 h-2" />}
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                <div className={cn("mt-auto flex items-center justify-between pt-4 border-t", collabMode ? "border-white/10" : "border-slate-50")}>
-                  <div className="flex -space-x-2">
-                    {match.family.kids.map((kid, i) => (
-                      <div key={i} className={cn("w-8 h-8 rounded-full border-2 flex items-center justify-center text-[10px] font-black", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-white border-slate-100 text-primary")}>
-                        {kid.age}
-                      </div>
-                    ))}
-                  </div>
-                  {isConnected ? (
-                    <PremiumAction isPremium={isPremium} onPaywall={onPaywall} onClick={() => onSayHello(match.family)}>
-                      <button 
-                        className={cn("px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg active:scale-95 transition-transform", collabMode ? "bg-white text-[#006d77]" : "bg-primary text-white shadow-primary/20")}
-                      >
-                        Chat
-                      </button>
-                    </PremiumAction>
-                  ) : isReceived ? (
-                    <button 
-                      onClick={() => acceptConnection(connection.id)}
-                      className={cn("px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg active:scale-95 transition-transform", collabMode ? "bg-white text-[#006d77]" : "bg-primary text-white shadow-primary/20")}
-                    >
-                      Accept
-                    </button>
-                  ) : isSent ? (
-                    <button 
-                      onClick={() => cancelConnection(connection.id)}
-                      className={cn("px-6 py-2.5 rounded-xl text-sm font-bold transition-colors group", collabMode ? "bg-white/10 text-white/40 hover:bg-red-500/20 hover:text-red-400" : "bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500")}
-                    >
-                      <span className="group-hover:hidden">Pending...</span>
-                      <span className="hidden group-hover:inline">Cancel Request</span>
-                    </button>
-                  ) : (
-                    <PremiumAction isPremium={isPremium} onPaywall={onPaywall} onClick={() => requestConnection(match.family.id)}>
-                      <button 
-                        className={cn("px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg active:scale-95 transition-transform", collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white shadow-secondary/20")}
-                      >
-                        {collabMode ? 'Coffee & Collab?' : 'Connect'}
-                      </button>
-                    </PremiumAction>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Nearby Tribe */}
-      <section className="space-y-4">
-        <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Neighborhood</h2>
-        <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-          {profiles.filter(p => p.id !== currentUser?.id && (!collabMode || p.openToCollabs)).map(p => (
-            <motion.div 
-              key={p.id}
-              className={cn(
-                "flex-shrink-0 w-48 rounded-3xl p-4 border text-center transition-colors",
-                collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 card-shadow"
-              )}
+          {/* Quick Actions Context Bar */}
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button 
+              onClick={() => setIsLookingForOpen(true)}
+              className={cn("p-6 rounded-[2.5rem] border flex flex-col items-center gap-3 transition-all", collabMode ? "bg-white/5 border-white/10 hover:bg-white/10" : "bg-white border-slate-100 card-shadow hover:bg-slate-50")}
             >
-              <div className={cn("w-20 h-20 rounded-full mx-auto mb-3 border-4 overflow-hidden", collabMode ? "border-white/10" : "border-slate-50")}>
-                <img 
-                  src={anonymizePhoto(p.photoUrl, isCollabGated, p.id)} 
-                  alt="" 
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${p.id}/200/200?blur=10`;
+              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                <Plus className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest">Post Request</span>
+            </button>
+            <button 
+              onClick={() => setIsAddEventOpen(true)}
+              className={cn("p-6 rounded-[2.5rem] border flex flex-col items-center gap-3 transition-all", collabMode ? "bg-white/5 border-white/10 hover:bg-white/10" : "bg-white border-slate-100 card-shadow hover:bg-slate-50")}
+            >
+              <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest">Post Event</span>
+            </button>
+            <button 
+              onClick={() => setIsAddItemOpen(true)}
+              className={cn("p-6 rounded-[2.5rem] border flex flex-col items-center gap-3 transition-all", collabMode ? "bg-white/5 border-white/10 hover:bg-white/10" : "bg-white border-slate-100 card-shadow hover:bg-slate-50")}
+            >
+              <div className="w-10 h-10 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
+                <ShoppingBag className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest">Sell / Swap Gear</span>
+            </button>
+          </section>
+
+          {/* Integrated Map & Local Calendar View */}
+          <section className="space-y-4">
+            <div className="flex justify-between items-end">
+              <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Local Tribe Map & Calendar</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Map (2/3) */}
+              <div className="lg:col-span-2 h-[500px] w-full rounded-[3rem] overflow-hidden border border-slate-100 shadow-2xl relative">
+                <MapView 
+                  center={{ lat: activeLocation.lat, lng: activeLocation.lng }} 
+                  profiles={[...(currentUser ? [currentUser] : []), ...filteredProfiles]}
+                  spots={filteredSpots}
+                  marketItems={localMarketItems}
+                  events={localEvents}
+                  requests={localRequests}
+                  deals={filteredDeals}
+                  onSelectFamily={(family) => {
+                    onSelectFamily(family);
+                  }}
+                  onSelectSpot={(spot) => {
+                    // Logic to open spot details if needed
                   }}
                 />
               </div>
-              <h4 className={cn("font-bold truncate flex items-center justify-center gap-1", collabMode ? "text-white" : "text-secondary")}>
-                {anonymize(p.familyName, isCollabGated)}
-                {p.role === 'SuperAdmin' && !isCollabGated && <Shield className={cn("w-3 h-3 fill-current", collabMode ? "text-white" : "text-secondary")} />}
-              </h4>
-              
-              {collabMode ? (
-                <div className="mt-1">
-                  <p className={cn("text-[10px] font-black uppercase tracking-widest truncate px-2", collabMode ? "text-white/80" : "text-primary")}>
-                    {p.collabCard?.occupation || 'Digital Nomad'}
-                  </p>
-                  <p className={cn("text-[8px] font-bold uppercase mt-0.5", collabMode ? "text-white/40" : "text-slate-400")}>Open to Collabs</p>
+
+              {/* Local Calendar Sidebar (1/3) */}
+              <div className={cn(
+                "p-6 rounded-[3rem] border flex flex-col h-[500px]",
+                collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
+              )}>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="font-bold">Next Up</h3>
+                  <Calendar className="w-4 h-4 opacity-40" />
                 </div>
-              ) : (
-                <>
-                  <div className="flex justify-center gap-1 mt-1">
-                    {(p.badges || []).slice(0, 2).map((badge, i) => (
-                      <Badge key={i} name={badge} />
-                    ))}
-                  </div>
-                  <p className={cn("text-[10px] font-bold uppercase mt-1", collabMode ? "text-white/40" : "text-slate-400")}>{p.nativeLanguage} • {p.kids.length} Kids</p>
-                </>
-              )}
-              {collabMode && p.collabCard && p.collabCard.occupation && (
-                <div className="mt-3 p-3 bg-white/5 rounded-2xl border border-white/5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-black text-[#e9c46a] uppercase truncate pr-2">{p.collabCard.occupation}</p>
-                    <Briefcase className="w-3 h-3 text-white/20" />
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {p.collabCard.superpowers.slice(0, 2).map(s => (
-                      <span key={s} className="text-[8px] font-bold px-1.5 py-0.5 bg-white/10 rounded-md text-white/60">{s}</span>
-                    ))}
-                  </div>
+                
+                <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar pr-1">
+                  {localEvents.slice(0, 3).map(event => (
+                    <div key={event.id} className={cn("p-4 rounded-2xl border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100")}>
+                      <p className="text-[10px] font-black text-accent uppercase mb-1">{event.category}</p>
+                      <p className="text-sm font-bold truncate mb-1">{event.title}</p>
+                      <p className="text-[10px] opacity-40 font-bold">{event.date} • {event.time}</p>
+                    </div>
+                  ))}
+                  {localEvents.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-full opacity-40 text-center p-4">
+                      <Calendar className="w-8 h-8 mb-2" />
+                      <p className="text-xs font-medium">No upcoming events yet</p>
+                    </div>
+                  )}
                 </div>
-              )}
-              <div className="mt-4 flex flex-col gap-2">
+
                 <button 
-                  onClick={() => onSelectFamily(p)}
-                  className={cn(
-                    "w-full py-2 rounded-xl text-xs font-bold transition-colors",
-                    collabMode ? "bg-white/10 text-white/80 hover:bg-white/20" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-                  )}
+                  onClick={() => setIsLocalFeedOpen(true)}
+                  className={cn("mt-6 w-full py-4 rounded-2xl font-black text-[10px] uppercase transition-all", collabMode ? "bg-white text-[#006d77]" : "bg-primary text-white shadow-lg")}
                 >
-                  View Profile
+                  Open Local Guide & Deals
                 </button>
-                {(() => {
-                  const conn = getConnection(p.id);
-                  const isReceived = conn?.status === 'pending' && conn.recipientId === currentUser?.id;
-                  const isSent = conn?.status === 'pending' && conn.requesterId === currentUser?.id;
-
-                  if (conn?.status === 'accepted') {
-                    return (
-                      <PremiumAction isPremium={isPremium} onPaywall={onPaywall} onClick={() => onSayHello(p)}>
-                        <button 
-                          className={cn(
-                            "w-full py-2 rounded-xl text-xs font-bold shadow-lg transition-all",
-                            collabMode ? "bg-white text-[#006d77]" : "bg-primary text-white shadow-primary/20"
-                          )}
-                        >
-                          Chat
-                        </button>
-                      </PremiumAction>
-                    );
-                  }
-                  if (isReceived) {
-                    return (
-                      <button 
-                        onClick={() => acceptConnection(conn.id)}
-                        className="w-full py-2 bg-primary text-white rounded-xl text-xs font-bold shadow-lg shadow-primary/20"
-                      >
-                        Accept
-                      </button>
-                    );
-                  }
-                  if (isSent) {
-                    return (
-                      <button 
-                        onClick={() => cancelConnection(conn.id)}
-                        className="w-full py-2 bg-slate-100 text-slate-400 rounded-xl text-xs font-bold hover:bg-red-50 hover:text-red-500 transition-colors group"
-                      >
-                        <span className="group-hover:hidden">Pending...</span>
-                        <span className="hidden group-hover:inline">Cancel Request</span>
-                      </button>
-                    );
-                  }
-                  return (
-                    <PremiumAction isPremium={isPremium} onPaywall={onPaywall} onClick={() => requestConnection(p.id)}>
-                      <button 
-                        className="w-full py-2 bg-secondary text-white rounded-xl text-xs font-bold shadow-lg shadow-secondary/20"
-                      >
-                        {collabMode ? 'Collab?' : 'Connect'}
-                      </button>
-                    </PremiumAction>
-                  );
-                })()}
               </div>
-            </motion.div>
-          ))}
-        </div>
-      </section>
+            </div>
+          </section>
 
-      {/* Looking For Modal */}
-      <Modal isOpen={isLookingForOpen} onClose={() => setIsLookingForOpen(false)} title="What are you looking for?">
-        <form onSubmit={handleAddLookingFor} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Category</label>
-            <div className="grid grid-cols-2 gap-2">
-              {['Help', 'Playdate', 'Gear', 'Advice'].map(cat => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setNewRequest({...newRequest, category: cat as any})}
-                  className={cn(
-                    "py-2 rounded-xl text-sm font-bold border transition-all",
-                    newRequest.category === cat ? "bg-secondary text-white border-secondary" : "bg-slate-50 text-slate-500 border-slate-100"
-                  )}
+          {/* Vetted Local Spots (Activities, Dining, etc.) */}
+          {filteredSpots.length > 0 && (
+            <section className="space-y-6">
+              <div className="flex justify-between items-center">
+                 <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Vetted Neighborhood Spots</h2>
+              </div>
+              <div className="flex gap-6 overflow-x-auto pb-4 no-scrollbar">
+                {filteredSpots.slice(0, 8).map(spot => (
+                  <div key={spot.id} className={cn("flex-shrink-0 w-72 rounded-[2.5rem] overflow-hidden border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                    <div className="h-40 relative">
+                       <img src={spot.imageUrl || null} className="w-full h-full object-cover" alt="" />
+                       <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-xl font-black text-[10px] uppercase text-secondary">{spot.category}</div>
+                       {spot.isVetted && <div className="absolute top-4 right-4 bg-primary text-white p-1.5 rounded-full"><ShieldCheck className="w-3 h-3" /></div>}
+                    </div>
+                    <div className="p-6 space-y-3">
+                       <h3 className="font-bold truncate">{spot.name}</h3>
+                       <div className="flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          <span className="text-[10px] font-black">{spot.rating}</span>
+                       </div>
+                       <p className="text-[10px] opacity-60 line-clamp-2">{spot.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Local Deals Section */}
+          {filteredDeals.length > 0 && (
+            <section className="space-y-6">
+              <div className="flex justify-between items-center">
+                 <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Local Tribe Deals</h2>
+              </div>
+              <div className="flex gap-6 overflow-x-auto pb-4 no-scrollbar">
+                {filteredDeals.map(spot => (
+                  <div key={spot.id} className={cn("flex-shrink-0 w-80 rounded-[2.5rem] overflow-hidden border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                     <div className="h-40 relative">
+                        <img src={spot.imageUrl || null} className="w-full h-full object-cover" alt="" />
+                        <div className="absolute top-4 right-4 bg-accent text-white px-3 py-1 rounded-xl font-black text-[10px] uppercase">{spot.monthlyDeal?.discount}</div>
+                     </div>
+                     <div className="p-6 space-y-4">
+                        <h3 className="font-bold">{spot.name}</h3>
+                        <div className="flex items-center justify-between">
+                           <span className="text-[10px] font-black text-accent uppercase tracking-widest">{spot.monthlyDeal?.description}</span>
+                           <button className="px-4 py-2 bg-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-accent/20">Claim Deal</button>
+                        </div>
+                     </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Collab Asks (Only in Collab Mode) */}
+          {collabMode && (
+            <section className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Local Collab Corner</h2>
+                <button 
+                  onClick={() => setIsCollabAskOpen(true)}
+                  className="bg-amber-400 text-[#264653] px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
                 >
-                  {cat}
+                  <Plus className="w-3 h-3" /> Post Ask
                 </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                 {collabAsks
+                   .filter(a => a.userId !== currentUser?.id && a.locationSlug === activeLocation.name)
+                   .slice(0, 3)
+                   .map(ask => {
+                     const family = profiles.find(p => p.id === ask.userId);
+                     if (!family) return null;
+                     return (
+                       <div key={ask.id} className="bg-white/5 border border-white/10 p-5 rounded-3xl hover:bg-white/10 transition-all">
+                          <div className="flex items-center gap-3 mb-3">
+                            <img src={family.photoUrl || null} className="w-8 h-8 rounded-lg object-cover" alt="" />
+                            <p className="text-xs font-bold">{ask.skillNeeded}</p>
+                          </div>
+                          <p className="text-xs text-white/60 italic line-clamp-2 mb-4">"{ask.description}"</p>
+                          <button 
+                            onClick={() => onSayHello(family, `Hi ${family.familyName}, I saw your ask for ${ask.skillNeeded}!`)}
+                            className="w-full py-2 bg-white text-[#006d77] rounded-xl text-[10px] font-black uppercase tracking-widest"
+                          >
+                            Respond
+                          </button>
+                       </div>
+                     );
+                   })}
+                 {collabAsks.filter(a => a.userId !== currentUser?.id && a.locationSlug === activeLocation.name).length === 0 && (
+                   <div className="col-span-full py-8 text-center bg-white/5 rounded-[2rem] border border-dashed border-white/10">
+                     <p className="text-xs text-white/40 font-medium tracking-tight">Be the first to post a collab ask in {activeLocation.name}!</p>
+                   </div>
+                 )}
+              </div>
+            </section>
+          )}
+
+          {/* New Requests Section (Pending) */}
+          {(() => {
+            const pendingConnections = connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending');
+            const filteredLocalRequests = localRequests.filter(r => r.userId !== currentUser?.id);
+            
+            if (pendingConnections.length === 0 && filteredLocalRequests.length === 0) return null;
+
+            return (
+              <section className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-accent rounded-xl flex items-center justify-center text-white">
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
+                    Neighborhood Social Feed
+                  </h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* ... (existing pending connections & requests mapping) ... */}
+                    {pendingConnections.map(conn => {
+                      const requester = profiles.find(p => p.id === conn.requesterId);
+                      if (!requester) return null;
+                      return (
+                        <div key={conn.id} className={cn("p-4 rounded-[2rem] border flex items-center justify-between gap-4 transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                          <div className="flex items-center gap-3">
+                            <img src={requester.photoUrl || null} className="w-10 h-10 rounded-full object-cover" alt="" />
+                            <p className="text-sm font-bold">{requester.familyName} <span className="block text-[9px] opacity-40 uppercase">New Connection Request</span></p>
+                          </div>
+                          <button onClick={() => acceptConnection(conn.id)} className="bg-primary text-white p-2 rounded-xl text-[10px] font-black uppercase">Accept</button>
+                        </div>
+                      );
+                    })}
+                    {filteredLocalRequests.map(req => (
+                      <div key={req.id} className={cn("p-4 rounded-[2rem] border flex items-center justify-between gap-4 transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center flex-shrink-0 text-[10px] font-black">{req.familyName[0]}</div>
+                          <div className="overflow-hidden">
+                            <p className="text-[10px] font-black uppercase text-accent leading-none mb-1">{req.category}</p>
+                            <p className="text-xs font-bold truncate">{req.title}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                           <VoteControls post={req} collection="lookingFor" dark={collabMode} />
+                           {getConnection(req.userId)?.status === 'accepted' ? (
+                             <button onClick={() => {
+                               const seller = profiles.find(p => p.id === req.userId);
+                               if (seller) onSayHello(seller, `Hi ${seller.familyName}, regarding your request: ${req.title}`);
+                             }} className="bg-secondary text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase">Chat</button>
+                           ) : (
+                             <button onClick={() => {
+                               const seller = profiles.find(p => p.id === req.userId);
+                               if (seller) onSelectFamily(seller);
+                             }} className="bg-primary text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase">View</button>
+                           )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </section>
+            );
+          })()}
+
+          {/* Matches & Overlaps */}
+          <section className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Nearby Matches & Overlaps</h2>
+              <div className="flex items-center gap-2">
+                <Search className="w-4 h-4 opacity-40" />
+                <input 
+                  type="text" 
+                  placeholder="Filter by interest..."
+                  className={cn("bg-transparent border-none text-xs font-medium focus:ring-0 w-32", collabMode ? "placeholder:text-white/20" : "placeholder:text-slate-300")}
+                  value={tribeSearchQuery}
+                  onChange={(e) => setTribeSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               {/* Use the filtered matches based on activeLocation and search query */}
+               {matches.filter(m => {
+                 const nearby = filteredProfiles.some(p => p.id === m.family.id);
+                 if (tribeSearchQuery) {
+                   const q = tribeSearchQuery.toLowerCase();
+                   return (nearby || m.score > 70) && m.family.familyName.toLowerCase().includes(q);
+                 }
+                 return nearby || m.score > 80;
+               }).slice(0, 4).map(match => (
+                 <motion.div 
+                   key={match.id}
+                   whileHover={{ y: -4 }}
+                   className={cn(
+                     "rounded-[2.5rem] p-6 border transition-all flex flex-col justify-between h-[240px]",
+                     collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
+                   )}
+                 >
+                   <div>
+                     <div className="flex justify-between items-start mb-4">
+                       <div className="flex gap-4">
+                         <img 
+                           src={anonymizePhoto(match.family.photoUrl, isCollabGated)} 
+                           className="w-14 h-14 rounded-2xl object-cover" 
+                           alt="" 
+                         />
+                         <div>
+                           <h3 className="font-bold text-lg">{anonymize(match.family.familyName, isCollabGated)}</h3>
+                           <p className="text-xs opacity-60">{match.family.nativeLanguage} Family</p>
+                         </div>
+                       </div>
+                       <div className="bg-primary/20 text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase">
+                         {match.score}% Match
+                       </div>
+                     </div>
+                     <div className="flex flex-wrap gap-2">
+                        {match.family.kids.map(k => <span key={k.id} className="text-[10px] font-bold opacity-40">{k.age}y {k.gender}</span>)}
+                     </div>
+                   </div>
+                   <div className="flex justify-end pt-4 border-t border-white/5">
+                      <button 
+                        onClick={() => onSelectFamily(match.family)}
+                        className={cn("px-6 py-2 rounded-xl text-xs font-bold", collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white")}
+                      >
+                        Connect
+                      </button>
+                   </div>
+                 </motion.div>
+               ))}
+            </div>
+          </section>
+
+          {/* Local Pop-up Events Section */}
+          {localEvents.length > 0 && (
+            <section className="space-y-6">
+              <div className="flex justify-between items-center">
+                 <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Local Pop-up Events</h2>
+              </div>
+              <div className="flex gap-6 overflow-x-auto pb-4 no-scrollbar">
+                {localEvents.map(event => (
+                  <motion.div 
+                    key={event.id}
+                    whileHover={{ y: -4 }}
+                    className={cn("flex-shrink-0 w-80 rounded-[2.5rem] p-6 border transition-all flex flex-col justify-between", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}
+                  >
+                    <div>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="bg-accent/10 text-accent px-3 py-1 rounded-full text-[10px] font-black uppercase">{event.category}</div>
+                        <div className="flex items-center gap-1 text-[10px] font-black text-slate-400"><Users className="w-3 h-3" /> {event.participants.length}/{event.maxParticipants}</div>
+                      </div>
+                      <h3 className="font-bold text-lg mb-2">{event.title}</h3>
+                      <p className="text-xs opacity-60 line-clamp-2 italic mb-4">"{event.description}"</p>
+                      <div className="flex items-center gap-3 text-[10px] font-bold opacity-40">
+                        <Calendar className="w-3 h-3" /> {event.date} • {event.time}
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center mt-6">
+                      <VoteControls post={event} collection="events" dark={collabMode} />
+                      <button 
+                        onClick={() => {
+                          if (currentUser) {
+                            useNomadStore.getState().rsvpForEvent(event.id, currentUser.id);
+                            const isRsvp = event.participants.includes(currentUser.id);
+                            useNomadStore.getState().addToast(isRsvp ? "RSVP cancelled" : "RSVP confirmed!", "success");
+                          }
+                        }}
+                        className={cn("flex-1 ml-4 py-3 rounded-2xl font-black text-[10px] uppercase transition-all", 
+                          currentUser && event.participants.includes(currentUser.id) ? "bg-slate-200 text-slate-600" : "bg-accent text-white"
+                        )}
+                      >
+                        {currentUser && event.participants.includes(currentUser.id) ? 'RSVPed ✓' : 'RSVP'}
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Local Marketplace Section */}
+          {localMarketItems.length > 0 && (
+            <section className="space-y-6">
+              <div className="flex justify-between items-center">
+                 <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>{collabMode ? 'Local Professional Services' : 'Local Gear Exchange'}</h2>
+              </div>
+              <div className="flex gap-6 overflow-x-auto pb-4 no-scrollbar">
+                {localMarketItems.map(item => (
+                  <div key={item.id} className={cn("flex-shrink-0 w-64 rounded-[2.5rem] overflow-hidden border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                    <div className="h-36 relative">
+                       <img src={item.imageUrl || null} className="w-full h-full object-cover" alt="" />
+                       <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-xl font-black text-[10px] uppercase text-secondary">€{item.price}</div>
+                    </div>
+                    <div className="p-5 space-y-3">
+                       <h3 className="font-bold text-sm truncate">{item.title}</h3>
+                       <p className="text-[10px] opacity-60 line-clamp-2 italic">"{item.description}"</p>
+                       <div className="flex items-center gap-2 mt-2">
+                         <VoteControls post={item} collection="marketplace" dark={collabMode} />
+                         <button 
+                           onClick={() => {
+                             const seller = profiles.find(p => p.id === item.sellerId);
+                             if (seller) onSayHello(seller, `Hi ${seller.familyName}, I'm interested in your item: ${item.title}`);
+                           }}
+                           className={cn("flex-1 py-3 rounded-xl text-[9px] font-black uppercase", collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white")}
+                         >
+                           Contact Seller
+                         </button>
+                       </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Local Tribe Members (The "Helemaal onderaan" part) */}
+          <section className="space-y-6 pt-4">
+            <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Local Tribe Members</h2>
+            <div className="flex gap-6 overflow-x-auto pb-8 no-scrollbar">
+              {filteredProfiles.map(p => (
+                <div key={p.id} className={cn("flex-shrink-0 w-44 p-6 rounded-[2.5rem] border text-center transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                  <img src={anonymizePhoto(p.photoUrl, isCollabGated)} className="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-white shadow-lg" alt="" />
+                  <h4 className="font-bold truncate">{anonymize(p.familyName, isCollabGated)}</h4>
+                  <p className="text-[10px] opacity-40 font-black uppercase mt-1">{p.nativeLanguage} • {p.kids.length} Kids</p>
+                  <button 
+                    onClick={() => onSelectFamily(p)}
+                    className={cn("mt-6 w-full py-2 rounded-xl text-[10px] font-black uppercase transition-all", collabMode ? "bg-white/10 hover:bg-white/20" : "bg-slate-50 hover:bg-slate-100 text-slate-500")}
+                  >
+                    View
+                  </button>
+                </div>
               ))}
             </div>
+          </section>
+        </>
+      )}
+
+      <Modal isOpen={isLocalFeedOpen} onClose={() => setIsLocalFeedOpen(false)} title="Neighborhood Activities & Gear" fullScreen dark={collabMode}>
+        <div className="max-w-6xl mx-auto space-y-12">
+          {/* Header & Filter */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div>
+              <p className={cn("text-sm font-bold opacity-60", collabMode ? "text-white" : "text-secondary")}>Discover what's happening in</p>
+              <h2 className="text-4xl font-black italic">{activeLocation.name}</h2>
+            </div>
+            <div className="flex items-center gap-4 w-full md:w-auto">
+              <Search className="w-5 h-5 opacity-40" />
+              <input 
+                type="text" 
+                placeholder="Search interests, items, or events..."
+                className={cn(
+                  "flex-1 md:w-80 p-4 rounded-2xl border-2 transition-all outline-none font-bold",
+                  collabMode ? "bg-white/5 border-white/10 text-white focus:border-white/30" : "bg-slate-50 border-slate-100 focus:border-primary/20"
+                )}
+                value={tribeSearchQuery}
+                onChange={(e) => setTribeSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Title</label>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
+            {/* Deals & Vetted Spots Column */}
+            <div className="space-y-8">
+              <div className="space-y-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <ShieldCheck className="w-5 h-5 text-primary" />
+                  <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Vetted Spots</h3>
+                </div>
+                <div className="space-y-4">
+                  {filteredSpots.length === 0 && <p className="text-xs opacity-40 italic">No vetted spots nearby.</p>}
+                  {filteredSpots.slice(0, 5).map(spot => (
+                    <div key={spot.id} className={cn("p-4 rounded-2xl border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100")}>
+                       <p className="text-[10px] font-black text-primary uppercase mb-1">{spot.category}</p>
+                       <p className="text-xs font-bold truncate">{spot.name}</p>
+                       <p className="text-[9px] opacity-60 line-clamp-1">{spot.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Zap className="w-5 h-5 text-accent" />
+                  <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Local Deals</h3>
+                </div>
+                <div className="space-y-4">
+                  {filteredDeals.length === 0 && <p className="text-xs opacity-40 italic">No active deals nearby.</p>}
+                  {filteredDeals.slice(0, 5).map(deal => (
+                    <div key={deal.id} className={cn("p-4 rounded-2xl border transition-all border-accent/20 bg-accent/5", collabMode ? "text-accent-foreground" : "text-accent")}>
+                       <p className="text-[10px] font-black uppercase mb-1">{deal.monthlyDeal?.discount}</p>
+                       <p className="text-xs font-bold truncate">{deal.name}</p>
+                       <p className="text-[9px] opacity-60 line-clamp-1">{deal.monthlyDeal?.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Events Column */}
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Calendar className="w-5 h-5 text-accent" />
+                <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Nearby Events</h3>
+              </div>
+              <div className="space-y-4">
+                {localEvents.filter(e => tribeSearchQuery ? e.title.toLowerCase().includes(tribeSearchQuery.toLowerCase()) || e.description?.toLowerCase().includes(tribeSearchQuery.toLowerCase()) : true).map(event => (
+                  <div key={event.id} className={cn("p-6 rounded-[2.5rem] border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                    <div className="flex justify-between mb-4">
+                      <span className="px-3 py-1 bg-accent/10 text-accent rounded-full text-[10px] font-black uppercase">{event.category}</span>
+                      <span className="text-[10px] font-bold opacity-40">{event.participants.length}/{event.maxParticipants}</span>
+                    </div>
+                    <h4 className="font-bold text-lg mb-2">{event.title}</h4>
+                    <p className="text-xs opacity-60 mb-4 italic line-clamp-2">"{event.description}"</p>
+                    <div className="flex items-center gap-2">
+                      <VoteControls post={event} collection="events" dark={collabMode} />
+                      <button 
+                        onClick={() => {
+                          if (currentUser) {
+                            useNomadStore.getState().rsvpForEvent(event.id, currentUser.id);
+                          }
+                        }}
+                        className={cn("flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all", 
+                          currentUser && event.participants.includes(currentUser.id) ? "bg-slate-100 text-slate-500" : "bg-accent text-white"
+                        )}
+                      >
+                        {currentUser && event.participants.includes(currentUser.id) ? 'Joined ✓' : 'RSVP Now'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Requests Column */}
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Plus className="w-5 h-5 text-primary" />
+                <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Requests</h3>
+              </div>
+              <div className="space-y-4">
+                {localRequests.filter(r => tribeSearchQuery ? r.title.toLowerCase().includes(tribeSearchQuery.toLowerCase()) || r.description.toLowerCase().includes(tribeSearchQuery.toLowerCase()) : true).map(req => {
+                  const requester = profiles.find(p => p.id === req.userId);
+                  return (
+                    <div key={req.id} className={cn("p-6 rounded-[2.5rem] border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                      <div className="flex items-center gap-3 mb-4">
+                         <img src={requester?.photoUrl || null} className="w-8 h-8 rounded-full object-cover" alt="" />
+                         <span className="text-[10px] font-bold opacity-60">{requester?.familyName} Family</span>
+                         <span className="ml-auto px-2 py-1 bg-primary/10 text-primary rounded-lg text-[9px] font-black uppercase">{req.category}</span>
+                      </div>
+                      <h4 className="font-bold mb-2">{req.title}</h4>
+                      <p className="text-xs opacity-60 mb-4 line-clamp-3">"{req.description}"</p>
+                      <div className="flex items-center gap-2">
+                        <VoteControls post={req} collection="lookingFor" dark={collabMode} />
+                        <button 
+                          onClick={() => {
+                            if (requester) onSayHello(requester, `Hi! I saw your request for "${req.title}" and would love to help.`);
+                          }}
+                          className="flex-1 py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase"
+                        >
+                          Message
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Gear/Market Column */}
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 mb-4">
+                <ShoppingBag className="w-5 h-5 text-secondary" />
+                <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Gear Swap & Sell</h3>
+              </div>
+              <div className="space-y-4">
+                {localMarketItems.filter(item => tribeSearchQuery ? item.title.toLowerCase().includes(tribeSearchQuery.toLowerCase()) || item.description?.toLowerCase().includes(tribeSearchQuery.toLowerCase()) : true).map(item => (
+                  <div key={item.id} className={cn("rounded-[2.5rem] border transition-all overflow-hidden", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                    <div className="h-40 relative">
+                      <img src={item.imageUrl || null} className="w-full h-full object-cover" alt="" />
+                      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-[10px] font-black uppercase text-secondary">€{item.price}</div>
+                    </div>
+                    <div className="p-6">
+                      <h4 className="font-bold mb-1 truncate">{item.title}</h4>
+                      <p className="text-[10px] opacity-40 mb-4 uppercase font-bold">{item.category}</p>
+                      <div className="flex items-center gap-2">
+                        <VoteControls post={item} collection="marketplace" dark={collabMode} />
+                        <button 
+                          onClick={() => {
+                            const seller = profiles.find(p => p.id === item.sellerId);
+                            if (seller) onSayHello(seller, `Hi! I'm interested in your ${item.title} listed on the marketplace.`);
+                          }}
+                          className="flex-1 py-3 bg-secondary text-white rounded-xl text-[10px] font-black uppercase"
+                        >
+                          Contact
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Reusable Modals */}
+      <Modal isOpen={isMyPostsOpen} onClose={() => setIsMyPostsOpen(false)} title="My Posts" dark={collabMode} fullScreen>
+        <div className="max-w-4xl mx-auto space-y-12 pb-20">
+          <div className="text-center space-y-4">
+            <h2 className="text-4xl font-black">Manage Your Tribe Shared Content</h2>
+            <p className="opacity-60 max-w-xl mx-auto">See, edit, or remove the things you've shared with the local community.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            {/* My Marketplace Items */}
+            <div className="space-y-6">
+              <h3 className="text-sm font-black uppercase tracking-widest text-secondary flex items-center gap-2">
+                <ShoppingBag className="w-4 h-4" /> Marketplace Gear ({marketItems.filter(i => i.sellerId === currentUser?.id).length})
+              </h3>
+              <div className="space-y-4">
+                {marketItems.filter(i => i.sellerId === currentUser?.id).map(item => (
+                  <div key={item.id} className={cn("p-6 rounded-[2.5rem] border flex gap-4 items-center", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl || null} className="w-16 h-16 rounded-2xl object-cover" alt="" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+                        <ShoppingBag className="w-6 h-6 opacity-20" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate">{item.title}</p>
+                      <p className="text-[10px] opacity-40 font-black uppercase">{item.category} • €{item.price}</p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        if (confirm('Are you sure you want to remove this item?')) removeMarketItem(item.id);
+                      }}
+                      className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                {marketItems.filter(i => i.sellerId === currentUser?.id).length === 0 && (
+                   <div className="p-8 border-2 border-dashed border-slate-100 rounded-[2.5rem] text-center opacity-40 italic text-sm">
+                      You haven't listed any gear yet.
+                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* My Looking For Requests */}
+            <div className="space-y-6">
+              <h3 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                <Plus className="w-4 h-4" /> Help & Advice Requests ({lookingFor.filter(r => r.userId === currentUser?.id).length})
+              </h3>
+              <div className="space-y-4">
+                {lookingFor.filter(r => r.userId === currentUser?.id).map(request => (
+                  <div key={request.id} className={cn("p-6 rounded-[2.5rem] border flex gap-4 items-center", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                    <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                      <Plus className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate">{request.title}</p>
+                      <p className="text-[10px] opacity-40 font-black uppercase">{request.category} • {request.location}</p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        if (confirm('Are you sure you want to remove this request?')) removeLookingFor(request.id);
+                      }}
+                      className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                {lookingFor.filter(r => r.userId === currentUser?.id).length === 0 && (
+                   <div className="p-8 border-2 border-dashed border-slate-100 rounded-[2.5rem] text-center opacity-40 italic text-sm">
+                      You haven't posted any requests yet.
+                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* My Events */}
+            <div className="space-y-6 md:col-span-2">
+              <h3 className="text-sm font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Organized Events ({events.filter(e => e.organizerId === currentUser?.id).length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {events.filter(e => e.organizerId === currentUser?.id).map(event => (
+                  <div key={event.id} className={cn("p-6 rounded-[2.5rem] border flex gap-4 items-center", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
+                    <div className="w-12 h-12 rounded-xl bg-accent/10 text-accent flex items-center justify-center flex-shrink-0">
+                      <Calendar className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate">{event.title}</p>
+                      <p className="text-[10px] opacity-40 font-black uppercase">{event.date} • {event.location.name}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => {
+                          if (confirm('Are you sure you want to cancel this event?')) removeEvent(event.id);
+                        }}
+                        className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {events.filter(e => e.organizerId === currentUser?.id).length === 0 && (
+                <div className="p-8 border-2 border-dashed border-slate-100 rounded-[2.5rem] text-center opacity-40 italic text-sm">
+                  You aren't organizing any events.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={isLookingForOpen} onClose={() => setIsLookingForOpen(false)} title="Post a Request" dark={collabMode}>
+        <form onSubmit={handleAddLookingFor} className="space-y-6">
+          <div className="grid grid-cols-3 gap-2">
+            {['Help', 'Advice', 'Care'].map(cat => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setNewRequest({...newRequest, category: cat as any})}
+                className={cn(
+                  "py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest border-2 transition-all",
+                  newRequest.category === cat 
+                    ? "bg-primary border-primary text-white shadow-lg shadow-primary/20" 
+                    : (collabMode ? "bg-white/5 border-white/10 text-white/40" : "bg-slate-50 border-slate-100 text-slate-400")
+                )}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+          <div className="space-y-4">
             <input 
               required
               type="text" 
-              placeholder="Short summary..." 
-              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              placeholder="What do you need? (e.g. Advice on local schools)" 
+              className={cn(
+                "w-full p-4 rounded-2xl border-2 transition-all focus:outline-none font-bold text-sm",
+                collabMode ? "bg-white/10 border-white/10 text-white focus:border-white/30" : "bg-slate-50 border-slate-100 focus:border-primary/20"
+              )}
               value={newRequest.title}
               onChange={e => setNewRequest({...newRequest, title: e.target.value})}
             />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Description</label>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Date (Optional)</label>
+                <input 
+                  type="date"
+                  className={cn(
+                    "w-full p-4 rounded-2xl border-2 transition-all focus:outline-none font-bold text-sm",
+                    collabMode ? "bg-white/10 border-white/10 text-white focus:border-white/30" : "bg-slate-50 border-slate-100 focus:border-primary/20"
+                  )}
+                  value={newRequest.date || ''}
+                  onChange={e => setNewRequest({...newRequest, date: e.target.value})}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Neighborhood (Optional)</label>
+                <LocationSelector 
+                  placeholder="Select area..."
+                  value={newRequest.location}
+                  onChange={(val, coords) => setNewRequest({
+                    ...newRequest, 
+                    location: val, 
+                    lat: coords?.lat || 0, 
+                    lng: coords?.lng || 0
+                  })}
+                />
+              </div>
+            </div>
+
             <textarea 
               required
-              rows={3}
-              placeholder="Tell the tribe more..." 
-              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none"
+              rows={4}
+              placeholder="Provide more context for your tribe..." 
+              className={cn(
+                "w-full p-4 rounded-2xl border-2 transition-all focus:outline-none font-medium text-sm resize-none",
+                collabMode ? "bg-white/10 border-white/10 text-white focus:border-white/30" : "bg-slate-50 border-slate-100 focus:border-primary/20"
+              )}
               value={newRequest.description}
               onChange={e => setNewRequest({...newRequest, description: e.target.value})}
             />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location</label>
-            <input 
-              required
-              type="text" 
-              placeholder="Current city..." 
-              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-              value={newRequest.location}
-              onChange={e => setNewRequest({...newRequest, location: e.target.value})}
-            />
-          </div>
-          <button type="submit" className="w-full bg-primary text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/20 active:scale-95 transition-transform">
-            Post Request
+          <button type="submit" className="w-full bg-primary text-white py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl shadow-primary/20 active:scale-[0.98] transition-all">
+            Post to neighborhood
           </button>
         </form>
       </Modal>
+
+      <Modal isOpen={isCollabAskOpen} onClose={() => setIsCollabAskOpen(false)} title="Post a Collab Ask" dark={collabMode}>
+        <form onSubmit={handleAddCollabAsk} className="space-y-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Category</label>
+              <select 
+                value={newCollabAsk.skillNeeded}
+                onChange={(e) => setNewCollabAsk(prev => ({ ...prev, skillNeeded: e.target.value }))}
+                className={cn(
+                  "w-full rounded-2xl p-4 border-2 transition-all outline-none cursor-pointer font-bold",
+                  collabMode 
+                    ? "bg-white/10 border-white/10 text-white focus:border-white/30" 
+                    : "bg-slate-50 border-slate-100 text-secondary focus:border-primary/20 shadow-inner"
+                )}
+                required
+              >
+                <option value="" disabled className="text-black">Select a Skill</option>
+                {['Meta Ads', 'React Dev', 'Content Strategy', 'UI/UX Design', 'Growth Hacking', 'SEO', 'Sales'].map(skill => (
+                  <option key={skill} value={skill} className="text-black">{skill}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">The Collaboration</label>
+              <textarea 
+                maxLength={200}
+                value={newCollabAsk.description}
+                onChange={(e) => setNewCollabAsk(prev => ({ ...prev, description: e.target.value }))}
+                className={cn(
+                  "w-full rounded-2xl p-4 min-h-[140px] border-2 transition-all outline-none font-medium resize-none",
+                  collabMode 
+                    ? "bg-white/10 border-white/10 text-white focus:border-white/30" 
+                    : "bg-slate-50 border-slate-100 text-secondary focus:border-primary/20"
+                )}
+                placeholder="Briefly explain what you're looking for..."
+                required
+              />
+              <p className="text-right text-[10px] font-bold opacity-30 mt-1">{newCollabAsk.description.length}/200</p>
+            </div>
+          </div>
+          <button type="submit" className="w-full bg-[#faedcd] text-[#bc6c25] py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl active:scale-[0.98] transition-all">
+            Publish Opportunity
+          </button>
+        </form>
+      </Modal>
+
+      <Modal isOpen={isAddItemOpen} onClose={() => setIsAddItemOpen(false)} title="Sell / Swap Gear" dark={collabMode}>
+        <form onSubmit={handleAddMarketItem} className="space-y-6">
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              {(['Sell', 'Swap'] as const).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setNewItem({...newItem, mode: m})}
+                  className={cn(
+                    "flex-1 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest border-2 transition-all",
+                    newItem.mode === m 
+                      ? "bg-secondary border-secondary text-white shadow-lg" 
+                      : (collabMode ? "bg-white/5 border-white/10 text-white/40" : "bg-slate-50 border-slate-100 text-slate-400")
+                  )}
+                >
+                  For {m}
+                </button>
+              ))}
+            </div>
+             <input 
+              required
+              type="text" 
+              placeholder="Item name (e.g. Thule stroller)" 
+              className={cn("w-full p-4 border-2 rounded-2xl font-bold", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")}
+              value={newItem.title}
+              onChange={e => setNewItem({...newItem, title: e.target.value})}
+            />
+            <textarea 
+              required
+              placeholder="Tell us about the item's condition..." 
+              className={cn("w-full p-4 border-2 rounded-2xl resize-none min-h-[100px] font-medium", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")}
+              value={newItem.description}
+              onChange={e => setNewItem({...newItem, description: e.target.value})}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Price (€) {newItem.mode === 'Swap' && '(Optional for swap)'}</label>
+                <input 
+                  required={newItem.mode === 'Sell'}
+                  type="number" 
+                  className={cn("w-full p-4 border-2 rounded-2xl font-bold", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")}
+                  value={newItem.price}
+                  onChange={e => setNewItem({...newItem, price: parseInt(e.target.value)})}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Category</label>
+                <select 
+                   className={cn("w-full p-4 border-2 rounded-2xl font-bold", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")}
+                   value={newItem.category}
+                   onChange={e => setNewItem({...newItem, category: e.target.value as any})}
+                >
+                  <option value="Gear" className="text-black">Gear</option>
+                  <option value="Stroller" className="text-black">Stroller</option>
+                  <option value="Toys" className="text-black">Toys</option>
+                  <option value="Clothes" className="text-black">Clothes</option>
+                  <option value="Vehicle" className="text-black">Vehicle</option>
+                  <option value="Services" className="text-black">Service</option>
+                  <option value="Other" className="text-black">Other</option>
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Image URL (Optional)</label>
+              <input 
+                type="url" 
+                placeholder="https://..." 
+                className={cn("w-full p-4 border-2 rounded-2xl font-bold", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")}
+                value={newItem.imageUrl}
+                onChange={e => setNewItem({...newItem, imageUrl: e.target.value})}
+              />
+            </div>
+          </div>
+          <button type="submit" className="w-full bg-secondary text-white py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl shadow-secondary/20 active:scale-[0.98] transition-all">
+            List in marketplace
+          </button>
+        </form>
+      </Modal>
+
+      <Modal isOpen={isAddEventOpen} onClose={() => setIsAddEventOpen(false)} title="Post Pop-up Event" dark={collabMode}>
+        <form onSubmit={handleAddEvent} className="space-y-6">
+          <div className="space-y-4">
+            <input 
+              required
+              type="text" 
+              placeholder="What are you organizing? (e.g. Potluck Dinner)" 
+              className={cn("w-full p-4 border-2 rounded-2xl font-bold", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")}
+              value={newEvent.title}
+              onChange={e => setNewEvent({...newEvent, title: e.target.value})}
+            />
+            
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Location (Optional)</label>
+              <LocationSelector 
+                placeholder="Search address or venue..."
+                value={newEvent.location}
+                onChange={(val, coords) => setNewEvent({
+                  ...newEvent, 
+                  location: val,
+                  // We need to store lat/lng for individual events if we want them on map
+                })}
+              />
+            </div>
+
+            <textarea 
+              required
+              placeholder="Event details (Location, what to bring, etc)..." 
+              className={cn("w-full p-4 border-2 rounded-2xl resize-none min-h-[100px] font-medium", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")}
+              value={newEvent.description}
+              onChange={e => setNewEvent({...newEvent, description: e.target.value})}
+            />
+            <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1">
+                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Date</label>
+                 <input required type="date" className={cn("w-full p-4 border-2 rounded-2xl font-bold text-sm", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")} value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} />
+               </div>
+               <div className="space-y-1">
+                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Time</label>
+                 <input required type="time" className={cn("w-full p-4 border-2 rounded-2xl font-bold text-sm", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")} value={newEvent.time} onChange={e => setNewEvent({...newEvent, time: e.target.value})} />
+               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1">
+                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Category</label>
+                 <select className={cn("w-full p-4 border-2 rounded-2xl font-bold text-sm", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")} value={newEvent.category} onChange={e => setNewEvent({...newEvent, category: e.target.value as any})}>
+                    <option value="Social" className="text-black">Social</option>
+                    <option value="Playdate" className="text-black">Playdate</option>
+                    <option value="Dinner" className="text-black">Dinner</option>
+                    <option value="Coworking" className="text-black">Coworking</option>
+                    <option value="Sports" className="text-black">Sports</option>
+                    <option value="Workshop" className="text-black">Workshop</option>
+                    <option value="Excursion" className="text-black">Excursion</option>
+                 </select>
+               </div>
+               <div className="space-y-1">
+                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Max Spots</label>
+                 <input required type="number" placeholder="Spots" className={cn("w-full p-4 border-2 rounded-2xl font-bold text-sm", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")} value={newEvent.maxParticipants} onChange={e => setNewEvent({...newEvent, maxParticipants: parseInt(e.target.value)})} />
+               </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Banner Image URL (Optional)</label>
+              <input 
+                type="url" 
+                placeholder="https://..." 
+                className={cn("w-full p-4 border-2 rounded-2xl font-bold", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")}
+                value={newEvent.imageUrl || ''}
+                onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})}
+              />
+            </div>
+          </div>
+          <button type="submit" className="w-full bg-accent text-white py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl shadow-accent/20 active:scale-[0.98] transition-all">
+            Create Event
+          </button>
+        </form>
+      </Modal>
+
       <VibeCheckModal 
         isOpen={isVibeCheckOpen} 
         onClose={() => setIsVibeCheckOpen(false)} 
         onSave={(metrics) => saveVibeCheck(metrics)} 
       />
-
-    </>
-  )}
-</div>
+    </div>
   );
 };
 
@@ -2464,7 +3040,7 @@ const ConnectView = ({ onPaywall, onSayHello }: { onPaywall: () => void, onSayHe
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                 <input 
                   type="text" 
-                  placeholder={collabMode ? "Zoek professionals..." : "Zoek Tribe members..."} 
+                  placeholder={collabMode ? "Search professionals..." : "Search Tribe members..."} 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-black/10 border-none rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder:text-white/30 focus:ring-1 focus:ring-white/20 outline-none transition-all"
@@ -2558,7 +3134,7 @@ const ConnectView = ({ onPaywall, onSayHello }: { onPaywall: () => void, onSayHe
                                 </div>
                                 <div>
                                   <p className="text-sm font-bold text-secondary">{family.familyName}</p>
-                                  <p className="text-[10px] text-primary font-black uppercase">Connect Verzoek</p>
+                                  <p className="text-[10px] text-primary font-black uppercase">Connect Request</p>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
@@ -2587,17 +3163,17 @@ const ConnectView = ({ onPaywall, onSayHello }: { onPaywall: () => void, onSayHe
                               <div className="flex items-center gap-3 min-w-0">
                                 <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
                                   {family?.photoUrl ? (
-                                    <img src={family.photoUrl} alt="" className="w-full h-full object-cover" />
+                                    <img src={family.photoUrl || null} alt="" className="w-full h-full object-cover" />
                                   ) : <User className="w-5 h-5 text-slate-300" />}
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-sm font-bold text-secondary truncate">{req.title}</p>
-                                  <p className="text-[10px] text-accent font-black uppercase truncate">{req.category} verzoek</p>
+                                  <p className="text-[10px] text-accent font-black uppercase truncate">{req.category} request</p>
                                 </div>
                               </div>
                               <button 
                                 onClick={() => {
-                                   if (family) onSayHello(family, `Hoi ${family.familyName}, ik zag je verzoek voor '${req.title}' en wil graag helpen!`);
+                                   if (family) onSayHello(family, `Hi ${family.familyName}, I saw your request for '${req.title}' and would love to help!`);
                                 }}
                                 className="bg-accent text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-accent/20 hover:scale-105 transition-transform shrink-0"
                               >
@@ -2645,7 +3221,7 @@ const ConnectView = ({ onPaywall, onSayHello }: { onPaywall: () => void, onSayHe
                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-300">
                       <MessageSquare className="w-8 h-8" />
                     </div>
-                    <p className="text-slate-400 text-sm font-medium">Nog geen gesprekken of verzoeken. Maak contact met families!</p>
+                    <p className="text-slate-400 text-sm font-medium">No conversations or requests yet. Connect with families!</p>
                   </div>
                 ) : filteredConversations.map((convo) => {
                   const conn = connections.find(c => c.id === convo.connectionId);
@@ -2843,49 +3419,11 @@ const TribeNearbyView = ({
   onSelectSpot?: (spot: Spot) => void,
   onSelectItem?: (item: MarketItem) => void
 }) => {
-  const { spots, destinations, currentUser, trips, marketItems, lookingFor, addLookingFor, removeLookingFor, removeMarketItem, removeSpot, reserveItem, reviews, profiles, collabMode, blocks } = useNomadStore();
+  const { spots, destinations, currentUser, trips, marketItems, lookingFor, addLookingFor, removeLookingFor, removeMarketItem, removeSpot, reserveItem, reviews, profiles, collabMode, blocks, tribeRadius, setTribeRadius } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
-  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0 });
+  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0, date: '' });
   const [activeLocationIndex, setActiveLocationIndex] = useState(0);
-
-  useEffect(() => {
-    if (collabMode) {
-      setNewRequest(prev => ({ ...prev, category: 'Work' }));
-    } else {
-      setNewRequest(prev => ({ ...prev, category: 'Help' }));
-    }
-  }, [collabMode]);
-
-  const handleAddLookingFor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser) return;
-
-    if (containsBlockedContent(newRequest.title) || containsBlockedContent(newRequest.description)) {
-      useNomadStore.getState().addToast("Your post contains inappropriate language. Please keep it family-friendly.", "error");
-      return;
-    }
-
-    try {
-      const request: LookingForRequest = {
-        id: `lf-${Date.now()}`,
-        userId: currentUser.id,
-        familyName: currentUser.familyName,
-        location: newRequest.location,
-        lat: newRequest.lat,
-        lng: newRequest.lng,
-        category: newRequest.category,
-        title: cleanContent(newRequest.title),
-        description: cleanContent(newRequest.description),
-        createdAt: new Date().toISOString()
-      };
-      await addLookingFor(request);
-      setIsLookingForOpen(false);
-      setNewRequest({ title: '', description: '', category: 'Help', location: '', lat: 0, lng: 0 });
-    } catch (error) {
-      console.error("Failed to add looking for request:", error);
-    }
-  };
 
   const locations = useMemo(() => {
     const locs: { name: string; type: 'current' | 'planned' | 'default'; lat: number; lng: number }[] = [];
@@ -2927,7 +3465,51 @@ const TribeNearbyView = ({
   const activeLocation = useMemo(() => {
     const safeIndex = activeLocationIndex % locations.locs.length;
     return locations.locs[safeIndex];
-  }, [locations.locs, activeLocationIndex]);
+  }, [activeLocationIndex, locations]);
+
+  useEffect(() => {
+    if (collabMode) {
+      setNewRequest(prev => ({ ...prev, category: 'Work' }));
+    } else {
+      setNewRequest(prev => ({ ...prev, category: 'Help' }));
+    }
+  }, [collabMode]);
+
+  const handleAddLookingFor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    if (newRequest.category === 'Playdate' && !newRequest.date) {
+      useNomadStore.getState().addToast("Voer aub een datum in voor de playdate.", "error");
+      return;
+    }
+
+    if (containsBlockedContent(newRequest.title) || containsBlockedContent(newRequest.description)) {
+      useNomadStore.getState().addToast("Je bericht bevat ongepast taalgebruik.", "error");
+      return;
+    }
+
+    try {
+      const request: LookingForRequest = {
+        id: `lf-${Date.now()}`,
+        userId: currentUser.id,
+        familyName: currentUser.familyName,
+        location: activeLocation.name,
+        lat: activeLocation.lat,
+        lng: activeLocation.lng,
+        category: newRequest.category,
+        title: cleanContent(newRequest.title),
+        description: cleanContent(newRequest.description),
+        date: newRequest.category === 'Playdate' ? newRequest.date : undefined,
+        createdAt: new Date().toISOString()
+      };
+      await addLookingFor(request);
+      setIsLookingForOpen(false);
+      setNewRequest({ title: '', description: '', category: 'Help', location: '', lat: 0, lng: 0, date: '' });
+    } catch (error) {
+      console.error("Failed to add looking for request:", error);
+    }
+  };
 
   const destination = useMemo(() => {
     return destinations.find(d => 
@@ -2955,7 +3537,7 @@ const TribeNearbyView = ({
     });
   }, [currentUser, profiles, blocks, activeLocation]);
 
-  const filteredLookingFor = useMemo(() => {
+  const localRequests = useMemo(() => {
     if (!currentUser) return [];
     return lookingFor.filter(r => {
       // Filter out blocked users
@@ -2964,13 +3546,13 @@ const TribeNearbyView = ({
       // Distance filter (50km radius)
       if (r.lat && r.lng && activeLocation.lat && activeLocation.lng) {
         const dist = calculateDistance(activeLocation.lat, activeLocation.lng, r.lat, r.lng);
-        return dist <= 50;
+        return dist <= tribeRadius;
       }
       
       // Fallback to name matching if coords missing
       return r.location.toLowerCase().includes(activeLocation.name.toLowerCase().split(',')[0]);
     });
-  }, [currentUser, lookingFor, blocks, activeLocation]);
+  }, [currentUser, lookingFor, blocks, activeLocation, tribeRadius]);
 
   const filteredSpots = useMemo(() => {
     return spots.filter(spot => {
@@ -3021,7 +3603,7 @@ const TribeNearbyView = ({
       <header className="flex justify-between items-start">
         <div>
           <h1 className={cn("text-3xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>
-            Neighborhood
+            Local Tribe
           </h1>
           <p className={cn("font-medium", collabMode ? "text-white/60" : "text-slate-500")}>Stuff, services, and destination guidance.</p>
         </div>
@@ -3041,9 +3623,23 @@ const TribeNearbyView = ({
       {/* Tribe Map */}
       <section className="space-y-4">
         <div className="flex justify-between items-end">
-          <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Neighborhood Map</h2>
-          <div className={cn("text-[10px] font-bold px-2 py-1 rounded-lg", collabMode ? "bg-white/10 text-white/60" : "bg-slate-100 text-slate-500")}>
-            Showing {activeLocation.name}
+          <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Local Tribe Map</h2>
+          
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <input 
+                type="range" 
+                min="1" 
+                max="100" 
+                value={tribeRadius} 
+                onChange={(e) => setTribeRadius(parseInt(e.target.value))}
+                className="w-20 accent-primary cursor-pointer"
+              />
+              <span className="text-[10px] font-black text-primary">{tribeRadius}km</span>
+            </div>
+            <div className={cn("text-[10px] font-bold px-2 py-1 rounded-lg", collabMode ? "bg-white/10 text-white/60" : "bg-slate-100 text-slate-500")}>
+              Showing {activeLocation.name}
+            </div>
           </div>
         </div>
         <div className="h-[400px] w-full">
@@ -3052,6 +3648,8 @@ const TribeNearbyView = ({
             profiles={filteredProfiles}
             spots={filteredSpots}
             marketItems={filteredMarketItems}
+            requests={localRequests}
+            deals={filteredDeals}
             onSelectFamily={onSelectFamily}
             onSelectSpot={onSelectSpot}
             onSelectItem={onSelectItem}
@@ -3190,11 +3788,11 @@ const TribeNearbyView = ({
           </button>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-          {filteredLookingFor.length === 0 ? (
+          {localRequests.length === 0 ? (
             <div className={cn("w-full py-12 rounded-3xl border border-dashed text-center", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
               <p className={cn("text-sm font-medium", collabMode ? "text-white/40" : "text-slate-400")}>No requests yet. Be the first!</p>
             </div>
-          ) : filteredLookingFor.filter(r => !collabMode || r.category === 'Work').map((request) => (
+          ) : localRequests.filter(r => !collabMode || r.category === 'Work').map((request) => (
             <motion.div 
               key={request.id}
               className={cn(
@@ -3230,7 +3828,7 @@ const TribeNearbyView = ({
                     {(() => {
                       const requester = profiles.find(p => p.id === request.userId);
                       return requester?.photoUrl ? (
-                        <img src={requester.photoUrl} alt="" className="w-full h-full object-cover" />
+                        <img src={requester.photoUrl || null} alt="" className="w-full h-full object-cover" />
                       ) : request.familyName[0];
                     })()}
                   </div>
@@ -3249,7 +3847,7 @@ const TribeNearbyView = ({
                 </div>
               </div>
               <div className="mt-3 flex justify-end">
-                <VoteButtons type="lookingFor" id={request.id} votes={request.votes} />
+                <VoteControls post={request} collection="lookingFor" dark={collabMode} />
               </div>
             </motion.div>
           ))}
@@ -3315,7 +3913,7 @@ const TribeNearbyView = ({
                   {item.status === 'Available' ? 'Reserve Item' : item.status}
                 </button>
                 <div className="flex justify-end">
-                  <VoteButtons type="marketplace" id={item.id} votes={item.votes} />
+                  <VoteControls post={item} collection="marketplace" dark={collabMode} />
                 </div>
               </div>
             </motion.div>
@@ -3851,7 +4449,7 @@ const VibeCheckModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose:
 };
 
 const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificationCenterOpen, isNotificationCenterOpen, setIsConnectOpen, onSetLocation }: { onShare: () => void, onLogout: () => void, onAddTrip: () => void, onEditTrip: (trip: Trip) => void, setIsNotificationCenterOpen: (open: boolean) => void, isNotificationCenterOpen: boolean, setIsConnectOpen: (open: boolean) => void, onSetLocation: () => void }) => {
-  const { currentUser, trips, removeTrip, updateProfile, updateKids, reviews, marketItems, spots, destinations, notifications, addToast, collabMode, collabEndorsements, setActiveTab } = useNomadStore();
+  const { currentUser, trips, cities: hubCities, removeTrip, updateProfile, updateKids, reviews, marketItems, spots, destinations, notifications, addToast, collabMode, collabEndorsements, setActiveTab } = useNomadStore();
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isEditTribeOpen, setIsEditTribeOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -4492,7 +5090,7 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xl overflow-hidden">
                           {parent.photoUrl ? (
-                            <img src={parent.photoUrl} alt={parent.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <img src={parent.photoUrl || null} alt={parent.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                           ) : (
                             parent.name[0]
                           )}
@@ -4601,9 +5199,16 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                       <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-lg">Now</span>
                     </div>
                     <h4 className="font-bold text-lg relative z-10">{currentUser.currentLocation.name}</h4>
-                    <p className={cn("text-xs mt-1 font-bold relative z-10", collabMode ? "text-white/60" : "text-white/60")}>
-                      Updated {currentUser.currentLocation.updatedAt ? format(parseISO(currentUser.currentLocation.updatedAt), 'MMM d, HH:mm') : 'Recently'}
-                    </p>
+                    <div className="flex items-center gap-2 relative z-10">
+                      <p className={cn("text-xs font-bold", collabMode ? "text-white/60" : "text-white/60")}>
+                        Updated {currentUser.currentLocation.updatedAt ? format(parseISO(currentUser.currentLocation.updatedAt), 'MMM d, HH:mm') : 'Recently'}
+                      </p>
+                      {(() => {
+                        const hub = hubCities.find(c => c.name.toLowerCase() === currentUser.currentLocation?.name.toLowerCase());
+                        if (hub) return <span className="text-[8px] font-black uppercase bg-white/20 px-1.5 py-0.5 rounded-lg">{hub.continent}</span>;
+                        return null;
+                      })()}
+                    </div>
                     <Globe className="absolute -bottom-2 -right-2 w-16 h-16 opacity-10" />
                   </div>
                   
@@ -4656,15 +5261,22 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                       </div>
                     </div>
                     <h4 className="font-bold text-lg relative z-10">{trip.location}</h4>
-                    <p className={cn("text-xs mt-1 font-bold relative z-10", collabMode ? "text-white/40" : "text-slate-500")}>
+                    <div className="flex items-center gap-2 relative z-10">
+                      <p className={cn("text-xs font-bold", collabMode ? "text-white/40" : "text-slate-500")}>
+                        {(() => {
+                          try {
+                            return `${format(parseISO(trip.startDate), 'MMM d')} — ${format(parseISO(trip.endDate), 'MMM d, yyyy')}`;
+                          } catch (e) {
+                            return `${trip.startDate} — ${trip.endDate}`;
+                          }
+                        })()}
+                      </p>
                       {(() => {
-                        try {
-                          return `${format(parseISO(trip.startDate), 'MMM d')} — ${format(parseISO(trip.endDate), 'MMM d, yyyy')}`;
-                        } catch (e) {
-                          return `${trip.startDate} — ${trip.endDate}`;
-                        }
+                        const hub = hubCities.find(c => trip.location.toLowerCase().includes(c.name.toLowerCase()));
+                        if (hub) return <span className={cn("text-[8px] font-black uppercase px-1.5 py-0.5 rounded-lg", collabMode ? "bg-white/10 text-white/60" : "bg-slate-100 text-slate-400")}>{hub.continent}</span>;
+                        return null;
                       })()}
-                    </p>
+                    </div>
                     <MapPin className="absolute -bottom-2 -right-2 w-16 h-16 opacity-5" />
                   </div>
                 </motion.div>
@@ -4717,7 +5329,7 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
             {editProfile.photoUrl && (
               <div className="w-24 h-24 rounded-[2rem] overflow-hidden mx-auto border-4 border-white shadow-lg mt-2">
                 <img 
-                  src={editProfile.photoUrl} 
+                  src={editProfile.photoUrl || null} 
                   onError={(e) => {
                     console.error("Image preview error, falling back to placeholder");
                     (e.target as HTMLImageElement).src = `https://picsum.photos/seed/preview/200/200`;
@@ -5148,28 +5760,53 @@ const EmptyStatePioneer = ({ cityName, onAddSpot }: { cityName: string, onAddSpo
   );
 };
 const ExploreView = ({ onAddTrip }: { onAddTrip: (city: string) => void }) => {
-  const { spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent } = useNomadStore() as any;
+  const { spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent, fetchCities } = useNomadStore() as any;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCity, setSelectedCity] = useState<CityProfile | null>(null);
-  const [activeContinent, setActiveContinent] = useState<'Alle' | 'Azië' | 'Europa' | 'Amerika' | 'Afrika' | 'Oceanië'>('Alle');
+  const [activeContinent, setActiveContinent] = useState<'All' | 'Asia' | 'Europe' | 'Americas' | 'Africa' | 'Oceania'>('All');
+  const [filters, setFilters] = useState({
+    minFamilyScore: 0,
+    minSafetyScore: 0,
+    minInternetScore: 0,
+    maxCost: 5
+  });
+  const [showFilters, setShowFilters] = useState(false);
 
-  const continents = ['Alle', 'Azië', 'Europa', 'Amerika', 'Afrika', 'Oceanië'] as const;
+  useEffect(() => {
+    fetchCities();
+  }, []);
 
-  const filteredCities = useMemo(() => {
-    if (!searchQuery) return [];
-    return cityProfiles.filter((c: any) => 
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      c.country.toLowerCase().includes(searchQuery.toLowerCase())
-    ).slice(0, 5);
-  }, [searchQuery, cityProfiles]);
+  const continents = ['All', 'Asia', 'Europe', 'Americas', 'Africa', 'Oceania'] as const;
 
   const dashboardCities = useMemo(() => {
     let list = cityProfiles;
-    if (activeContinent !== 'Alle') {
-      list = list.filter((c: any) => c.continent === activeContinent);
+    if (activeContinent !== 'All') {
+      list = list.filter((c: any) => {
+        const cont = (c.continent || '').toLowerCase();
+        if (activeContinent === 'Asia') return cont === 'azië' || cont === 'asia';
+        if (activeContinent === 'Europe') return cont === 'europa' || cont === 'europe';
+        if (activeContinent === 'Americas') return cont === 'amerika' || cont === 'americas' || cont === 'north america' || cont === 'south america';
+        if (activeContinent === 'Africa') return cont === 'afrika' || cont === 'africa';
+        if (activeContinent === 'Oceania') return cont === 'oceanië' || cont === 'oceania';
+        return false;
+      });
     }
-    return list;
-  }, [activeContinent, cityProfiles]);
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((c: any) => 
+        c.name.toLowerCase().includes(q) || 
+        c.country.toLowerCase().includes(q)
+      );
+    }
+    
+    return list.filter((c: CityProfile) => 
+      c.familyScore >= filters.minFamilyScore &&
+      c.safetyScore >= filters.minSafetyScore &&
+      c.internetScore >= filters.minInternetScore &&
+      c.costIndex <= filters.maxCost
+    );
+  }, [activeContinent, cityProfiles, filters, searchQuery]);
 
   if (selectedCity) {
     return (
@@ -5194,47 +5831,93 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (city: string) => void }) => {
           </p>
         </div>
 
-        <div className="relative">
+        <div className="space-y-4">
           <div className="relative">
-            <Search className={cn("absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5", collabMode ? "text-white/40" : "text-slate-400")} />
-            <input 
-              type="text"
-              placeholder="Zoek hubs..."
-              className={cn(
-                "w-full pl-12 pr-4 py-4 rounded-[2rem] card-shadow focus:outline-none focus:ring-2 transition-all font-bold",
-                collabMode 
-                  ? "bg-white/10 border-white/10 text-white placeholder:text-white/30 focus:ring-white/20" 
-                  : "bg-white border-slate-100 text-secondary focus:ring-primary/20"
+            <div className="relative flex gap-2">
+              <div className="relative flex-1">
+                <Search className={cn("absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5", collabMode ? "text-white/40" : "text-slate-400")} />
+                <input 
+                  type="text"
+                  placeholder="Search hubs..."
+                  className={cn(
+                    "w-full pl-12 pr-4 py-4 rounded-[2rem] card-shadow focus:outline-none focus:ring-2 transition-all font-bold",
+                    collabMode 
+                      ? "bg-white/10 border-white/10 text-white placeholder:text-white/30 focus:ring-white/20" 
+                      : "bg-white border-slate-100 text-secondary focus:ring-primary/20"
+                  )}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <button 
+                onClick={() => setShowFilters(!showFilters)}
+                className={cn(
+                  "p-4 rounded-2xl border transition-all flex items-center justify-center",
+                  showFilters ? "bg-primary text-white border-primary" : "bg-white border-slate-100 text-slate-400"
+                )}
+              >
+                <Filter size={20} />
+              </button>
+            </div>
+
+            <AnimatePresence>
+              {searchQuery && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute top-full left-0 right-12 mt-2 bg-white rounded-3xl border border-slate-100 shadow-xl z-50 overflow-hidden"
+                >
+                  {cityProfiles.filter((c: any) => 
+                    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                    c.country.toLowerCase().includes(searchQuery.toLowerCase())
+                  ).slice(0, 5).map((city: any) => (
+                    <button
+                      key={city.id}
+                      onClick={() => {
+                        setSelectedCity(city);
+                        setSearchQuery('');
+                      }}
+                      className="w-full p-4 text-left hover:bg-slate-50 flex items-center justify-between group transition-colors"
+                    >
+                      <div>
+                        <p className="font-bold text-secondary">{city.name}</p>
+                        <p className="text-xs text-slate-400">{city.country}</p>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-primary transition-colors" />
+                    </button>
+                  ))}
+                </motion.div>
               )}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+            </AnimatePresence>
           </div>
 
           <AnimatePresence>
-            {filteredCities.length > 0 && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="absolute top-full left-0 right-0 mt-2 bg-white rounded-3xl border border-slate-100 shadow-xl z-50 overflow-hidden"
+            {showFilters && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="bg-white/50 backdrop-blur-sm rounded-[2.5rem] p-6 border border-slate-100 overflow-hidden"
               >
-                {filteredCities.map((city: any) => (
-                  <button
-                    key={city.id}
-                    onClick={() => {
-                      setSelectedCity(city);
-                      setSearchQuery('');
-                    }}
-                    className="w-full p-4 text-left hover:bg-slate-50 flex items-center justify-between group transition-colors"
-                  >
-                    <div>
-                      <p className="font-bold text-secondary">{city.name}</p>
-                      <p className="text-xs text-slate-400">{city.country}</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-primary transition-colors" />
-                  </button>
-                ))}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Family Score ({filters.minFamilyScore})</label>
+                    <input type="range" min="0" max="100" value={filters.minFamilyScore} onChange={e => setFilters({...filters, minFamilyScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Safety Score ({filters.minSafetyScore})</label>
+                    <input type="range" min="0" max="100" value={filters.minSafetyScore} onChange={e => setFilters({...filters, minSafetyScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Internet Score ({filters.minInternetScore})</label>
+                    <input type="range" min="0" max="100" value={filters.minInternetScore} onChange={e => setFilters({...filters, minInternetScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Max Budget (Level {filters.maxCost})</label>
+                    <input type="range" min="1" max="5" value={filters.maxCost} onChange={e => setFilters({...filters, maxCost: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                  </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -5261,7 +5944,7 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (city: string) => void }) => {
       {/* Recommended Hubs */}
       <section className="space-y-6">
         <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
-          {activeContinent === 'Alle' ? 'Recommended Hubs' : `${activeContinent} Hubs`}
+          {activeContinent === 'All' ? 'Recommended Hubs' : `${activeContinent} Hubs`}
         </h2>
         
         {dashboardCities.length === 0 ? (
@@ -5285,29 +5968,38 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (city: string) => void }) => {
               >
                 <div className="h-48 relative bg-slate-100">
                   <img 
-                    src={city.coverImageUrl || `https://picsum.photos/seed/${city.id}/600/450`} 
+                    src={city.coverImageUrl || `https://picsum.photos/seed/cover${city.id}/600/450`} 
                     alt={city.name} 
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />
-                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-black text-secondary">
-                    ⭐ {city.nomadScore}
+                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-black text-secondary flex items-center gap-1 shadow-sm">
+                    <Star size={10} className="text-amber-500 fill-amber-500" />
+                    {city.familyScore}
                   </div>
                 </div>
                 <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
                   <div>
-                    <h3 className="font-black text-secondary">{city.name}</h3>
-                    <p className="text-xs text-slate-400 font-bold">{city.country}</p>
+                    <h3 className="font-black text-secondary leading-tight">{city.name}</h3>
+                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{city.country} • {city.continent}</p>
                   </div>
-                  <div className="flex items-center gap-4 pt-4 border-t border-slate-50">
-                    <div className="flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-slate-300" />
-                      <span className="text-[10px] font-black text-slate-500">{city.familyCount}</span>
+                  <div className="grid grid-cols-2 gap-2 pt-4 border-t border-slate-50">
+                    <div className="flex items-center gap-1.5 p-2 bg-slate-50 rounded-xl">
+                      <Shield size={12} className="text-slate-400" />
+                      <span className="text-[10px] font-black text-slate-500">{city.safetyScore}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-slate-300" />
-                      <span className="text-[10px] font-black text-slate-500">{city.spotCount}</span>
+                    <div className="flex items-center gap-1.5 p-2 bg-slate-50 rounded-xl">
+                      <Zap size={12} className="text-slate-400" />
+                      <span className="text-[10px] font-black text-slate-500">{city.internetScore}</span>
                     </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-2">
+                    <div className="flex items-center gap-1">
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < city.costIndex ? "bg-green-500" : "bg-slate-200")} />
+                      ))}
+                    </div>
+                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">Budget Lvl {city.costIndex}</span>
                   </div>
                 </div>
               </motion.div>
@@ -5386,9 +6078,9 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Goedkoop eten', value: `€${city.costOfLiving.localMeal.toFixed(0)} avg`, icon: Coffee, color: 'bg-amber-400' },
-            { label: 'Air Quality', value: `${city.airQuality.status} (${city.airQuality.aqi})`, icon: Globe, color: 'bg-green-500' },
-            { label: 'Vibe Score', value: `${city.vibeScore}/10`, icon: Zap, color: 'bg-indigo-500' },
+            { label: 'Goedkoop eten', value: `€${city.costIndex > 2 ? '15+' : '8-12'} avg`, icon: Coffee, color: 'bg-amber-400' },
+            { label: 'Safety Score', value: `${city.safetyScore}/100`, icon: Globe, color: 'bg-green-500' },
+            { label: 'Nomad Score', value: `${city.nomadScore}/100`, icon: Zap, color: 'bg-indigo-500' },
             { label: 'Families', value: `${city.familyCount} Tribers`, icon: Users, color: 'bg-primary' },
           ].map((stat, i) => (
             <div key={i} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl flex items-center gap-4 group">
@@ -5406,7 +6098,7 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
            <div className="lg:col-span-2 space-y-12">
              <section className="space-y-6">
-                <h2 className="text-2xl font-black text-secondary tracking-tight">Neighborhood Guide</h2>
+                <h2 className="text-2xl font-black text-secondary tracking-tight">Local Tribe Guide</h2>
                 <div className="h-[400px] rounded-[3rem] overflow-hidden border border-slate-100 shadow-xl">
                    <MapView center={city.coordinates} />
                 </div>
@@ -5446,7 +6138,7 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
 
              <section className="space-y-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                   <h2 className="text-2xl font-black text-secondary tracking-tight">Kindvriendelijke Plekken</h2>
+                   <h2 className="text-2xl font-black text-secondary tracking-tight">Vetted Local Spots</h2>
                    <div className="flex gap-2 overflow-x-auto no-scrollbar">
                       {['All', 'Playground', 'Cafe', 'Restaurant', 'Workspace'].map(f => (
                         <button 
@@ -5465,7 +6157,7 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
 
                 {filteredSpots.length === 0 ? (
                    <div className="bg-white p-12 rounded-[3rem] border border-slate-100 text-center">
-                      <p className="text-slate-400 font-bold">More geverifieerde spots binnenkort!</p>
+                      <p className="text-slate-400 font-bold">More verified spots coming soon!</p>
                    </div>
                 ) : (
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -5494,46 +6186,42 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
                    <h3 className="text-[10px] font-black text-secondary uppercase tracking-widest">Kosten Gids</h3>
                 </div>
                 <div className="space-y-4">
-                   {[
-                     { label: 'Eenvoudige Maaltijd', value: `€${city.costOfLiving.localMeal.toFixed(2)}` },
-                     { label: 'Goede Cappuccino', value: `€${city.costOfLiving.coffee.toFixed(2)}` },
-                     { label: 'Grote Pizza', value: `€${city.costOfLiving.pizza.toFixed(2)}` },
-                     { label: 'Apt (1 slk)', value: `€${city.costOfLiving.oneBedApartment.toFixed(0)}` },
-                     { label: 'Internet', value: `€${city.costOfLiving.internet50mbps.toFixed(2)}` },
-                   ].map((item, i) => (
-                     <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50">
+                    {[
+                      { label: 'Budget Level', value: `Level ${city.costIndex}/5` },
+                      { label: 'Safety Score', value: `${city.safetyScore}/100` },
+                      { label: 'Internet Score', value: `${city.internetScore}/100` },
+                      { label: 'Primary Language', value: city.language },
+                      { label: 'Currency', value: city.currency },
+                    ].map((item, i) => (
+                      <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50">
                         <p className="text-[10px] font-bold text-slate-500">{item.label}</p>
                         <p className="text-[10px] font-black text-secondary">{item.value}</p>
-                     </div>
-                   ))}
+                      </div>
+                    ))}
                 </div>
              </div>
 
              <div className="bg-secondary p-8 rounded-[3rem] border border-secondary/20 shadow-2xl text-white space-y-6">
                 <div className="flex items-center gap-3">
                    <ShieldCheck className="w-5 h-5 text-amber-400" />
-                   <h3 className="text-[10px] font-black uppercase tracking-widest text-white/50">Safety & Infra</h3>
+                   <h3 className="text-[10px] font-black uppercase tracking-widest text-white/50">Connectivity & Tips</h3>
                 </div>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
-                       <p className="text-[8px] text-white/40 font-black uppercase mb-1">Safety</p>
-                       <p className="text-lg font-black">{city.safety.safetyIndex}</p>
+                       <p className="text-[8px] text-white/40 font-black uppercase mb-1">Internet</p>
+                       <p className="text-lg font-black">{city.internetScore}</p>
                     </div>
                     <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
-                       <p className="text-[8px] text-white/40 font-black uppercase mb-1">Crime</p>
-                       <p className="text-lg font-black">{city.safety.crimeIndex}</p>
+                       <p className="text-[8px] text-white/40 font-black uppercase mb-1">Safety</p>
+                       <p className="text-lg font-black">{city.safetyScore}</p>
                     </div>
                   </div>
                   
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                       <Navigation className={cn("w-4 h-4", city.infrastructure.drivingSide === 'right' ? 'text-green-400' : 'text-amber-400')} />
-                       <p className="text-[10px] font-bold text-white/80">Driving on the {city.infrastructure.drivingSide}</p>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
                        <Globe className="w-4 h-4 text-blue-400" />
-                       <p className="text-[10px] font-bold text-white/80">Timezone: {city.infrastructure.timezone}</p>
+                       <p className="text-[10px] font-bold text-white/80">Timezone: {city.timezone}</p>
                     </div>
                   </div>
                 </div>
@@ -5542,19 +6230,14 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
              <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-xl space-y-6">
                 <div className="flex items-center gap-3">
                    <BookOpen className="w-5 h-5 text-primary" />
-                   <h3 className="text-[10px] font-black text-secondary uppercase tracking-widest">Onderwijs</h3>
+                   <h3 className="text-[10px] font-black text-secondary uppercase tracking-widest">Tags</h3>
                 </div>
-                <div className="space-y-3">
-                   {(city.internationalSchools || []).length === 0 ? (
-                      <p className="text-[10px] text-slate-400 font-medium italic">No verified schools yet.</p>
-                   ) : (
-                     city.internationalSchools.map((s, i) => (
-                       <div key={i} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center gap-3 group hover:bg-slate-100 transition-colors cursor-pointer">
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                          <p className="text-[10px] font-black text-secondary truncate">{s}</p>
-                       </div>
-                     ))
-                   )}
+                <div className="flex flex-wrap gap-2">
+                   {(city.tags || []).map((t, i) => (
+                      <span key={i} className="px-3 py-1 bg-slate-50 text-slate-500 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-100">
+                         {t}
+                      </span>
+                   ))}
                 </div>
              </div>
            </div>
@@ -5649,6 +6332,9 @@ export default function App() {
 
   useEffect(() => {
     init();
+  }, []);
+
+  useEffect(() => {
     calculateBadges();
     
     // Only superadmins should trigger initial data seeding/syncing
@@ -5917,19 +6603,6 @@ export default function App() {
           onPaywall={() => setIsPaywallOpen(true)}
         />
       );
-      case 'tribe-nearby': return (
-        <TribeNearbyView 
-          onPaywall={() => setIsPaywallOpen(true)} 
-          onViewAllDeals={() => setActiveTab('deals')} 
-          onRecommendSpot={() => setIsRecommendSpotOpen(true)}
-          onViewAllMarketplace={() => setActiveTab('marketplace')}
-          onContactSeller={handleContactSeller}
-          onSetLocation={() => setIsLocationModalOpen(true)}
-          onSelectFamily={setSelectedFamily}
-          onSelectSpot={setSelectedSpot}
-          onSelectItem={setSelectedItem}
-        />
-      );
       case 'profile': return (
         <ProfileView 
           onShare={handleShareProfile} 
@@ -5964,7 +6637,6 @@ export default function App() {
         />
       );
       case 'marketplace': return <MarketplaceView onBack={() => setActiveTab('tribe')} onContactSeller={handleContactSeller} collabMode={collabMode} onPaywall={() => setIsPaywallOpen(true)} />;
-      case 'deals': return <DealsView onBack={() => setActiveTab('tribe-nearby')} onPaywall={() => setIsPaywallOpen(true)} />;
       case 'admin': return <AdminDashboard />;
       default: return (
         <TribeView 
@@ -6079,8 +6751,7 @@ export default function App() {
         </div>
 
         <nav className="flex-1 space-y-2">
-          <SidebarLink active={activeTab === 'tribe'} onClick={() => setActiveTab('tribe')} icon={<Radar />} label={collabMode ? "Matches" : "Tribe"} />
-          <SidebarLink active={activeTab === 'tribe-nearby'} onClick={() => setActiveTab('tribe-nearby')} icon={<MapIcon />} label="Neighborhood" />
+          <SidebarLink active={activeTab === 'tribe'} onClick={() => setActiveTab('tribe')} icon={<MapIcon />} label="Local Tribe" />
           <SidebarLink active={activeTab === 'explore'} onClick={() => setActiveTab('explore')} icon={<Globe />} label="Explore" />
           <SidebarLink active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={
             <div className="relative">
@@ -6152,8 +6823,7 @@ export default function App() {
         collabMode ? "bg-[#006d77] border-[#005f6a]" : "bg-white border-slate-100"
       )}>
         <div className="flex items-center justify-around h-20 px-2 pb-6">
-          <NavButton active={activeTab === 'tribe'} onClick={() => setActiveTab('tribe')} icon={<Radar className="w-6 h-6" />} label={collabMode ? "Matches" : "Tribe"} dark={collabMode} />
-          <NavButton active={activeTab === 'tribe-nearby'} onClick={() => setActiveTab('tribe-nearby')} icon={<MapIcon className="w-6 h-6" />} label="Near" dark={collabMode} />
+          <NavButton active={activeTab === 'tribe'} onClick={() => setActiveTab('tribe')} icon={<MapIcon className="w-6 h-6" />} label="Local Tribe" dark={collabMode} />
           <div className="flex flex-col items-center">
              <button 
                onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -6478,7 +7148,7 @@ export default function App() {
           <ImageUpload label="Spot Photo" onUpload={(url) => setNewSpot(prev => ({...prev, imageUrl: url}))} />
           {newSpot.imageUrl && (
             <div className="w-full h-32 rounded-2xl overflow-hidden">
-              <img src={newSpot.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+              <img src={newSpot.imageUrl || null} alt="Preview" className="w-full h-full object-cover" />
             </div>
           )}
           <div className="space-y-1">

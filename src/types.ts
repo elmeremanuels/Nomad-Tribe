@@ -36,11 +36,13 @@ export interface LookingForRequest {
   location: string;
   lat?: number;
   lng?: number;
-  category: 'Help' | 'Playdate' | 'Gear' | 'Advice' | 'Work';
+  category: 'Help' | 'Playdate' | 'Gear' | 'Advice' | 'Work' | 'Transport' | 'Care';
   title: string;
   description: string;
+  date?: string;
   createdAt: string;
-  votes?: { up: string[]; down: string[] };
+  upvotes?: string[];
+  downvotes?: string[];
 }
 
 export interface PrivacySettings {
@@ -285,71 +287,20 @@ export interface CityProfile {
   id: string; // citySlug
   name: string;
   country: string;
-  countryCode: string;
+  continent: string;
   coordinates: { lat: number; lng: number };
-  coverImageUrl?: string;
-  description?: string;
-  continent: 'Azië' | 'Europa' | 'Amerika' | 'Afrika' | 'Oceanië';
-
-  // --- Statistieken (auto-bijgewerkt) ---
-  spotCount: number;
-  vettedSpotCount: number;
-  familyCount: number; 
-  eventCount: number; 
-
-  // --- Externe Data (gecached) ---
-  costOfLiving: {
-    source: 'numbeo';
-    lastUpdated: string;
-    coffee: number;
-    localMeal: number;
-    pizza: number;
-    beer: number;
-    coworking: number;
-    oneBedApartment: number;
-    internet50mbps: number;
-    taxi1km: number;
-    currency: string;
-    exchangeRate: number;
-  };
-
-  airQuality: {
-    source: 'iqair';
-    lastUpdated: string;
-    aqi: number;
-    status: 'Good' | 'Moderate' | 'Unhealthy' | 'Hazardous';
-    pm25: number;
-  };
-
-  climate: {
-    currentTemp: number;
-    condition: string;
-    humidity: number;
-    season: string;
-  };
-
-  safety: {
-    source: 'numbeo';
-    safetyIndex: number;
-    crimeIndex: number;
-  };
-
-  infrastructure: {
-    visaFree: string[];
-    electricityPlug: string;
-    drivingSide: 'left' | 'right';
-    timezone: string;
-  };
-
-  // --- Community Data ---
-  vibeScore: number;
-  familyFriendlyScore: number;
-  internationalSchools: string[];
   nomadScore: number;
-
-  // --- Kalender ---
-  upcomingEventIds: string[];
-
+  familyScore: number;
+  safetyScore: number;
+  internetScore: number;
+  costIndex: number;
+  language: string;
+  currency: string;
+  timezone: string;
+  tags: string[];
+  coverImageUrl: string;
+  spotCount: number;
+  familyCount: number;
   isPublished: boolean;
   createdAt: string;
   updatedAt: string;
@@ -458,26 +409,37 @@ export interface MarketItem {
   location: { lat: number; lng: number; name: string };
   title: string;
   description: string;
-  category: 'Stroller' | 'Car Seat' | 'Toys' | 'Books' | 'Other' | 'Professional Services';
+  category: 'Stroller' | 'Car Seat' | 'Toys' | 'Books' | 'Gear' | 'Vehicle' | 'Clothes' | 'Services' | 'Other' | 'Professional Services';
+  mode: 'Sell' | 'Swap';
   price: number | 'Free';
   status: 'Available' | 'Reserved' | 'Sold';
   imageUrl?: string;
   reservedUntil?: string;
   reservedBy?: string;
   createdAt: string;
-  votes?: { up: string[]; down: string[] };
+  upvotes?: string[];
+  downvotes?: string[];
 }
 
 export interface PopUpEvent {
   id: string;
   organizerId: string;
+  organizerName?: string;
   title: string;
+  description?: string;
   location: { lat: number; lng: number; name: string };
   date: string;
+  time?: string;
+  category?: string;
+  imageUrl?: string;
   maxParticipants: number;
   participants: string[]; // User IDs
   waitlist: string[];
-  targetAgeRange: { min: number; max: number };
+  targetAgeRange?: { min: number; max: number };
+  isVerified?: boolean;
+  isCollaborative?: boolean;
+  upvotes?: string[];
+  downvotes?: string[];
 }
 
 // Replaced by Conversation and Message above

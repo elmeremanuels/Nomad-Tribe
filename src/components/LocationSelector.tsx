@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MapPin, Search, X } from 'lucide-react';
+import { MapPin, Search, X, Star } from 'lucide-react';
 import { cn } from '../lib/utils';
-import citiesData from '../data/citiesSeed.json';
+import { useNomadStore } from '../store';
 
 interface City {
   id: string;
@@ -10,6 +10,7 @@ interface City {
   slug: string;
   lat?: number;
   lng?: number;
+  isHub?: boolean;
 }
 
 interface LocationSelectorProps {
@@ -23,16 +24,23 @@ interface LocationSelectorProps {
 export const LocationSelector: React.FC<LocationSelectorProps> = ({ 
   value, 
   onChange, 
-  placeholder = "Search city...", 
+  placeholder = "Search hub or city...", 
   className,
   label
 }) => {
+  const { cities: hubCities, fetchCities } = useNomadStore();
   const [searchTerm, setSearchTerm] = useState(value);
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<City[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (hubCities.length === 0) {
+      fetchCities();
+    }
+  }, []);
 
   useEffect(() => {
     setSearchTerm(value);
@@ -57,19 +65,24 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
     
     setIsLoading(true);
     try {
-      // Prioritize local seed for fast typing matches
-      const localMatches: City[] = (citiesData as any[]).filter(c => 
-        c.name.toLowerCase().includes(text.toLowerCase())
-      ).slice(0, 3).map(c => ({
-        id: c.id,
-        name: c.name,
-        country: c.country,
-        slug: c.slug,
-        lat: c.lat || 0,
-        lng: c.lng || 0
-      }));
+      // 1. Search in Hubs (Primary)
+      const hubMatches: City[] = hubCities
+        .filter(c => 
+          c.name.toLowerCase().includes(text.toLowerCase()) || 
+          c.country.toLowerCase().includes(text.toLowerCase())
+        )
+        .slice(0, 5)
+        .map(c => ({
+          id: c.id,
+          name: c.name,
+          country: c.country,
+          slug: c.id,
+          lat: c.coordinates?.lat || 0,
+          lng: c.coordinates?.lng || 0,
+          isHub: true
+        }));
 
-      // OSM search (Nominatim) - improved query for better results
+      // 2. OSM search (Nominatim) as fallback/extended search
       const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&addressdetails=1&limit=8&featuretype=city&accept-language=en,nl`);
       const data = await response.json();
       
@@ -79,11 +92,12 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
         country: item.address.country || item.display_name.split(',').pop().trim(),
         slug: item.display_name.split(',')[0].toLowerCase().replace(/\s+/g, '-'),
         lat: parseFloat(item.lat),
-        lng: parseFloat(item.lon)
+        lng: parseFloat(item.lon),
+        isHub: false
       }));
 
-      // Combine, avoid duplicates by name
-      const combined: City[] = [...localMatches];
+      // Combine, prioritize hubs, avoid duplicates
+      const combined: City[] = [...hubMatches];
       apiResults.forEach((api) => {
         if (!combined.some(c => c.name.toLowerCase() === api.name.toLowerCase())) {
           combined.push(api);
@@ -147,7 +161,7 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
         <input
           type="text"
           placeholder={placeholder}
-          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 pl-12 text-sm font-bold text-secondary outline-none focus:border-primary/20 transition-all"
+          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 pl-12 text-sm font-bold text-secondary outline-none focus:border-primary/20 transition-all shadow-sm"
           value={searchTerm}
           onFocus={() => {
             setIsOpen(true);
@@ -161,16 +175,15 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
             if (debounceTimer.current) clearTimeout(debounceTimer.current);
             debounceTimer.current = setTimeout(() => {
               searchLocations(val);
-            }, 400);
+            }, 300);
 
             if (val === '') {
                 onChange('');
             }
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && searchTerm) {
-               onChange(searchTerm);
-               setIsOpen(false);
+            if (e.key === 'Enter' && results.length > 0) {
+               handleSelect(results[0]);
             }
           }}
         />
@@ -206,7 +219,7 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
                onClick={detectLocation}
                className="w-full p-4 flex items-center gap-3 hover:bg-slate-50 text-left transition-colors text-primary font-bold text-sm"
              >
-               <MapPin className="w-4 h-4" /> Use my current location
+               <MapPin className="w-4 h-4" /> Use current location
              </button>
           )}
           {results.map(city => (
@@ -215,18 +228,29 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
               onClick={() => handleSelect(city)}
               className="w-full p-4 flex items-center gap-3 hover:bg-slate-50 text-left transition-colors border-b border-slate-50 last:border-none group"
             >
-              <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                <MapPin className="w-4 h-4" />
+              <div className={cn(
+                "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
+                city.isHub ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-400 group-hover:bg-slate-200"
+              )}>
+                {city.isHub ? <Star className="w-4 h-4 fill-primary" /> : <MapPin className="w-4 h-4" />}
               </div>
-              <div>
-                <p className="text-sm font-bold text-secondary">{city.name}</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase">{city.country}</p>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-secondary">{city.name}</p>
+                  {city.isHub && <span className="text-[8px] font-black uppercase bg-primary/10 text-primary px-1.5 py-0.5 rounded">Hub</span>}
+                </div>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">
+                  {city.country} 
+                  {city.isHub && hubCities.find(c => c.id === city.id)?.continent && (
+                    <span className="text-slate-300 ml-1"> • {hubCities.find(c => c.id === city.id)?.continent}</span>
+                  )}
+                </p>
               </div>
             </button>
           ))}
           {isOpen && searchTerm.length >= 2 && results.length === 0 && !isLoading && (
               <div className="p-4 text-center text-xs text-slate-400 font-medium">
-                  No cities found. Try checking your spelling.
+                  No cities found.
               </div>
           )}
         </div>

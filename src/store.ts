@@ -29,6 +29,7 @@ import {
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { 
   collection, 
+  getDocs,
   doc, 
   setDoc, 
   getDoc, 
@@ -40,7 +41,8 @@ import {
   addDoc,
   serverTimestamp,
   orderBy,
-  writeBatch
+  writeBatch,
+  arrayUnion
 } from 'firebase/firestore';
 import { onAuthStateChanged, getRedirectResult, User as FirebaseUser, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth';
 
@@ -106,8 +108,10 @@ interface NomadStore {
   removeMarketItem: (itemId: string) => Promise<void>;
   cancelReservation: (itemId: string) => Promise<void>;
   processPayment: (itemId: string, amount: number) => Promise<boolean>;
-  rsvpForEvent: (eventId: string, userId: string) => void;
-  addEvent: (event: PopUpEvent) => void;
+  rsvpForEvent: (eventId: string, userId: string) => Promise<void>;
+  addEvent: (event: PopUpEvent) => Promise<void>;
+  removeEvent: (eventId: string) => Promise<void>;
+  voteOnPost: (postId: string, collection: 'marketplace' | 'lookingFor' | 'events', delta: 1 | -1) => Promise<void>;
   addLookingFor: (request: LookingForRequest) => Promise<void>;
   removeLookingFor: (requestId: string) => Promise<void>;
   requestConnection: (targetId: string) => Promise<void>;
@@ -142,6 +146,8 @@ interface NomadStore {
   removeToast: (id: string) => void;
   isLocationModalOpen: boolean;
   setIsLocationModalOpen: (open: boolean) => void;
+  tribeRadius: number;
+  setTribeRadius: (radius: number) => void;
   
   // Admin Actions
   updateAppSettings: (settings: Partial<AppSettings>) => Promise<void>;
@@ -151,6 +157,7 @@ interface NomadStore {
   moderateReport: (reportId: string, status: Report['status'], action?: string) => Promise<void>;
   moderateUser: (userId: string, updates: Partial<FamilyProfile>) => Promise<void>;
   completeOnboarding: (profileData: Partial<FamilyProfile>, trips: Trip[]) => Promise<void>;
+  fetchCities: () => Promise<void>;
 }
 
 export const useNomadStore = create<NomadStore>((set, get) => ({
@@ -184,8 +191,10 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   activeTab: 'tribe',
   toasts: [],
   isLocationModalOpen: false,
+  tribeRadius: 25,
 
   setIsLocationModalOpen: (open) => set({ isLocationModalOpen: open }),
+  setTribeRadius: (radius) => set({ tribeRadius: radius }),
 
   addToast: (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -208,6 +217,13 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   init: () => {
     // Force browser local persistence
     setPersistence(auth, browserLocalPersistence).catch(console.error);
+
+    let unsubscribes: (() => void)[] = [];
+
+    const cleanup = () => {
+      unsubscribes.forEach(unsub => unsub());
+      unsubscribes = [];
+    };
 
     // Handle redirect result for mobile/iframe login
     getRedirectResult(auth)
@@ -233,16 +249,18 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       });
 
     onAuthStateChanged(auth, async (firebaseUser) => {
+      cleanup();
+
       if (firebaseUser) {
         // Fetch app settings
-        onSnapshot(doc(db, 'settings', 'global'), (doc) => {
+        unsubscribes.push(onSnapshot(doc(db, 'settings', 'global'), (doc) => {
           if (doc.exists()) {
             set({ appSettings: doc.data() as AppSettings });
           }
-        });
+        }));
 
         // Fetch user profile with real-time updates
-        onSnapshot(doc(db, 'users', firebaseUser.uid), async (snapshot) => {
+        unsubscribes.push(onSnapshot(doc(db, 'users', firebaseUser.uid), async (snapshot) => {
           if (snapshot.exists()) {
             const data = snapshot.data() as FamilyProfile;
             
@@ -298,9 +316,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
             
             // Admin only listeners
             if (updatedData.role === 'SuperAdmin') {
-              onSnapshot(collection(db, 'reports'), (snapshot) => {
+              unsubscribes.push(onSnapshot(collection(db, 'reports'), (snapshot) => {
                 set({ reports: snapshot.docs.map(d => d.data() as Report) });
-              });
+              }));
             }
           } else {
             // Create default profile if not exists
@@ -336,75 +354,79 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
             await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
             set({ currentUser: newProfile, isAuthReady: true });
           }
-        }, (err) => handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`));
+        }, (err) => handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`)));
 
         // Real-time listeners
-        onSnapshot(query(collection(db, 'blocks'), where('blockerId', '==', firebaseUser.uid)), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'blocks'), where('blockerId', '==', firebaseUser.uid)), (snapshot) => {
           set({ blocks: snapshot.docs.map(d => d.data() as BlockedUser) });
-        });
+        }));
 
-        onSnapshot(collection(db, 'destinations'), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'destinations'), (snapshot) => {
           set({ destinations: snapshot.docs.map(d => d.data() as DestinationGuidance) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'destinations'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'destinations')));
 
-        onSnapshot(query(collection(db, 'notifications'), where('userId', '==', firebaseUser.uid)), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'notifications'), where('userId', '==', firebaseUser.uid)), (snapshot) => {
           set({ notifications: snapshot.docs.map(d => d.data() as AppNotification) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'notifications'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'notifications')));
 
-        onSnapshot(collection(db, 'trips'), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'trips'), (snapshot) => {
           set({ trips: snapshot.docs.map(d => d.data() as Trip) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'trips'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'trips')));
 
-        onSnapshot(collection(db, 'cities'), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'cities'), (snapshot) => {
           set({ cities: snapshot.docs.map(d => d.data() as CityProfile) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'cities'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'cities')));
 
-        onSnapshot(collection(db, 'cityEvents'), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'cityEvents'), (snapshot) => {
           set({ cityEvents: snapshot.docs.map(d => d.data() as CityEvent) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'cityEvents'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'cityEvents')));
 
-        onSnapshot(collection(db, 'marketplace'), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'events'), (snapshot) => {
+          set({ events: snapshot.docs.map(d => d.data() as PopUpEvent) });
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'events')));
+
+        unsubscribes.push(onSnapshot(collection(db, 'marketplace'), (snapshot) => {
           set({ marketItems: snapshot.docs.map(d => d.data() as MarketItem) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'marketplace'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'marketplace')));
 
-        onSnapshot(collection(db, 'lookingFor'), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'lookingFor'), (snapshot) => {
           set({ lookingFor: snapshot.docs.map(d => d.data() as LookingForRequest) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'lookingFor'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'lookingFor')));
 
-        onSnapshot(collection(db, 'users'), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'users'), (snapshot) => {
           const allProfiles = snapshot.docs.map(d => d.data() as FamilyProfile);
           console.log(`[Admin] Loaded ${allProfiles.length} user profiles`);
           set({ profiles: allProfiles });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'users')));
 
-        onSnapshot(collection(db, 'spots'), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'spots'), (snapshot) => {
           set({ spots: snapshot.docs.map(d => d.data() as Spot) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'spots'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'spots')));
 
-        onSnapshot(collection(db, 'collabAsks'), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'collabAsks'), (snapshot) => {
           set({ collabAsks: snapshot.docs.map(d => d.data() as CollabAsk) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabAsks'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabAsks')));
 
-        onSnapshot(collection(db, 'collabEndorsements'), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'collabEndorsements'), (snapshot) => {
           set({ collabEndorsements: snapshot.docs.map(d => d.data() as CollabEndorsement) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabEndorsements'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabEndorsements')));
 
         // Only admins can see reports
         if (firebaseUser.email?.toLowerCase() === 'e.emanuels@gmail.com') {
-          onSnapshot(collection(db, 'reports'), (snapshot) => {
+          unsubscribes.push(onSnapshot(collection(db, 'reports'), (snapshot) => {
             set({ reports: snapshot.docs.map(d => d.data() as Report) });
-          }, (err) => handleFirestoreError(err, OperationType.LIST, 'reports'));
+          }, (err) => handleFirestoreError(err, OperationType.LIST, 'reports')));
         }
 
         // Connections: Use array-contains for participantIds
-        onSnapshot(query(collection(db, 'connections'), where('participantIds', 'array-contains', firebaseUser.uid)), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'connections'), where('participantIds', 'array-contains', firebaseUser.uid)), (snapshot) => {
           set({ connections: snapshot.docs.map(d => d.data() as Connection) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'connections'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'connections')));
 
         // Conversations: Use array-contains for participantIds
-        onSnapshot(query(collection(db, 'conversations'), where('participantIds', 'array-contains', firebaseUser.uid)), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'conversations'), where('participantIds', 'array-contains', firebaseUser.uid)), (snapshot) => {
           set({ conversations: snapshot.docs.map(d => d.data() as Conversation) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'conversations'));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'conversations')));
 
       } else {
         set({ currentUser: null, isAuthReady: true });
@@ -668,7 +690,12 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   addItem: async (item) => {
     try {
-      await setDoc(doc(db, 'marketplace', item.id), item);
+      const itemWithVotes = {
+        ...item,
+        upvotes: [],
+        downvotes: []
+      };
+      await setDoc(doc(db, 'marketplace', item.id), itemWithVotes);
       
       // Add activity
       const newActivity: Activity = {
@@ -707,7 +734,12 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   addLookingFor: async (request) => {
     try {
-      await setDoc(doc(db, 'lookingFor', request.id), request);
+      const reqWithVotes = {
+        ...request,
+        upvotes: [],
+        downvotes: []
+      };
+      await setDoc(doc(db, 'lookingFor', request.id), reqWithVotes);
       
       // Add activity
       const newActivity: Activity = {
@@ -722,10 +754,6 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `lookingFor/${request.id}`);
     }
-  },
-
-  addLookinFor: async (request) => {
-    // ... existing ...
   },
 
   addCollabAsk: async (ask) => {
@@ -790,33 +818,93 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     return new Promise((resolve) => setTimeout(() => resolve(true), 1500));
   },
 
-  rsvpForEvent: (eventId, userId) => set((state) => ({
-    events: state.events.map(event => {
-      if (event.id === eventId) {
-        if (event.participants.length < event.maxParticipants && !event.participants.includes(userId)) {
-          return { ...event, participants: [...event.participants, userId] };
-        } else if (!event.participants.includes(userId) && !event.waitlist.includes(userId)) {
-          return { ...event, waitlist: [...event.waitlist, userId] };
-        }
+  rsvpForEvent: async (eventId, userId) => {
+    try {
+      const eventRef = doc(db, 'events', eventId);
+      const eventSnap = await getDoc(eventRef);
+      if (!eventSnap.exists()) return;
+      
+      const event = eventSnap.data() as PopUpEvent;
+      if (event.participants.length < event.maxParticipants && !event.participants.includes(userId)) {
+        await updateDoc(eventRef, {
+          participants: arrayUnion(userId)
+        });
+      } else if (!event.participants.includes(userId) && !event.waitlist.includes(userId)) {
+        await updateDoc(eventRef, {
+          waitlist: arrayUnion(userId)
+        });
       }
-      return event;
-    })
-  })),
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `events/${eventId}`);
+    }
+  },
 
-  addEvent: (event) => set((state) => {
-    const newActivity: Activity = {
-      id: `a-${Date.now()}`,
-      userId: event.organizerId,
-      familyName: state.currentUser?.familyName || 'Unknown',
-      type: 'Event',
-      content: `Organized a new event: ${event.title}`,
-      createdAt: new Date().toISOString()
-    };
-    return { 
-      events: [...state.events, event],
-      activities: [newActivity, ...state.activities]
-    };
-  }),
+  removeEvent: async (eventId) => {
+    try {
+      await deleteDoc(doc(db, 'events', eventId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `events/${eventId}`);
+    }
+  },
+
+  voteOnPost: async (postId, collectionName, delta) => {
+    const user = get().currentUser;
+    if (!user) return;
+
+    try {
+      const postRef = doc(db, collectionName, postId);
+      const postSnap = await getDoc(postRef);
+      if (!postSnap.exists()) return;
+
+      const data = postSnap.data();
+      let upvotes = data.upvotes || [];
+      let downvotes = data.downvotes || [];
+
+      // Remove from both first to toggle/clean
+      upvotes = upvotes.filter((id: string) => id !== user.id);
+      downvotes = downvotes.filter((id: string) => id !== user.id);
+
+      if (delta === 1) {
+        upvotes.push(user.id);
+      } else {
+        downvotes.push(user.id);
+      }
+
+      await updateDoc(postRef, { upvotes, downvotes });
+
+      // Auto-delete check
+      const netScore = upvotes.length - downvotes.length;
+      if (netScore <= -20) {
+        await deleteDoc(postRef);
+        get().addToast("Een bericht is automatisch verwijderd vanwege te veel downvotes.", "info");
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `${collectionName}/${postId}`);
+    }
+  },
+
+  addEvent: async (event) => {
+    try {
+      const eventWithVotes = {
+        ...event,
+        upvotes: [],
+        downvotes: []
+      };
+      await setDoc(doc(db, 'events', event.id), eventWithVotes);
+      
+      const newActivity: Activity = {
+        id: `a-${Date.now()}`,
+        userId: event.organizerId,
+        familyName: get().currentUser?.familyName || 'Unknown',
+        type: 'Event',
+        content: `Organized a new event: ${event.title}`,
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, 'activities', newActivity.id), newActivity);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `events/${event.id}`);
+    }
+  },
 
   requestConnection: async (targetId, category = 'tribe') => {
     const user = get().currentUser;
@@ -1630,6 +1718,56 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       get().addToast("User moderation applied.", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+    }
+  },
+
+  fetchCities: async () => {
+    if (!auth.currentUser) return;
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, 'cities'),
+          where('isPublished', '==', true),
+          orderBy('familyScore', 'desc')
+        )
+      );
+      
+      const getContinentByCountry = (country: string) => {
+        const c = country.toLowerCase();
+        if (['portugal', 'netherlands', 'spain', 'bulgaria', 'croatia', 'poland', 'germany', 'greece', 'turkey', 'czech republic', 'hungary', 'estonia', 'latvia', 'lithuania', 'ukraine', 'austria', 'france', 'italy', 'switzerland', 'belgium', 'georgia', 'armenia', 'azerbaijan', 'denmark', 'sweden', 'norway', 'finland', 'ireland', 'uk', 'united kingdom'].some(x => c.includes(x))) return 'Europe';
+        if (['indonesia', 'thailand', 'vietnam', 'cambodia', 'malaysia', 'taiwan', 'south korea', 'japan', 'india', 'philippines', 'singapore', 'sri lanka', 'laos', 'myanmar', 'uae', 'israel', 'jordan', 'georgia', 'nepal', 'china'].some(x => c.includes(x))) return 'Asia';
+        if (['usa', 'united states', 'mexico', 'colombia', 'argentina', 'brazil', 'guatemala', 'peru', 'costa rica', 'panama', 'ecuador', 'chile', 'canada', 'bolivia', 'paraguay', 'uruguay', 'el salvador', 'honduras', 'nicaragua', 'dominican republic', 'puerto rico'].some(x => c.includes(x))) return 'Americas';
+        if (['south africa', 'morocco', 'kenya', 'mauritius', 'egypt', 'ghana', 'tanzania', 'nigeria', 'namibia', 'uganda', 'rwanda'].some(x => c.includes(x))) return 'Africa';
+        if (['australia', 'new zealand', 'fiji', 'bali'].some(x => c.includes(x))) return 'Oceania';
+        return 'Other';
+      };
+
+      const cities = snap.docs.map(d => {
+        const data = d.data() as CityProfile;
+        let continent = data.continent || getContinentByCountry(data.country);
+        
+        // Normalize Dutch variants to English
+        const normalizationMap: Record<string, string> = {
+          'azië': 'Asia',
+          'europa': 'Europe',
+          'amerika': 'Americas',
+          'afrika': 'Africa',
+          'oceanië': 'Oceania'
+        };
+        
+        const normalized = normalizationMap[continent.toLowerCase()];
+        if (normalized) continent = normalized;
+
+        return { 
+          ...data, 
+          id: d.id,
+          continent
+        } as CityProfile;
+      });
+      
+      set({ cities });
+    } catch (err) {
+      console.error("Error fetching cities:", err);
     }
   }
 }));
