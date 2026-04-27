@@ -13,7 +13,7 @@ import { SpotCard } from './components/SpotCard';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import { standardizeInterest } from './lib/interestUtils';
-import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon } from 'lucide-react';
+import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNomadStore } from './store';
 import { containsBlockedContent, cleanContent } from './lib/contentFilter';
@@ -1539,6 +1539,13 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   const [spotCategoryFilter, setSpotCategoryFilter] = useState('All');
   const [professionalOnly, setProfessionalOnly] = useState(false);
   const [activeLocationIndex, setActiveLocationIndex] = useState(0);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isAllSpotsOpen, setIsAllSpotsOpen] = useState(false);
+  const [isActionDropdownOpen, setIsActionDropdownOpen] = useState(false);
+  const [isSpotDropdownOpen, setIsSpotDropdownOpen] = useState(false);
+  const [isPostEventOpen, setIsPostEventOpen] = useState(false);
+  const [isPostMarketItemOpen, setIsPostMarketItemOpen] = useState(false);
+  const [isRecommendSpotOpen, setIsRecommendSpotOpen] = useState(false);
 
   const getConnection = (otherId: string) => {
     return connections.find(c => 
@@ -1992,46 +1999,12 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
             </div>
           </section>
 
-          {/* Quick Actions Context Bar */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button 
-              onClick={() => setIsLookingForOpen(true)}
-              className={cn("p-6 rounded-[2.5rem] border flex flex-col items-center gap-3 transition-all", collabMode ? "bg-white/5 border-white/10 hover:bg-white/10" : "bg-white border-slate-100 card-shadow hover:bg-slate-50")}
-            >
-              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                <Plus className="w-5 h-5" />
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-widest">Post Request</span>
-            </button>
-            <button 
-              onClick={() => setIsAddEventOpen(true)}
-              className={cn("p-6 rounded-[2.5rem] border flex flex-col items-center gap-3 transition-all", collabMode ? "bg-white/5 border-white/10 hover:bg-white/10" : "bg-white border-slate-100 card-shadow hover:bg-slate-50")}
-            >
-              <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
-                <Calendar className="w-5 h-5" />
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-widest">Post Event</span>
-            </button>
-            <button 
-              onClick={() => setIsAddItemOpen(true)}
-              className={cn("p-6 rounded-[2.5rem] border flex flex-col items-center gap-3 transition-all", collabMode ? "bg-white/5 border-white/10 hover:bg-white/10" : "bg-white border-slate-100 card-shadow hover:bg-slate-50")}
-            >
-              <div className="w-10 h-10 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
-                <ShoppingBag className="w-5 h-5" />
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-widest">Sell / Swap Gear</span>
-            </button>
-          </section>
 
-          {/* Integrated Map & Local Calendar View */}
+          {/* Integrated Map & Local Action Selection */}
           <section className="space-y-4">
-            <div className="flex justify-between items-end">
-              <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Local Tribe Map & Calendar</h2>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
               {/* Map (2/3) */}
-              <div className="lg:col-span-2 h-[500px] w-full rounded-[3rem] overflow-hidden border border-slate-100 shadow-2xl relative">
+              <div className="lg:col-span-2 min-h-[500px] w-full rounded-[3rem] overflow-hidden border border-slate-100 shadow-2xl relative">
                 <MapView 
                   center={{ lat: activeLocation.lat, lng: activeLocation.lng }} 
                   profiles={[...(currentUser ? [currentUser] : []), ...filteredProfiles]}
@@ -2045,129 +2018,209 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                   onSelectFamily={(family) => {
                     onSelectFamily(family);
                   }}
-                  onSelectSpot={(spot) => {
-                    // Logic to open spot details if needed
-                  }}
                 />
               </div>
 
-              {/* Local Calendar & Places Sidebar (1/3) */}
-              <div className="flex flex-col gap-6 h-[500px]">
-                {/* Block 1: Next Up */}
+              {/* Next Up (1/3) */}
+              <div className="flex flex-col gap-6">
                 <div className={cn(
-                  "p-6 rounded-[3rem] border flex flex-col flex-1 min-h-0",
+                  "p-8 rounded-[3rem] border flex flex-col flex-1 min-h-0",
                   collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
                 )}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold text-sm">Next Up</h3>
-                    <div className="flex gap-1">
-                      <Filter className="w-3 h-3 opacity-40" />
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-black text-xs uppercase tracking-widest opacity-40">Next Up</h3>
+                    
+                    {/* Action Dropdown */}
+                    <div className="relative">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setIsActionDropdownOpen(!isActionDropdownOpen); }}
+                        className={cn(
+                          "w-8 h-8 rounded-xl flex items-center justify-center transition-all",
+                          collabMode ? "bg-white/10 hover:bg-white/20" : "bg-primary/10 text-primary hover:bg-primary/20",
+                          isActionDropdownOpen && "rotate-45"
+                        )}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                      
+                      {isActionDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setIsActionDropdownOpen(false)} />
+                          <div className={cn(
+                            "absolute right-0 mt-3 w-52 rounded-2xl shadow-2xl border p-2 z-50 animate-in fade-in slide-in-from-top-2",
+                            collabMode ? "bg-[#0b5351] border-white/10" : "bg-white border-slate-100"
+                          )}>
+                             <button onClick={() => { setIsLookingForOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 transition-colors">Post Request</button>
+                             <button onClick={() => { setIsAddEventOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 transition-colors">Post Event</button>
+                             <button onClick={() => { setIsAddItemOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 transition-colors">Sell / Swap Gear</button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                   
-                  <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar pr-1">
-                    {nextUpItems.map(item => (
+                  <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar pr-1">
+                    {nextUpItems.slice(0, 4).map(item => (
                       <div key={item.id} className={cn(
-                        "p-3 rounded-2xl border transition-all", 
-                        collabMode ? "bg-white/5 border-white/10 text-white" : 
-                        item.type === 'market' ? "bg-secondary text-white border-secondary/20" : "bg-slate-50 border-slate-100"
+                        "p-4 rounded-2xl border transition-all", 
+                        collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"
                       )}>
-                        <div className="flex justify-between items-start mb-1">
-                          <p className={cn("text-[8px] font-black uppercase tracking-widest", item.type === 'market' ? "text-white/60" : "text-accent")}>
-                            {item.type === 'market' ? (item as MarketItem).mode : (item as any).category}
+                        <div className="flex justify-between items-center mb-1">
+                          <p className={cn("text-[8px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-accent")}>
+                            {(item as any).type}
                           </p>
-                          <p className={cn("text-[8px] font-bold opacity-40", item.type === 'market' ? "text-white" : "text-slate-500")}>
+                          <p className="text-[9px] font-bold opacity-30">
                             {format(item.dateObj, 'MMM d')}
                           </p>
                         </div>
-                        <p className="text-xs font-bold truncate">{item.title}</p>
+                        <p className="text-xs font-black truncate">{item.title}</p>
                       </div>
                     ))}
                     {nextUpItems.length === 0 && (
-                      <div className="flex flex-col items-center justify-center h-full opacity-40 text-center p-4">
-                        <Calendar className="w-6 h-6 mb-2" />
-                        <p className="text-[10px] font-medium">Nothing planned yet</p>
+                      <div className="flex flex-col items-center justify-center h-full opacity-20 text-center">
+                        <Calendar className="w-8 h-8 mb-2" />
+                        <p className="text-[10px] font-black uppercase tracking-widest">Nothing planned</p>
                       </div>
                     )}
                   </div>
-                  <button className="mt-4 text-center text-[10px] font-black uppercase text-primary hover:underline">View All</button>
-                </div>
 
-                {/* Block 2: Places You May Like */}
-                <div className={cn(
-                  "p-6 rounded-[3rem] border flex flex-col h-[180px]",
-                  collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
-                )}>
-                  <h3 className="font-bold text-sm mb-4">Places You May Like</h3>
-                  <div className="space-y-2">
-                    {placesYouMayLike.map(spot => (
-                      <div key={spot.id} className="flex items-center gap-3 cursor-pointer group">
-                        <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-100 flex-shrink-0">
-                          <img src={spot.imageUrl} className="w-full h-full object-cover" alt="" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className={cn("text-xs font-bold truncate group-hover:text-primary transition-colors", collabMode ? "text-white" : "text-slate-900")}>{spot.name}</p>
-                          <p className={cn("text-[8px] font-bold uppercase", collabMode ? "text-white/40" : "text-slate-400")}>{spot.category}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {placesYouMayLike.length === 0 && (
-                      <p className="text-[10px] opacity-40 text-center py-4">No vetted places nearby</p>
-                    )}
-                  </div>
+                  <button 
+                    onClick={() => setIsCalendarOpen(true)}
+                    className="mt-6 w-full py-4 rounded-2xl border-2 border-dashed border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:border-primary hover:text-primary transition-colors"
+                  >
+                    View All
+                  </button>
                 </div>
               </div>
             </div>
           </section>
 
-          {/* Tribe Deals Section */}
-          <section className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Tribe Deals & Partnerships</h2>
-              <button className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline">All Deals</button>
+          {/* Places You May Like Section - Full Width */}
+          <section className="space-y-8">
+            <div className="flex items-center justify-between px-4">
+              <div className="flex items-center gap-3">
+                 <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-emerald-50 text-emerald-500")}>
+                    <Star className={cn("w-5 h-5", collabMode ? "fill-white text-white" : "fill-emerald-500")} />
+                 </div>
+                 <div>
+                    <h2 className={cn("text-2xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Places You May Like</h2>
+                    <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Selected curated spots for your tribe</p>
+                 </div>
+              </div>
+              
+              <div className="relative">
+                <button 
+                  onClick={() => setIsSpotDropdownOpen(!isSpotDropdownOpen)}
+                  className={cn(
+                    "px-6 py-3 border rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center gap-2",
+                    collabMode ? "bg-white/10 border-white/10 text-white" : "bg-white border-slate-100 text-slate-600"
+                  )}
+                >
+                  + Add family friendly spot
+                  <ChevronDown className={cn("w-3 h-3 transition-transform", isSpotDropdownOpen && "rotate-180")} />
+                </button>
+
+                {isSpotDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsSpotDropdownOpen(false)} />
+                    <div className={cn(
+                      "absolute right-0 mt-3 w-56 rounded-2xl shadow-2xl border p-2 z-50 animate-in fade-in slide-in-from-top-2",
+                      collabMode ? "bg-[#0b5351] border-white/10" : "bg-white border-slate-100"
+                    )}>
+                       {['Playground', 'Restaurant', 'Cafe', 'Activity', 'Education', 'Health'].map(cat => (
+                         <button 
+                          key={cat}
+                          onClick={() => { setIsRecommendSpotOpen(true); setIsSpotDropdownOpen(false); }}
+                          className="w-full text-left p-4 hover:bg-slate-50 rounded-xl transition-colors group flex items-center gap-3"
+                         >
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Add {cat}</span>
+                         </button>
+                       ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="relative">
+              <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8 px-4 scroll-smooth">
+                {filteredSpots.length === 0 ? (
+                  <div className={cn("w-full py-12 text-center rounded-[3rem] border-2 border-dashed", collabMode ? "border-white/10" : "border-slate-100")}>
+                    <MapIcon className="w-10 h-10 mx-auto mb-4 opacity-20" />
+                    <p className="text-sm font-bold opacity-30">No spots found in this area yet.</p>
+                  </div>
+                ) : (
+                  filteredSpots.map(spot => (
+                    <SpotCard 
+                      key={spot.id} 
+                      spot={spot} 
+                      collabMode={collabMode}
+                      currentUserId={currentUser?.id}
+                      onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
+                      className="w-72"
+                    />
+                  ))
+                )}
+              </div>
+              
+              <div className="flex justify-center -mt-4">
+                 <button 
+                  onClick={() => setIsAllSpotsOpen(true)}
+                  className={cn(
+                    "px-8 py-4 rounded-[2rem] text-xs font-black uppercase tracking-widest shadow-xl transition-all flex items-center gap-2 active:scale-95",
+                    collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white shadow-secondary/20"
+                  )}
+                 >
+                    <MapIcon className="w-4 h-4" />
+                    All spots around me
+                 </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Tribe Deals & Partnerships */}
+          <section className="space-y-6 pt-12">
+            <div className="flex items-center justify-between px-4">
+              <div className="flex items-center gap-3">
+                 <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-accent/10 text-accent")}>
+                    <Tag className="w-5 h-5" />
+                 </div>
+                 <div>
+                    <h2 className={cn("text-2xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Tribe Deals & Partnerships</h2>
+                    <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Exclusive perks for Nomad Tribes members</p>
+                 </div>
+              </div>
+              <button className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/60" : "text-accent")}>View all deals →</button>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               {filteredDeals.length > 0 ? (
-                 filteredDeals.slice(0, 3).map(deal => (
-                   <DealCard key={deal.id} deal={deal} />
-                 ))
-               ) : (
-                 <div className="md:col-span-2 lg:col-span-3 py-12 text-center bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-200">
-                   <Star className="w-8 h-8 text-slate-200 mx-auto mb-3" />
-                   <p className="text-sm font-bold text-slate-400 italic">No deals active in this region. Check back soon!</p>
+            <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8 px-4">
+              {filteredDeals.length === 0 ? (
+                 <div className={cn("w-full py-12 text-center rounded-[3rem] border-2 border-dashed", collabMode ? "border-white/10" : "border-slate-100")}>
+                   <Tag className="w-10 h-10 mx-auto mb-4 opacity-20" />
+                   <p className="text-sm font-bold opacity-30">No deals in this location yet.</p>
                  </div>
-               )}
-            </div>
-          </section>
-
-          {/* Vetted Local Spots (Activities, Dining, etc.) */}
-          {filteredSpots.length > 0 && (
-            <section className="space-y-6">
-              <div className="flex justify-between items-center">
-                 <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Vetted Neighborhood Spots</h2>
-              </div>
-              <div className="flex gap-6 overflow-x-auto pb-4 no-scrollbar">
-                {filteredSpots.slice(0, 8).map(spot => (
-                  <div key={spot.id} className={cn("flex-shrink-0 w-72 rounded-[2.5rem] overflow-hidden border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
-                    <div className="h-40 relative">
-                       <img src={spot.imageUrl || null} className="w-full h-full object-cover" alt="" />
-                       <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-xl font-black text-[10px] uppercase text-secondary">{spot.category}</div>
-                       {spot.isVetted && <div className="absolute top-4 right-4 bg-primary text-white p-1.5 rounded-full"><ShieldCheck className="w-3 h-3" /></div>}
-                    </div>
-                    <div className="p-6 space-y-3">
-                       <h3 className="font-bold truncate">{spot.name}</h3>
-                       <div className="flex items-center gap-1">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          <span className="text-[10px] font-black">{spot.rating}</span>
+              ) : (
+                filteredDeals.map(deal => (
+                  <div key={deal.id} className={cn("flex-shrink-0 w-80 rounded-[2.5rem] overflow-hidden border group", collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 shadow-sm shadow-slate-200/50")}>
+                    <div className="h-44 relative bg-slate-100 overflow-hidden">
+                       <img src={deal.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" />
+                       <div className="absolute top-4 left-4 px-3 py-1 bg-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg">
+                          {deal.discountLabel}
                        </div>
-                       <p className="text-[10px] opacity-60 line-clamp-2">{spot.description}</p>
+                    </div>
+                    <div className="p-6">
+                       <h4 className="font-black text-lg">{deal.name}</h4>
+                       <p className="text-[11px] opacity-60 line-clamp-2 mt-2">{deal.description}</p>
+                       <div className="flex items-center justify-between mt-6">
+                          <p className="text-[10px] font-black opacity-30 uppercase tracking-widest">{deal.advertiserName}</p>
+                          <button className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105", collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white")}>Redeem</button>
+                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </section>
-          )}
+                ))
+              )}
+            </div>
+          </section>
 
 
           {/* Collab Asks (Only in Collab Mode) */}
@@ -2445,6 +2498,119 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
               ))}
             </div>
           </section>
+
+          {/* Calendar Overlay */}
+          {isCalendarOpen && (
+            <div className="fixed inset-0 z-[100] flex items-end justify-center">
+               <div className="absolute inset-0 bg-secondary/80 backdrop-blur-md" onClick={() => setIsCalendarOpen(false)} />
+               <div className={cn(
+                 "relative w-full max-w-4xl max-h-[90vh] rounded-t-[4rem] shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-500",
+                 collabMode ? "bg-[#0b5351] text-white" : "bg-white"
+               )}>
+                  <div className="p-8 border-b border-white/10 flex items-center justify-between">
+                     <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-[1.5rem] bg-primary/10 text-primary flex items-center justify-center">
+                           <Calendar className="w-6 h-6" />
+                        </div>
+                        <div>
+                           <h2 className="text-2xl font-black tracking-tight">Tribe Activities</h2>
+                           <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Schedule of events, requests and items</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setIsCalendarOpen(false)} className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-white/40 hover:bg-white/20 transition-all">
+                        <X className="w-6 h-6" />
+                     </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-12 space-y-12 no-scrollbar">
+                     {['Upcoming', 'Next Week'].map(section => (
+                       <div key={section} className="space-y-6">
+                          <h3 className="text-xs font-black uppercase tracking-[0.2em] opacity-30">{section}</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                             {nextUpItems.map(item => (
+                               <div key={`${section}-${item.id}`} className={cn(
+                                 "group p-8 rounded-[3rem] border transition-all cursor-pointer",
+                                 collabMode ? "bg-white/5 border-white/10 hover:bg-white/10" : "bg-slate-50 border-slate-100"
+                               )}>
+                                  <div className="flex items-center justify-between mb-4">
+                                     <span className={cn(
+                                        "text-[9px] font-black uppercase px-3 py-1 rounded-xl",
+                                        (item as any).type === 'event' ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"
+                                      )}>
+                                        {(item as any).type}
+                                      </span>
+                                      <span className="text-[10px] font-black uppercase tracking-widest opacity-30">{format(item.dateObj, 'EEEE, MMM d')}</span>
+                                  </div>
+                                  <h4 className="text-lg font-black group-hover:text-primary transition-colors">{item.title}</h4>
+                                  <p className="text-xs opacity-60 mt-2 line-clamp-2">{item.description}</p>
+                                  <div className="mt-8 flex items-center justify-between border-t border-white/5 pt-6">
+                                     <div className="flex -space-x-2">
+                                        {[1, 2, 3].map(i => (
+                                          <div key={i} className="w-8 h-8 rounded-full border-2 border-white overflow-hidden bg-slate-100">
+                                             <img src={`https://i.pravatar.cc/100?img=${i + 10}`} alt="" />
+                                          </div>
+                                        ))}
+                                     </div>
+                                     <button className="text-[10px] font-black uppercase tracking-widest text-primary px-4 py-2 rounded-xl bg-primary/5 hover:bg-primary/20 transition-all">Details</button>
+                                  </div>
+                               </div>
+                             ))}
+                          </div>
+                       </div>
+                     ))}
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {/* All Spots Overlay */}
+          {isAllSpotsOpen && (
+            <div className="fixed inset-0 z-[100] flex items-end justify-center">
+               <div className="absolute inset-0 bg-secondary/80 backdrop-blur-sm" onClick={() => setIsAllSpotsOpen(false)} />
+               <div className={cn(
+                 "relative w-full max-w-4xl max-h-[90vh] rounded-t-[4rem] shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-500",
+                 collabMode ? "bg-[#0b5351] text-white" : "bg-white"
+               )}>
+                  <div className="p-8 border-b border-white/10 flex items-center justify-between">
+                     <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-[1.5rem] bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                           <MapIcon className="w-6 h-6" />
+                        </div>
+                        <div>
+                           <h2 className="text-2xl font-black tracking-tight">Spots Nearby</h2>
+                           <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Community curated places for your tribe</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setIsAllSpotsOpen(false)} className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-white/40 hover:bg-white/20 transition-all">
+                        <X className="w-6 h-6" />
+                     </button>
+                  </div>
+
+                  <div className="p-8 border-b border-white/5 flex items-center gap-3 overflow-x-auto no-scrollbar">
+                     {['All', 'Playgrounds', 'Restaurants', 'Education', 'Medical', 'Workspace'].map(cat => (
+                        <button key={cat} className={cn("px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all", cat === 'All' ? (collabMode ? "bg-white text-secondary" : "bg-emerald-500 text-white") : "hover:opacity-60")}>
+                           {cat}
+                        </button>
+                     ))}
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-8 no-scrollbar">
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredSpots.map(spot => (
+                          <SpotCard 
+                            key={spot.id} 
+                            spot={spot} 
+                            collabMode={collabMode}
+                            currentUserId={currentUser?.id}
+                            onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
+                            className="w-full"
+                          />
+                        ))}
+                     </div>
+                  </div>
+               </div>
+            </div>
+          )}
         </>
       )}
 
