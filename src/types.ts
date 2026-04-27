@@ -4,6 +4,33 @@ import { format, isWithinInterval, parseISO, addDays, differenceInYears } from '
  * DATABASE SCHEMAS & TYPES
  */
 
+export interface PlaceResult {
+  placeId: string;          // Google place_id — unieke identifier
+  name: string;             // Naam van het bedrijf of de stad
+  address: string;          // Volledig geformatteerd adres
+  city: string;             // Stad (extracted uit address_components)
+  country: string;          // Land
+  countryCode: string;      // ISO 3166-1 alpha-2, bijv. 'ID', 'NL'
+  lat: number;
+  lng: number;
+  types: string[];          // Google place types, bijv. ['restaurant', 'food']
+}
+
+export interface PastPlace {
+  id: string;
+  userId: string;
+  placeId: string;          // Google place_id
+  name: string;             // Naam van de plek
+  city: string;
+  country: string;
+  countryCode: string;
+  lat: number;
+  lng: number;
+  year: number;             // Jaar van bezoek (geen exacte datum — privacy + geheugen)
+  linkedSpotId?: string;    // Als deze plek ook een Spot is in de spots-collectie
+  addedAt: string;          // ISO — wanneer toegevoegd aan de journey
+}
+
 export interface Kid {
   id: string;
   age: number;
@@ -24,7 +51,11 @@ export interface Trip {
   id: string;
   familyId: string;
   location: string;
-  coordinates: { lat: number; lng: number };
+  lat: number;
+  lng: number;
+  place?: PlaceResult;
+  citySlug?: string;
+  countryCode?: string;
   startDate: string;
   endDate: string;
 }
@@ -34,8 +65,9 @@ export interface LookingForRequest {
   userId: string;
   familyName: string;
   location: string;
-  lat?: number;
-  lng?: number;
+  lat: number;
+  lng: number;
+  place?: PlaceResult;
   category: 'Help' | 'Playdate' | 'Gear' | 'Advice' | 'Work' | 'Transport' | 'Care';
   title: string;
   description: string;
@@ -125,12 +157,7 @@ export interface FamilyProfile {
   };
   askUsAbout?: string;
   photoUrl?: string;
-  currentLocation?: {
-    name: string;
-    lat: number;
-    lng: number;
-    updatedAt: string;
-  };
+  currentLocation?: PlaceResult & { updatedAt: string };
   hasCompletedOnboarding?: boolean; // Added
   role: 'User' | 'UserPlus' | 'SuperAdmin' | 'Advertiser';
   collabCard?: CollabCard;
@@ -229,12 +256,11 @@ export interface Spot {
   votes?: { up: string[]; down: string[] };
 
   // --- NEW: Locatie & Geo ---
-  coordinates: { lat: number; lng: number };
-  address?: string;
+  place: PlaceResult;
   citySlug: string; 
   countryCode: string; 
   osmId?: string; 
-  googlePlaceId?: string;
+  googlePlaceId?: string; // Keep for compatibility if needed, but redundant with place.placeId
 
   // --- NEW: Kwaliteit & Moderatie ---
   isVetted: boolean; 
@@ -411,7 +437,10 @@ export interface MarketItem {
   id: string;
   sellerId: string;
   sellerName: string;
-  location: { lat: number; lng: number; name: string };
+  location: string;
+  lat: number;
+  lng: number;
+  place?: PlaceResult;
   title: string;
   description: string;
   category: 'Stroller' | 'Car Seat' | 'Toys' | 'Books' | 'Gear' | 'Vehicle' | 'Clothes' | 'Services' | 'Other' | 'Professional Services';
@@ -432,7 +461,10 @@ export interface PopUpEvent {
   organizerName?: string;
   title: string;
   description?: string;
-  location: { lat: number; lng: number; name: string };
+  location: string;
+  lat: number;
+  lng: number;
+  place?: PlaceResult;
   date: string;
   time?: string;
   category?: string;
@@ -489,7 +521,10 @@ export interface Deal {
 
   // Targeting
   isGlobal: boolean;
-  location?: { name: string; lat: number; lng: number };
+  location?: string;
+  lat?: number;
+  lng?: number;
+  place?: PlaceResult;
   radiusKm: number;             // Default 25
 
   // Scheduling
@@ -574,8 +609,8 @@ export function calculateMatchScore(
     
     // Proximity still matters for networking
     const distance = calculateDistance(
-      userTrip.coordinates.lat, userTrip.coordinates.lng,
-      otherTrip.coordinates.lat, otherTrip.coordinates.lng
+      userTrip.lat || 0, userTrip.lng || 0,
+      otherTrip.lat || 0, otherTrip.lng || 0
     );
     if (distance < 50) {
       score += 20;
@@ -620,8 +655,8 @@ export function calculateMatchScore(
     }
 
     const distance = calculateDistance(
-      userTrip.coordinates.lat, userTrip.coordinates.lng,
-      otherTrip.coordinates.lat, otherTrip.coordinates.lng
+      userTrip.lat || 0, userTrip.lng || 0,
+      otherTrip.lat || 0, otherTrip.lng || 0
     );
     if (distance < 30) {
       score += 20;

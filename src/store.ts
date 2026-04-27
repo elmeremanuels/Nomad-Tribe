@@ -28,7 +28,9 @@ import {
   Deal,           // Added
   Advertiser,     // Added
   DealCategory,   // Added
-  DealStatus      // Added
+  DealStatus,      // Added
+  PlaceResult,
+  PastPlace
 } from './types';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { 
@@ -98,6 +100,7 @@ interface NomadStore {
   deals: Deal[];
   adminDeals: Deal[];
   advertisers: Advertiser[];
+  pastPlaces: PastPlace[];
   
   // Actions
   init: () => void;
@@ -137,6 +140,10 @@ interface NomadStore {
   addCollabAsk: (ask: CollabAsk) => Promise<void>;
   removeCollabAsk: (askId: string) => Promise<void>;
   addCollabEndorsement: (endorsement: CollabEndorsement) => Promise<void>;
+
+  // Past Places
+  addPastPlace: (place: PlaceResult, year: number) => Promise<void>;
+  removePastPlace: (pastPlaceId: string) => Promise<void>;
 
   // Deals
   addDeal: (deal: Omit<Deal, 'id' | 'createdAt' | 'impressions' | 'clicks' | 'reportToken'>) => Promise<void>;
@@ -199,6 +206,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   deals: [],
   adminDeals: [],
   advertisers: [],
+  pastPlaces: [],
   messages: {},
   appSettings: {
     maxUploadSizeKB: 500,
@@ -397,6 +405,10 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         unsubscribes.push(onSnapshot(query(collection(db, 'notifications'), where('userId', '==', firebaseUser.uid)), (snapshot) => {
           set({ notifications: snapshot.docs.map(d => d.data() as AppNotification) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'notifications')));
+        
+        unsubscribes.push(onSnapshot(query(collection(db, 'pastPlaces'), where('userId', '==', firebaseUser.uid)), (snapshot) => {
+          set({ pastPlaces: snapshot.docs.map(d => d.data() as PastPlace) });
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'pastPlaces')));
 
         unsubscribes.push(onSnapshot(collection(db, 'trips'), (snapshot) => {
           set({ trips: snapshot.docs.map(d => d.data() as Trip) });
@@ -518,14 +530,16 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         const scheduledDate = new Date(now.getTime() + 36 * 60 * 60 * 1000);
         scheduledDate.setHours(14, 0, 0, 0);
         
+        const locName = profile.currentLocation.city || profile.currentLocation.name;
+        
         try {
           const notification: AppNotification = {
             id: `notif-${Date.now()}`,
             userId,
             title: 'Vibe Check! 🌍',
-            message: `Hey Pioneer! Is the vibe in ${profile.currentLocation.name} still as good as we think? Help the Tribe with a quick check!`,
+            message: `Hey Pioneer! Is the vibe in ${locName} still as good as we think? Help the Tribe with a quick check!`,
             type: 'VibeCheck',
-            data: { cityName: profile.currentLocation.name },
+            data: { cityName: locName },
             isRead: false,
             scheduledFor: scheduledDate.toISOString(),
             createdAt: now.toISOString()
@@ -576,11 +590,11 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       
       // Sync with Explore list (destinations)
       const destinations = get().destinations;
-      const existing = destinations.find(d => d.cityName.toLowerCase() === trip.location.split(',')[0].trim().toLowerCase());
+      const cityName = trip.place?.city || (trip.location.includes(',') ? trip.location.split(',')[0].trim() : trip.location);
+      const existing = destinations.find(d => d.cityName.toLowerCase() === cityName.toLowerCase());
       
-      if (!existing) {
-        const cityName = trip.location.split(',')[0].trim();
-        const country = trip.location.split(',')[1]?.trim() || '';
+      if (!existing && cityName) {
+        const country = trip.place?.country || (trip.location.includes(',') ? trip.location.split(',').pop()?.trim() : '');
         const newDest: DestinationGuidance = {
           id: `d-${Date.now()}`,
           cityName,
@@ -1204,7 +1218,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       };
 
       const spotsInCity = get().spots.filter(s => {
-        return calculateDistance(s.coordinates.lat, s.coordinates.lng, cleanSpot.coordinates.lat, cleanSpot.coordinates.lng) < 20;
+        return calculateDistance(s.place.lat, s.place.lng, cleanSpot.place.lat, cleanSpot.place.lng) < 20;
       });
 
       await setDoc(doc(db, 'spots', cleanSpot.id), cleanSpot);
@@ -1818,6 +1832,40 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     } catch (err) {
       console.error("Scale-out deletion failed:", err);
       get().addToast("Partial account deletion occurred. Please contact support.", "error");
+    }
+  },
+
+  addPastPlace: async (place, year) => {
+    const user = get().currentUser;
+    if (!user) return;
+    const id = `pp-${user.id}-${place.placeId}-${year}`;
+    const pastPlace: PastPlace = {
+      id,
+      userId: user.id,
+      placeId: place.placeId,
+      name: place.name,
+      city: place.city,
+      country: place.country,
+      countryCode: place.countryCode,
+      lat: place.lat,
+      lng: place.lng,
+      year,
+      addedAt: new Date().toISOString()
+    };
+    try {
+      await setDoc(doc(db, 'pastPlaces', id), pastPlace);
+      get().addToast(`Added ${place.name} to your journey!`, "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `pastPlaces/${id}`);
+    }
+  },
+
+  removePastPlace: async (pastPlaceId) => {
+    try {
+      await deleteDoc(doc(db, 'pastPlaces', pastPlaceId));
+      get().addToast("Removed from your journey.", "info");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `pastPlaces/${pastPlaceId}`);
     }
   },
 

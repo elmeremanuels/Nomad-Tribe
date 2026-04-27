@@ -9,8 +9,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="NomadTribe" />
     <link rel="apple-touch-icon" href="https://picsum.photos/seed/nomadtribe/180/180" />
+    <script type="module"
+      src="https://ajax.googleapis.com/ajax/libs/@googlemaps/extended-component-library/0.6.11/index.min.js">
+    </script>
   </head>
   <body>
+    <gmpx-api-loader key="%VITE_GOOGLE_MAPS_API_KEY%" solution-channel="GMP_GE_placepicker_v2">
+    </gmpx-api-loader>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

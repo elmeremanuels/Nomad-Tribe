@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNomadStore } from '../../store';
-import { Deal, Advertiser, DealCategory, DealStatus } from '../../types';
+import { Deal, Advertiser, DealCategory, DealStatus, PlaceResult } from '../../types';
 import { Plus, Trash2, Edit2, ExternalLink, Tag, Globe, MapPin, Building2, TrendingUp, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { PlacesAutocomplete } from '../PlacesAutocomplete';
 
 const AdminDealsTab = () => {
   const { deals, advertisers, addAdvertiser, updateAdvertiser, addDeal, updateDeal } = useNomadStore() as any;
@@ -37,7 +38,10 @@ const AdminDealsTab = () => {
     status: 'Active' as DealStatus,
     targetPremiumOnly: false,
     isGlobal: false,
-    location: undefined as { lat: number, lng: number, name: string } | undefined,
+    location: '',
+    lat: 0,
+    lng: 0,
+    place: null as PlaceResult | null,
     radiusKm: 50,
     startDate: new Date().toISOString(),
     endDate: '',
@@ -73,7 +77,11 @@ const AdminDealsTab = () => {
     const data = {
         ...newDeal,
         advertiserName: advertiser?.companyName || 'Unknown',
-        endDate: newDeal.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        endDate: newDeal.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        location: newDeal.place ? `${newDeal.place.city}, ${newDeal.place.country}` : newDeal.location,
+        lat: newDeal.place?.lat || newDeal.lat,
+        lng: newDeal.place?.lng || newDeal.lng,
+        place: newDeal.place || undefined
     };
 
     if (editingDeal) {
@@ -96,7 +104,10 @@ const AdminDealsTab = () => {
       status: 'Active',
       targetPremiumOnly: false,
       isGlobal: false,
-      location: undefined,
+      location: '',
+      lat: 0,
+      lng: 0,
+      place: null,
       radiusKm: 50,
       startDate: new Date().toISOString(),
       endDate: '',
@@ -151,7 +162,10 @@ const AdminDealsTab = () => {
                 status: 'Active',
                 targetPremiumOnly: false,
                 isGlobal: false,
-                location: undefined,
+                location: '',
+                lat: 0,
+                lng: 0,
+                place: null,
                 radiusKm: 50,
                 startDate: new Date().toISOString(),
                 endDate: '',
@@ -287,6 +301,9 @@ const AdminDealsTab = () => {
                                 targetPremiumOnly: deal.targetPremiumOnly || false,
                                 isGlobal: deal.isGlobal || false,
                                 location: deal.location,
+                                lat: deal.lat || 0,
+                                lng: deal.lng || 0,
+                                place: deal.place || null,
                                 radiusKm: deal.radiusKm || 50,
                                 startDate: deal.startDate,
                                 endDate: deal.endDate,
@@ -485,16 +502,18 @@ const AdminDealsTab = () => {
 
               {!newDeal.isGlobal && (
                 <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Targeting</p>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Targeting</label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500">City Name</label>
-                        <input 
-                          type="text" 
+                     <div className="col-span-1 space-y-1">
+                        <PlacesAutocomplete 
+                          label="City / Hub"
                           placeholder="e.g. Barcelona"
-                          className="w-full p-3 bg-white border border-slate-100 rounded-xl"
-                          value={newDeal.location?.name || ''}
-                          onChange={e => setNewDeal({...newDeal, location: { ...newDeal.location!, name: e.target.value, lat: newDeal.location?.lat || 0, lng: newDeal.location?.lng || 0 }})}
+                          value={newDeal.place}
+                          onChange={(place) => setNewDeal({
+                            ...newDeal, 
+                            place,
+                            location: place ? `${place.city}, ${place.country}` : ''
+                          })}
                         />
                      </div>
                      <div className="space-y-1">

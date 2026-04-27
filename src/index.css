@@ -26,3 +26,12 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
 }
 
+gmpx-place-picker {
+  --gmpx-color-surface: #f8fafc;
+  --gmpx-color-on-surface: #0f172a;
+  --gmpx-color-primary: #E2725B;
+  --gmpx-border-radius: 1rem;
+  --gmpx-font-family-base: 'Inter', sans-serif;
+  width: 100%;
+}
+

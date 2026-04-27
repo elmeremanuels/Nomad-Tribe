@@ -8,7 +8,7 @@ import { Step4Collab } from './onboarding/Step4Collab';
 import { Step5Welcome } from './onboarding/Step5Welcome';
 import { ArrowLeft, ArrowRight, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Kid, Trip, CollabCard, FamilyProfile } from '../types';
+import { Kid, Trip, CollabCard, FamilyProfile, PlaceResult } from '../types';
 
 export const OnboardingFlow: React.FC = () => {
   const { currentUser, completeOnboarding, setActiveTab } = useNomadStore();
@@ -31,7 +31,8 @@ export const OnboardingFlow: React.FC = () => {
         id: `trip_${Date.now()}`,
         familyId: '',
         location: '',
-        coordinates: { lat: 0, lng: 0 },
+        lat: 0,
+        lng: 0,
         startDate: new Date().toISOString().split('T')[0],
         endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
       }
@@ -68,7 +69,7 @@ export const OnboardingFlow: React.FC = () => {
       case 2:
         return formData.kids.length === 0 || formData.kids.every(k => k.interests.length >= 1);
       case 3:
-        return formData.trips.length > 0 && formData.trips.every(t => t.location.length >= 3 && !!t.startDate && !!t.endDate);
+        return formData.trips.length > 0 && formData.trips.every(t => !!t.place && !!t.startDate && !!t.endDate);
       case 4:
         if (formData.openToCollabs) {
           // LinkedIn is no longer mandatory, but if present, must be valid

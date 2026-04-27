@@ -37,7 +37,9 @@ interface MapViewProps {
 const RecenterMap = ({ center }: { center: { lat: number; lng: number } }) => {
   const map = useMap();
   useEffect(() => {
-    map.setView([center.lat, center.lng]);
+    if (center && typeof center.lat === 'number' && typeof center.lng === 'number' && !isNaN(center.lat) && !isNaN(center.lng)) {
+      map.setView([center.lat, center.lng]);
+    }
   }, [center, map]);
   return null;
 };
@@ -60,6 +62,12 @@ export const MapView: React.FC<MapViewProps> = ({
   userPhotoUrl,
   radiusKm = 25
 }) => {
+  // Guard against invalid center coordinates
+  const safeCenter = {
+    lat: typeof center?.lat === 'number' && !isNaN(center.lat) ? center.lat : 0,
+    lng: typeof center?.lng === 'number' && !isNaN(center.lng) ? center.lng : 0,
+  };
+
   return (
     <div className={cn("w-full h-full rounded-[2.5rem] overflow-hidden border-2 border-slate-100 shadow-inner relative z-0 toner-map", className)}>
       <style>{`
@@ -75,7 +83,7 @@ export const MapView: React.FC<MapViewProps> = ({
         }
       `}</style>
       <MapContainer 
-        center={[center.lat, center.lng]} 
+        center={[safeCenter.lat, safeCenter.lng]} 
         zoom={zoom} 
         scrollWheelZoom={false}
         className="w-full h-full"
@@ -85,11 +93,11 @@ export const MapView: React.FC<MapViewProps> = ({
           url="https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png"
         />
         
-        <RecenterMap center={center} />
+        <RecenterMap center={safeCenter} />
 
         {/* Tribe Radius Circle */}
         <Circle 
-          center={[center.lat, center.lng]}
+          center={[safeCenter.lat, safeCenter.lng]}
           radius={radiusKm * 1000}
           pathOptions={{ 
             fillColor: 'var(--primary)', 
@@ -102,7 +110,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
         {/* Current Location / Focus Point (Custom Icon with User Photo) */}
         <Marker 
-          position={[center.lat, center.lng]}
+          position={[safeCenter.lat, safeCenter.lng]}
           zIndexOffset={1000}
           icon={new L.DivIcon({
             className: 'custom-div-icon',
@@ -121,7 +129,7 @@ export const MapView: React.FC<MapViewProps> = ({
         </Marker>
 
         {/* Profiles */}
-        {profiles.map(profile => profile.currentLocation && (
+        {profiles.map(profile => profile.currentLocation && typeof profile.currentLocation.lat === 'number' && typeof profile.currentLocation.lng === 'number' && (
           <Marker 
             key={profile.id} 
             position={[profile.currentLocation.lat, profile.currentLocation.lng]}
@@ -149,10 +157,10 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Vetted Spots */}
-        {spots.map(spot => (
+        {spots.map(spot => spot.place && typeof spot.place.lat === 'number' && typeof spot.place.lng === 'number' && (
           <Marker 
             key={spot.id} 
-            position={[spot.coordinates.lat, spot.coordinates.lng]}
+            position={[spot.place.lat, spot.place.lng]}
             icon={new L.DivIcon({
               className: 'custom-div-icon',
               html: `<div class="w-8 h-8 rounded-xl bg-secondary text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform border-2 border-white">
@@ -178,10 +186,10 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Deals */}
-        {deals.map(deal => deal.location && (
+        {deals.map(deal => typeof deal.lat === 'number' && typeof deal.lng === 'number' && (
           <Marker 
             key={deal.id} 
-            position={[deal.location.lat, deal.location.lng]}
+            position={[deal.lat, deal.lng]}
             icon={new L.DivIcon({
               className: 'custom-div-icon',
               html: `<div class="w-8 h-8 rounded-xl bg-accent text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform border-2 border-white">
@@ -202,10 +210,10 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Events */}
-        {events.map(event => event.location && (
+        {events.map(event => typeof event.lat === 'number' && typeof event.lng === 'number' && (
           <Marker 
             key={event.id} 
-            position={[event.location.lat, event.location.lng]}
+            position={[event.lat, event.lng]}
             icon={new L.DivIcon({
               className: 'custom-div-icon',
               html: `<div class="w-8 h-8 rounded-xl bg-amber-400 text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform border-2 border-white">
@@ -226,7 +234,7 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Requests (Looking For) */}
-        {requests.map(req => (
+        {requests.map(req => typeof req.lat === 'number' && typeof req.lng === 'number' && (
           <Marker 
             key={req.id} 
             position={[req.lat, req.lng]}
@@ -250,10 +258,10 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Market Items */}
-        {marketItems.map(item => item.location && (
+        {marketItems.map(item => typeof item.lat === 'number' && typeof item.lng === 'number' && (
           <Marker 
             key={item.id} 
-            position={[item.location.lat, item.location.lng]}
+            position={[item.lat, item.lng]}
             icon={new L.DivIcon({
               className: 'custom-div-icon',
               html: `<div class="w-8 h-8 rounded-xl bg-secondary text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform border-2 border-white">

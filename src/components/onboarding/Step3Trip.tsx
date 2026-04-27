@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { MapPin, Calendar, Plus, X, Search } from 'lucide-react';
-import { Trip } from '../../types';
-import { LocationSelector } from '../LocationSelector';
+import { Trip, PlaceResult } from '../../types';
+import { PlacesAutocomplete } from '../PlacesAutocomplete';
 
 interface Step3Props {
   trips: Trip[];
@@ -20,7 +20,8 @@ export const Step3Trip: React.FC<Step3Props> = ({ trips, onChange }) => {
       id: `trip_${Date.now()}`,
       familyId: '', // Set by store
       location: '',
-      coordinates: { lat: 0, lng: 0 },
+      lat: 0,
+      lng: 0,
       startDate,
       endDate
     };
@@ -31,13 +32,10 @@ export const Step3Trip: React.FC<Step3Props> = ({ trips, onChange }) => {
     onChange(trips.filter(t => t.id !== id));
   };
 
-  const updateTripCorrect = (id: string, field: keyof Trip | 'lat' | 'lng', value: any) => {
+  const updateTrip = (id: string, updates: Partial<Trip>) => {
     onChange(trips.map(t => {
       if (t.id === id) {
-        if (field === 'lat' || field === 'lng') {
-          return { ...t, coordinates: { ...t.coordinates, [field]: value } };
-        }
-        return { ...t, [field]: value };
+        return { ...t, ...updates };
       }
       return t;
     }));
@@ -70,15 +68,30 @@ export const Step3Trip: React.FC<Step3Props> = ({ trips, onChange }) => {
             </div>
 
             <div className="space-y-4">
-              <LocationSelector 
+              <PlacesAutocomplete 
                 label="Location"
-                placeholder="Search city (e.g. Ubud, Bali)"
-                value={trip.location}
-                onChange={(val, coords) => {
-                  updateTripCorrect(trip.id, 'location', val);
-                  if (coords) {
-                    updateTripCorrect(trip.id, 'lat', coords.lat);
-                    updateTripCorrect(trip.id, 'lng', coords.lng);
+                placeholder="Where are you going? (e.g. Bali, Indonesia)"
+                value={trip.place || null}
+                searchType="cities"
+                onChange={(place) => {
+                  if (place) {
+                    updateTrip(trip.id, {
+                      place,
+                      location: `${place.city}, ${place.country}`,
+                      lat: place.lat,
+                      lng: place.lng,
+                      citySlug: place.city.toLowerCase().replace(/\s+/g, '-'),
+                      countryCode: place.countryCode
+                    });
+                  } else {
+                    updateTrip(trip.id, {
+                      place: undefined,
+                      location: '',
+                      lat: 0,
+                      lng: 0,
+                      citySlug: undefined,
+                      countryCode: undefined
+                    });
                   }
                 }}
               />
@@ -93,7 +106,7 @@ export const Step3Trip: React.FC<Step3Props> = ({ trips, onChange }) => {
                       className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 pl-12 text-xs font-bold text-secondary outline-none focus:border-primary/20 transition-all"
                       value={trip.startDate}
                       min={new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-                      onChange={(e) => updateTripCorrect(trip.id, 'startDate', e.target.value)}
+                      onChange={(e) => updateTrip(trip.id, { startDate: e.target.value })}
                     />
                   </div>
                 </div>
@@ -104,7 +117,7 @@ export const Step3Trip: React.FC<Step3Props> = ({ trips, onChange }) => {
                       onClick={() => {
                         const start = new Date(trip.startDate);
                         const end = new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
-                        updateTripCorrect(trip.id, 'endDate', end.toISOString().split('T')[0]);
+                        updateTrip(trip.id, { endDate: end.toISOString().split('T')[0] });
                       }}
                       className="text-[9px] font-black text-primary hover:underline uppercase"
                     >
@@ -118,7 +131,7 @@ export const Step3Trip: React.FC<Step3Props> = ({ trips, onChange }) => {
                       className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 pl-12 text-xs font-bold text-secondary outline-none focus:border-primary/20 transition-all"
                       value={trip.endDate}
                       min={new Date(new Date(trip.startDate).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-                      onChange={(e) => updateTripCorrect(trip.id, 'endDate', e.target.value)}
+                      onChange={(e) => updateTrip(trip.id, { endDate: e.target.value })}
                     />
                   </div>
                 </div>

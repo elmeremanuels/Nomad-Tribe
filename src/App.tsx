@@ -7,16 +7,16 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { OnboardingFlow } from './components/OnboardingFlow';
 import { TagInput } from './components/TagInput';
 import { SharedJourneyTimeline } from './components/SharedJourneyTimeline';
-import { LocationSelector } from './components/LocationSelector';
+import { PlacesAutocomplete } from './components/PlacesAutocomplete';
 import { MapView } from './components/MapView';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import { standardizeInterest } from './lib/interestUtils';
-import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, Home, ShieldAlert, ArrowUp, ArrowDown } from 'lucide-react';
+import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNomadStore } from './store';
 import { containsBlockedContent, cleanContent } from './lib/contentFilter';
-import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance, Deal } from './types';
+import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance, Deal, PlaceResult } from './types';
 import { format, parseISO } from 'date-fns';
 import { cn } from './lib/utils';
 import occupations from './data/occupationsSeed.json';
@@ -1084,8 +1084,8 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
   const [isRequestItemOpen, setIsRequestItemOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
-  const [newItem, setNewItem] = useState({ title: '', description: '', price: 0, category: collabMode ? 'Professional Services' : 'Gear' as any, mode: 'Sell' as 'Sell' | 'Swap', imageUrl: '', locationName: '', lat: 0, lng: 0 });
-  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0, date: '' });
+  const [newItem, setNewItem] = useState<{ title: string; description: string; price: number; category: MarketItem['category']; mode: 'Sell' | 'Swap'; imageUrl: string; place: PlaceResult | null }>({ title: '', description: '', price: 0, category: collabMode ? 'Professional Services' : 'Gear', mode: 'Sell', imageUrl: '', place: null });
+  const [newRequest, setNewRequest] = useState<{ title: string; description: string; category: LookingForRequest['category']; place: PlaceResult | null; date: string }>({ title: '', description: '', category: 'Help', place: null, date: '' });
 
   const filteredItems = marketItems.filter(item => {
     // Mock distance check - stable based on item ID
@@ -1200,7 +1200,7 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
               <div>
                 <h4 className={cn("font-bold text-lg", collabMode ? "text-white" : "text-secondary")}>{item.title}</h4>
                 <p className={cn("text-xs flex items-center gap-1", collabMode ? "text-white/40" : "text-slate-400")}>
-                  <MapPin className="w-3 h-3" /> {item.location.name}
+                  <MapPin className="w-3 h-3" /> {item.location}
                 </p>
               </div>
 
@@ -1280,12 +1280,15 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
             category: newItem.category,
             mode: 'Sell',
             imageUrl: newItem.imageUrl,
-            location: { name: newItem.locationName || 'Current Location', lat: newItem.lat || 0, lng: newItem.lng || 0 },
+            place: newItem.place || undefined,
+            location: newItem.place ? `${newItem.place.city}, ${newItem.place.country}` : 'Unknown',
+            lat: newItem.place?.lat || 0,
+            lng: newItem.place?.lng || 0,
             status: 'Available',
             createdAt: new Date().toISOString()
           });
           setIsAddItemOpen(false);
-          setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', locationName: '', lat: 0, lng: 0 });
+          setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', place: null });
           addToast("Item geplaatst!", "success");
         }}>
           <ImageUpload label="Item Photo" onUpload={(url) => setNewItem(prev => ({...prev, imageUrl: url}))} />
@@ -1306,11 +1309,11 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Description</label>
             <textarea required className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl" rows={3} value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} />
           </div>
-          <LocationSelector 
+          <PlacesAutocomplete 
             label="Location (Where is the item?)"
             placeholder="Search city..."
-            value={newItem.locationName}
-            onChange={(val, coords) => setNewItem(prev => ({ ...prev, locationName: val, lat: coords?.lat || 0, lng: coords?.lng || 0 }))}
+            value={newItem.place}
+            onChange={(place) => setNewItem(prev => ({ ...prev, place }))}
           />
           <button type="submit" className="w-full bg-primary text-white py-4 rounded-2xl font-bold">List Item</button>
         </form>
@@ -1323,16 +1326,17 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
             id: `lf-${Date.now()}`,
             userId: currentUser?.id || '',
             familyName: currentUser?.familyName || '',
-            location: newRequest.location || 'Current Location',
-            lat: newRequest.lat || 0,
-            lng: newRequest.lng || 0,
+            place: newRequest.place || undefined,
+            location: newRequest.place ? `${newRequest.place.city}, ${newRequest.place.country}` : 'Current Location',
+            lat: newRequest.place?.lat || 0,
+            lng: newRequest.place?.lng || 0,
             category: 'Gear',
             title: newRequest.title,
             description: newRequest.description,
             createdAt: new Date().toISOString()
           });
           setIsRequestItemOpen(false);
-          setNewRequest({ title: '', description: '', category: 'Help', location: '', lat: 0, lng: 0, date: '' });
+          setNewRequest({ title: '', description: '', category: 'Help', place: null, date: '' });
           addToast("Request posted to the tribe!", "success");
         }}>
           <div className="space-y-1">
@@ -1343,11 +1347,11 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Details</label>
             <textarea required rows={3} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl resize-none" value={newRequest.description} onChange={e => setNewRequest({...newRequest, description: e.target.value})} />
           </div>
-          <LocationSelector 
+          <PlacesAutocomplete 
             label="Location"
             placeholder="Where do you need help?"
-            value={newRequest.location}
-            onChange={(val, coords) => setNewRequest(prev => ({ ...prev, location: val, lat: coords?.lat || 0, lng: coords?.lng || 0 }))}
+            value={newRequest.place}
+            onChange={(place) => setNewRequest(prev => ({ ...prev, place }))}
           />
           <button type="submit" className="w-full bg-secondary text-white py-4 rounded-2xl font-bold">Post Request</button>
         </form>
@@ -1523,10 +1527,10 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [isMyPostsOpen, setIsMyPostsOpen] = useState(false);
-  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0, date: '' });
+  const [newRequest, setNewRequest] = useState<{ title: string; description: string; category: LookingForRequest['category']; place: PlaceResult | null; date: string }>({ title: '', description: '', category: 'Help', place: null, date: '' });
   const [newCollabAsk, setNewCollabAsk] = useState({ skillNeeded: '', description: '' });
-  const [newItem, setNewItem] = useState({ title: '', description: '', price: 0, category: 'Gear' as any, mode: 'Sell' as 'Sell' | 'Swap', imageUrl: '', locationName: '', lat: 0, lng: 0 });
-  const [newEvent, setNewEvent] = useState({ title: '', description: '', date: '', time: '', category: 'Social' as any, imageUrl: '', location: '', maxParticipants: 10 });
+  const [newItem, setNewItem] = useState<{ title: string; description: string; price: number; category: MarketItem['category']; mode: 'Sell' | 'Swap'; imageUrl: string; place: PlaceResult | null }>({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', place: null });
+  const [newEvent, setNewEvent] = useState<{ title: string; description: string; date: string; time: string; category: string; imageUrl: string; place: PlaceResult | null; maxParticipants: number }>({ title: '', description: '', date: '', time: '', category: 'Social', imageUrl: '', place: null, maxParticipants: 10 });
   const [isLocalFeedOpen, setIsLocalFeedOpen] = useState(false);
   const [isVibeCheckOpen, setIsVibeCheckOpen] = useState(false);
   const [tribeSearchQuery, setTribeSearchQuery] = useState('');
@@ -1541,29 +1545,33 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   };
 
   const locations = useMemo(() => {
-    const locs: { name: string; type: 'current' | 'planned' | 'default'; lat: number; lng: number, continent?: string }[] = [];
-    if (currentUser?.currentLocation?.name) {
-      const hub = hubCities.find(c => c.name.toLowerCase() === currentUser.currentLocation?.name.toLowerCase());
+    const locs: { name: string; type: 'current' | 'planned' | 'default'; lat: number; lng: number, continent?: string, fullPlace?: PlaceResult }[] = [];
+    if (currentUser?.currentLocation?.placeId) {
+      const locName = currentUser.currentLocation.city || currentUser.currentLocation.name;
+      const hub = hubCities.find(c => c.name.toLowerCase() === locName.toLowerCase());
       locs.push({ 
-        name: currentUser.currentLocation.name, 
+        name: locName, 
         type: 'current',
-        lat: currentUser.currentLocation.lat,
-        lng: currentUser.currentLocation.lng,
-        continent: hub?.continent
+        lat: currentUser.currentLocation.lat || 0,
+        lng: currentUser.currentLocation.lng || 0,
+        continent: hub?.continent,
+        fullPlace: currentUser.currentLocation
       });
     }
     const userTrips = trips
       .filter(t => t.familyId === currentUser?.id)
       .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
     userTrips.forEach(t => {
-      if (!locs.some(l => l.name === t.location)) {
-        const hub = hubCities.find(c => t.location.toLowerCase().includes(c.name.toLowerCase()));
+      const tripLocName = t.location;
+      if (!locs.some(l => l.name === tripLocName)) {
+        const hub = hubCities.find(c => tripLocName.toLowerCase().includes(c.name.toLowerCase()));
         locs.push({ 
-          name: t.location, 
+          name: tripLocName, 
           type: 'planned',
-          lat: t.coordinates.lat,
-          lng: t.coordinates.lng,
-          continent: hub?.continent
+          lat: t.lat || 0,
+          lng: t.lng || 0,
+          continent: hub?.continent,
+          fullPlace: t.place
         });
       }
     });
@@ -1612,8 +1620,8 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
       const isSpeciallyFeatured = spot.isVetted || !!spot.monthlyDeal;
       if (collabMode && !isSpeciallyFeatured && (spot.category !== 'Workspace' && spot.category !== 'Accommodation')) return false;
       
-      if (spot.coordinates && activeLocation.lat && activeLocation.lng) {
-        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, spot.coordinates.lat, spot.coordinates.lng);
+      if (spot.place && activeLocation.lat && activeLocation.lng) {
+        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, spot.place.lat, spot.place.lng);
         return dist <= tribeRadius;
       }
       return true;
@@ -1625,8 +1633,8 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
       if (d.status !== 'Active') return false;
       if (d.targetPremiumOnly && !isPremium) return false;
       if (d.isGlobal) return true;
-      if (d.location && activeLocation.lat && activeLocation.lng) {
-        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, d.location.lat, d.location.lng);
+      if (d.lat !== undefined && d.lng !== undefined && activeLocation.lat && activeLocation.lng) {
+        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, d.lat, d.lng);
         return dist <= d.radiusKm;
       }
       return false;
@@ -1635,19 +1643,19 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
 
   const localEvents = useMemo(() => {
     return events.filter(e => {
-       if (e.location?.lat && e.location?.lng && activeLocation.lat && activeLocation.lng) {
-         return calculateDistance(activeLocation.lat, activeLocation.lng, e.location.lat, e.location.lng) <= tribeRadius;
+       if (e.lat && e.lng && activeLocation.lat && activeLocation.lng) {
+         return calculateDistance(activeLocation.lat, activeLocation.lng, e.lat, e.lng) <= tribeRadius;
        }
-       return e.location?.name === activeLocation.name;
+       return e.location === activeLocation.name;
     });
   }, [activeLocation, events, tribeRadius]);
 
   const localMarketItems = useMemo(() => {
     return marketItems.filter(item => {
-       if (item.location?.lat && item.location?.lng && activeLocation.lat && activeLocation.lng) {
-         return calculateDistance(activeLocation.lat, activeLocation.lng, item.location.lat, item.location.lng) <= tribeRadius;
+       if (item.lat && item.lng && activeLocation.lat && activeLocation.lng) {
+         return calculateDistance(activeLocation.lat, activeLocation.lng, item.lat, item.lng) <= tribeRadius;
        }
-       return item.location?.name === activeLocation.name;
+       return item.location === activeLocation.name;
     });
   }, [activeLocation, marketItems, tribeRadius]);
 
@@ -1670,7 +1678,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   }, [localEvents, localRequests, localMarketItems]);
 
   const placesYouMayLike = useMemo(() => {
-    return spots.filter(s => s.isVetted && calculateDistance(activeLocation.lat, activeLocation.lng, s.coordinates.lat, s.coordinates.lng) <= tribeRadius).slice(0, 3);
+    return spots.filter(s => s.isVetted && calculateDistance(activeLocation.lat, activeLocation.lng, s.place.lat, s.place.lng) <= tribeRadius).slice(0, 3);
   }, [spots, activeLocation, tribeRadius]);
 
   // --- Collab Mode Monetization Gating ---
@@ -1711,9 +1719,10 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
         id: `lf-${Date.now()}`,
         userId: currentUser.id,
         familyName: currentUser.familyName,
-        location: activeLocation.name,
-        lat: activeLocation.lat,
-        lng: activeLocation.lng,
+        place: newRequest.place || undefined,
+        location: newRequest.place ? `${newRequest.place.city}, ${newRequest.place.country}` : activeLocation.name,
+        lat: newRequest.place?.lat || activeLocation.lat,
+        lng: newRequest.place?.lng || activeLocation.lng,
         category: newRequest.category,
         title: cleanContent(newRequest.title),
         description: cleanContent(newRequest.description),
@@ -1722,7 +1731,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
       };
       await addLookingFor(request);
       setIsLookingForOpen(false);
-      setNewRequest({ title: '', description: '', category: 'Help', location: '', lat: 0, lng: 0, date: '' });
+      setNewRequest({ title: '', description: '', category: 'Help', place: null, date: '' });
     } catch (error) {
       console.error("Failed to add looking for request:", error);
     }
@@ -1769,16 +1778,15 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
       mode: newItem.mode || 'Sell',
       imageUrl: newItem.imageUrl || '',
       status: 'Available',
-      location: { 
-        lat: activeLocation.lat, 
-        lng: activeLocation.lng, 
-        name: activeLocation.name 
-      },
+      place: newItem.place || undefined,
+      location: newItem.place ? `${newItem.place.city}, ${newItem.place.country}` : activeLocation.name,
+      lat: newItem.place?.lat || activeLocation.lat,
+      lng: newItem.place?.lng || activeLocation.lng,
       createdAt: new Date().toISOString()
     };
     await addItem(item);
     setIsAddItemOpen(false);
-    setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', locationName: '', lat: 0, lng: 0 });
+    setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', place: null });
   };
 
   const handleAddEvent = async (e: React.FormEvent) => {
@@ -1793,11 +1801,10 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
       description: newEvent.description,
       date: newEvent.date,
       time: newEvent.time,
-      location: {
-        lat: activeLocation.lat, // For now keeping activeLocation lat/lng unless we add coords to newEvent
-        lng: activeLocation.lng,
-        name: newEvent.location || activeLocation.name
-      },
+      place: newEvent.place || undefined,
+      location: newEvent.place ? `${newEvent.place.city}, ${newEvent.place.country}` : activeLocation.name,
+      lat: newEvent.place?.lat || activeLocation.lat,
+      lng: newEvent.place?.lng || activeLocation.lng,
       category: newEvent.category,
       imageUrl: newEvent.imageUrl || '',
       participants: [currentUser.id],
@@ -1808,7 +1815,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
     };
     await addEvent(event);
     setIsAddEventOpen(false);
-    setNewEvent({ title: '', description: '', date: '', time: '', category: 'Social', imageUrl: '', location: '', maxParticipants: 10 });
+    setNewEvent({ title: '', description: '', date: '', time: '', category: 'Social', imageUrl: '', place: null, maxParticipants: 10 });
   };
 
   const matches = useMemo(() => {
@@ -2688,7 +2695,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold truncate">{event.title}</p>
-                      <p className="text-[10px] opacity-40 font-black uppercase">{event.date} • {event.location.name}</p>
+                      <p className="text-[10px] opacity-40 font-black uppercase">{event.date} • {event.location}</p>
                     </div>
                     <div className="flex gap-2">
                       <button 
@@ -2760,14 +2767,12 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Neighborhood (Optional)</label>
-                <LocationSelector 
+                <PlacesAutocomplete 
                   placeholder="Select area..."
-                  value={newRequest.location}
-                  onChange={(val, coords) => setNewRequest({
+                  value={newRequest.place}
+                  onChange={(place) => setNewRequest({
                     ...newRequest, 
-                    location: val, 
-                    lat: coords?.lat || 0, 
-                    lng: coords?.lng || 0
+                    place: place
                   })}
                 />
               </div>
@@ -2931,13 +2936,12 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
             
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Location (Optional)</label>
-              <LocationSelector 
+              <PlacesAutocomplete 
                 placeholder="Search address or venue..."
-                value={newEvent.location}
-                onChange={(val, coords) => setNewEvent({
+                value={newEvent.place}
+                onChange={(place) => setNewEvent({
                   ...newEvent, 
-                  location: val,
-                  // We need to store lat/lng for individual events if we want them on map
+                  place: place
                 })}
               />
             </div>
@@ -3557,19 +3561,20 @@ const TribeNearbyView = ({
   const { spots, destinations, currentUser, trips, marketItems, lookingFor, addLookingFor, removeLookingFor, removeMarketItem, removeSpot, reserveItem, reviews, profiles, collabMode, blocks, tribeRadius, setTribeRadius, deals } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
-  const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0, date: '' });
+  const [newRequest, setNewRequest] = useState<{ title: string; description: string; category: LookingForRequest['category']; place: PlaceResult | null; date: string }>({ title: '', description: '', category: 'Help', place: null, date: '' });
   const [activeLocationIndex, setActiveLocationIndex] = useState(0);
 
   const locations = useMemo(() => {
-    const locs: { name: string; type: 'current' | 'planned' | 'default'; lat: number; lng: number }[] = [];
+    const locs: { name: string; type: 'current' | 'planned' | 'default'; lat: number; lng: number; fullPath?: PlaceResult }[] = [];
     
     // 1. Current Location (Highest Priority)
     if (currentUser?.currentLocation?.name) {
       locs.push({ 
         name: currentUser.currentLocation.name, 
         type: 'current',
-        lat: currentUser.currentLocation.lat,
-        lng: currentUser.currentLocation.lng
+        lat: currentUser.currentLocation.lat || 0,
+        lng: currentUser.currentLocation.lng || 0,
+        fullPath: currentUser.currentLocation
       });
     }
     
@@ -3579,22 +3584,23 @@ const TribeNearbyView = ({
       .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
     
     userTrips.forEach(t => {
-      if (!locs.some(l => l.name === t.location)) {
+      const tripLocName = t.location;
+      if (!locs.some(l => l.name === tripLocName)) {
         locs.push({ 
-          name: t.location, 
+          name: tripLocName, 
           type: 'planned',
-          lat: t.coordinates.lat,
-          lng: t.coordinates.lng
+          lat: t.lat || 0,
+          lng: t.lng || 0,
+          fullPath: t.place
         });
       }
     });
     
     // 3. Fallback
-    const hasAnyLocation = locs.length > 0;
     if (locs.length === 0) {
       locs.push({ name: 'Chiang Mai', type: 'default', lat: 18.7883, lng: 98.9853 });
     }
-    return { locs, hasAnyLocation };
+    return { locs, hasAnyLocation: locs.length > 0 };
   }, [currentUser?.currentLocation, trips, currentUser?.id]);
 
   const activeLocation = useMemo(() => {
@@ -3629,9 +3635,10 @@ const TribeNearbyView = ({
         id: `lf-${Date.now()}`,
         userId: currentUser.id,
         familyName: currentUser.familyName,
-        location: activeLocation.name,
-        lat: activeLocation.lat,
-        lng: activeLocation.lng,
+        place: newRequest.place || undefined,
+        location: newRequest.place ? `${newRequest.place.city}, ${newRequest.place.country}` : activeLocation.name,
+        lat: newRequest.place?.lat || activeLocation.lat,
+        lng: newRequest.place?.lng || activeLocation.lng,
         category: newRequest.category,
         title: cleanContent(newRequest.title),
         description: cleanContent(newRequest.description),
@@ -3640,7 +3647,7 @@ const TribeNearbyView = ({
       };
       await addLookingFor(request);
       setIsLookingForOpen(false);
-      setNewRequest({ title: '', description: '', category: 'Help', location: '', lat: 0, lng: 0, date: '' });
+      setNewRequest({ title: '', description: '', category: 'Help', place: null, date: '' });
     } catch (error) {
       console.error("Failed to add looking for request:", error);
     }
@@ -3685,7 +3692,8 @@ const TribeNearbyView = ({
       }
       
       // Fallback to name matching if coords missing
-      return r.location.toLowerCase().includes(activeLocation.name.toLowerCase().split(',')[0]);
+      const reqCityName = r.location;
+      return reqCityName.toLowerCase().includes(activeLocation.name.toLowerCase().split(',')[0]);
     });
   }, [currentUser, lookingFor, blocks, activeLocation, tribeRadius]);
 
@@ -3695,15 +3703,15 @@ const TribeNearbyView = ({
       if (collabMode && (spot.category !== 'Workspace' && spot.category !== 'Accommodation')) return false;
       
       // Distance filter (50km radius)
-      if (spot.coordinates && activeLocation.lat && activeLocation.lng) {
-        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, spot.coordinates.lat, spot.coordinates.lng);
+      if (spot.place && activeLocation.lat && activeLocation.lng) {
+        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, spot.place.lat, spot.place.lng);
         return dist <= 50;
       }
       
       // Fallback
-      const cityName = (spot as any).cityName;
-      if (cityName) {
-        return cityName.toLowerCase().includes(activeLocation.name.toLowerCase().split(',')[0]);
+      const spotCityName = spot.place.city || spot.place.name;
+      if (spotCityName) {
+        return spotCityName.toLowerCase().includes(activeLocation.name.toLowerCase().split(',')[0]);
       }
       return true;
     });
@@ -3714,8 +3722,8 @@ const TribeNearbyView = ({
       if (d.status !== 'Active') return false;
       if (d.targetPremiumOnly && !isPremium) return false;
       if (d.isGlobal) return true;
-      if (d.location && activeLocation.lat && activeLocation.lng) {
-        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, d.location.lat, d.location.lng);
+      if (d.lat !== undefined && d.lng !== undefined && activeLocation.lat && activeLocation.lng) {
+        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, d.lat, d.lng);
         return dist <= d.radiusKm;
       }
       return false;
@@ -3729,13 +3737,14 @@ const TribeNearbyView = ({
       if (blocks.some(b => (b.blockerId === currentUser.id && b.blockedId === i.sellerId) || (b.blockerId === i.sellerId && b.blockedId === currentUser.id))) return false;
       
       // Distance filter (50km radius)
-      if (i.location && activeLocation.lat && activeLocation.lng) {
-        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, i.location.lat, i.location.lng);
+      if (i.lat && i.lng && activeLocation.lat && activeLocation.lng) {
+        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, i.lat, i.lng);
         return dist <= 50;
       }
       
       // Fallback
-      return i.location.name.toLowerCase().includes(activeLocation.name.toLowerCase().split(',')[0]);
+      const itemCityName = i.location;
+      return itemCityName.toLowerCase().includes(activeLocation.name.toLowerCase().split(',')[0]);
     });
   }, [currentUser, marketItems, blocks, activeLocation]);
 
@@ -4042,7 +4051,7 @@ const TribeNearbyView = ({
                 <h3 className={cn("font-bold text-sm mb-1 truncate", collabMode ? "text-white" : "text-secondary")}>{item.title}</h3>
                 <div className={cn("flex items-center text-[10px] font-bold mb-3", collabMode ? "text-white/40" : "text-slate-400")}>
                   <MapPin className="w-3 h-3 mr-1" />
-                  {item.location.name}
+                  {item.location}
                 </div>
                 <button 
                   disabled={item.status !== 'Available'}
@@ -4274,11 +4283,11 @@ const TribeNearbyView = ({
             />
           </div>
           <div className="space-y-1">
-            <LocationSelector 
+            <PlacesAutocomplete 
               label="Location"
               placeholder="Search city..."
-              value={newRequest.location}
-              onChange={(val, coords) => setNewRequest(prev => ({ ...prev, location: val, lat: coords?.lat || 0, lng: coords?.lng || 0 }))}
+              value={newRequest.place}
+              onChange={(place) => setNewRequest(prev => ({ ...prev, place }))}
             />
           </div>
           <button 
@@ -4593,7 +4602,25 @@ const VibeCheckModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose:
 };
 
 const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificationCenterOpen, isNotificationCenterOpen, setIsConnectOpen, onSetLocation }: { onShare: () => void, onLogout: () => void, onAddTrip: () => void, onEditTrip: (trip: Trip) => void, setIsNotificationCenterOpen: (open: boolean) => void, isNotificationCenterOpen: boolean, setIsConnectOpen: (open: boolean) => void, onSetLocation: () => void }) => {
-  const { currentUser, trips, cities: hubCities, removeTrip, updateProfile, updateKids, reviews, marketItems, spots, destinations, notifications, addToast, collabMode, collabEndorsements, setActiveTab } = useNomadStore();
+  const { 
+    currentUser, 
+    trips, 
+    cities: hubCities, 
+    pastPlaces,
+    removePastPlace,
+    removeTrip, 
+    updateProfile, 
+    updateKids, 
+    reviews, 
+    marketItems, 
+    spots, 
+    destinations, 
+    notifications, 
+    addToast, 
+    collabMode, 
+    collabEndorsements, 
+    setActiveTab 
+  } = useNomadStore();
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isEditTribeOpen, setIsEditTribeOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -5404,7 +5431,9 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                         </button>
                       </div>
                     </div>
-                    <h4 className="font-bold text-lg relative z-10">{trip.location}</h4>
+                    <h4 className="font-bold text-lg relative z-10">
+                      {typeof trip.location === 'string' ? trip.location : (trip.location as any)?.name || 'Unknown Location'}
+                    </h4>
                     <div className="flex items-center gap-2 relative z-10">
                       <p className={cn("text-xs font-bold", collabMode ? "text-white/40" : "text-slate-500")}>
                         {(() => {
@@ -5416,7 +5445,8 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                         })()}
                       </p>
                       {(() => {
-                        const hub = hubCities.find(c => trip.location.toLowerCase().includes(c.name.toLowerCase()));
+                        const locationStr = trip.location.toLowerCase();
+                        const hub = hubCities.find(c => locationStr.includes(c.name.toLowerCase()));
                         if (hub) return <span className={cn("text-[8px] font-black uppercase px-1.5 py-0.5 rounded-lg", collabMode ? "bg-white/10 text-white/60" : "bg-slate-100 text-slate-400")}>{hub.continent}</span>;
                         return null;
                       })()}
@@ -5448,6 +5478,50 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
               )}
             </div>
           </section>
+
+        {/* My Journey (Past Places) */}
+        <section className={cn(
+          "p-8 rounded-[2.5rem] border space-y-6",
+          collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 card-shadow"
+        )}>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10 text-white" : "bg-accent/10 text-accent")}>
+                <HistoryIcon className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className={cn("text-xl font-black", collabMode ? "text-white" : "text-secondary")}>My Journey</h2>
+                <p className={cn("text-xs", collabMode ? "text-white/40" : "text-slate-500")}>Places we've explored as a family.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {pastPlaces.length > 0 ? (
+              [...pastPlaces]
+                .sort((a, b) => b.year - a.year)
+                .map((place) => (
+                  <div key={place.id} className={cn("p-4 rounded-3xl border group relative overflow-hidden", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100")}>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); removePastPlace(place.id); }}
+                      className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-red-100 text-red-500 rounded-lg"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-black opacity-40 uppercase tracking-widest">{place.year}</p>
+                      <h4 className="font-bold text-sm line-clamp-1">{place.name}</h4>
+                      <p className="text-[10px] font-medium opacity-60 line-clamp-1">{place.city}, {place.country}</p>
+                    </div>
+                  </div>
+                ))
+            ) : (
+              <div className={cn("col-span-full py-8 text-center rounded-3xl border border-dashed", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100")}>
+                <p className="text-xs opacity-40 italic">Geen reishistorie gevonden. Voeg plekken toe via Aanbevelingen of Trips!</p>
+              </div>
+            )}
+          </div>
+        </section>
       </div>
 
       {/* Modals */}
@@ -5781,61 +5855,22 @@ const EditLocationModal = ({
   onDetect: () => void, 
   onManual: (e: React.FormEvent) => void,
   isDetecting: boolean,
-  manualLocation: { name: string, lat: number, lng: number },
-  setManualLocation: (val: { name: string, lat: number, lng: number }) => void
+  manualLocation: PlaceResult | null,
+  setManualLocation: (val: PlaceResult | null) => void
 }) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Current Location">
       <div className="space-y-6">
-        <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 text-center space-y-4">
-          <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto text-primary">
-            <Navigation className="w-8 h-8" />
-          </div>
-          <div>
-            <h3 className="font-bold text-secondary">Use GPS</h3>
-            <p className="text-xs text-slate-500">Automatically detect your city and country.</p>
-          </div>
-          <button 
-            disabled={isDetecting}
-            onClick={onDetect}
-            className={cn(
-              "w-full py-4 rounded-xl font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-3 active:scale-[0.98]",
-              isDetecting 
-                ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
-                : "bg-primary text-white shadow-primary/20 hover:scale-[1.02]"
-            )}
-          >
-            {isDetecting ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Detecting...
-              </>
-            ) : (
-              <>
-                <Navigation className="w-5 h-5" />
-                Detect Location
-              </>
-            )}
-          </button>
-        </div>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-100"></div>
-          </div>
-          <div className="relative flex justify-center text-[10px] uppercase font-black text-slate-300 bg-white px-4">
-            Or enter manually
-          </div>
-        </div>
-
         <form onSubmit={onManual} className="space-y-4">
-          <LocationSelector 
+          <PlacesAutocomplete 
             label="Stad, Land"
             placeholder="Bijv. Lissabon, Portugal"
-            value={manualLocation.name}
-            onChange={(val, coords) => setManualLocation({ name: val, lat: coords?.lat || 0, lng: coords?.lng || 0 })}
+            value={manualLocation}
+            onChange={(place) => setManualLocation(place)}
+            searchType="cities"
+            showDetectButton={true}
           />
-          <button type="submit" className="w-full bg-secondary text-white py-4 rounded-2xl font-bold shadow-lg shadow-secondary/20 active:scale-95 transition-transform">
+          <button type="submit" disabled={!manualLocation} className="w-full bg-secondary text-white py-4 rounded-2xl font-bold shadow-lg shadow-secondary/20 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale">
             Set Location
           </button>
         </form>
@@ -5903,7 +5938,7 @@ const EmptyStatePioneer = ({ cityName, onAddSpot }: { cityName: string, onAddSpo
     </div>
   );
 };
-const ExploreView = ({ onAddTrip }: { onAddTrip: (city: string) => void }) => {
+const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void }) => {
   const { spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent, fetchCities } = useNomadStore() as any;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCity, setSelectedCity] = useState<CityProfile | null>(null);
@@ -6155,7 +6190,7 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (city: string) => void }) => {
   );
 };
 
-const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () => void, onAddTrip: (city: string) => void }) => {
+const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () => void, onAddTrip: (place: PlaceResult) => void }) => {
   const { spots, cityEvents, rsvpToCityEvent, collabMode } = useNomadStore() as any;
   const [activeFilter, setActiveFilter] = useState<'All' | SpotCategory>('All');
   
@@ -6208,7 +6243,17 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
             
             <div className="flex gap-3">
               <button 
-                onClick={() => onAddTrip(city.name)}
+                onClick={() => onAddTrip({
+                  name: city.name,
+                  lat: city.coordinates.lat,
+                  lng: city.coordinates.lng,
+                  city: city.name,
+                  country: city.country,
+                  countryCode: '',
+                  address: `${city.name}, ${city.country}`,
+                  placeId: `city-${city.id}`,
+                  types: ['locality', 'political']
+                })}
                 className="bg-primary text-white px-8 py-4 rounded-[1.5rem] font-black shadow-2xl shadow-primary/40 flex items-center gap-3 hover:scale-105 transition-transform"
               >
                 <Calendar className="w-5 h-5" /> Plan Trip
@@ -6439,23 +6484,48 @@ export default function App() {
   const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
   const [selectedItem, setSelectedItem] = useState<MarketItem | null>(null);
   const [isRecommendSpotOpen, setIsRecommendSpotOpen] = useState(false);
-  const [newSpot, setNewSpot] = useState({ name: '', description: '', category: 'Playground' as any, imageUrl: '', locationName: '', lat: 0, lng: 0 });
+  const [newSpot, setNewSpot] = useState<{
+    name: string;
+    description: string;
+    category: SpotCategory;
+    imageUrl: string;
+    place: PlaceResult | null;
+    personallyVisited: boolean;
+    visitedYear: number;
+  }>({ 
+    name: '', 
+    description: '', 
+    category: 'Playground', 
+    imageUrl: '', 
+    place: null,
+    personallyVisited: false,
+    visitedYear: new Date().getFullYear()
+  });
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
-  const [manualLocation, setManualLocation] = useState({ name: '', lat: 0, lng: 0 });
+  const [manualLocation, setManualLocation] = useState<PlaceResult | null>(null);
 
   const [isAddTripOpen, setIsAddTripOpen] = useState(false);
-  const [newTrip, setNewTrip] = useState({ id: '', location: '', startDate: '', endDate: '', lat: 0, lng: 0 });
+  const [newTrip, setNewTrip] = useState<{
+    id: string;
+    place: PlaceResult | null;
+    startDate: string;
+    endDate: string;
+  }>({ id: '', place: null, startDate: '', endDate: '' });
   const [reportingTarget, setReportingTarget] = useState<{ id: string, type: Report['targetType'] } | null>(null);
 
   const handleAddTrip = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser) return;
+    if (!currentUser || !newTrip.place) return;
     try {
       const trip: Trip = {
         id: newTrip.id || `trip-${Date.now()}`,
         familyId: currentUser.id,
-        location: newTrip.location,
-        coordinates: { lat: newTrip.lat, lng: newTrip.lng },
+        place: newTrip.place,
+        location: `${newTrip.place.city}, ${newTrip.place.country}`,
+        lat: newTrip.place.lat,
+        lng: newTrip.place.lng,
+        citySlug: newTrip.place.city.toLowerCase().replace(/\s+/g, '-'),
+        countryCode: newTrip.place.countryCode,
         startDate: newTrip.startDate,
         endDate: newTrip.endDate
       };
@@ -6467,7 +6537,7 @@ export default function App() {
       }
       
       setIsAddTripOpen(false);
-      setNewTrip({ id: '', location: '', startDate: '', endDate: '', lat: 0, lng: 0 });
+      setNewTrip({ id: '', place: null, startDate: '', endDate: '' });
     } catch (err) {
       console.error("Error saving trip:", err);
       addToast("Trip opslaan mislukt.", "error");
@@ -6753,17 +6823,15 @@ export default function App() {
           onLogout={handleLogout}
           onSetLocation={() => setIsLocationModalOpen(true)}
           onAddTrip={() => {
-            setNewTrip({ id: '', location: '', startDate: '', endDate: '', lat: 0, lng: 0 });
+            setNewTrip({ id: '', place: null, startDate: '', endDate: '' });
             setIsAddTripOpen(true);
           }}
           onEditTrip={(trip) => {
             setNewTrip({ 
               id: trip.id, 
-              location: trip.location, 
+              place: trip.place || null, 
               startDate: trip.startDate, 
-              endDate: trip.endDate, 
-              lat: trip.coordinates?.lat || 0, 
-              lng: trip.coordinates?.lng || 0 
+              endDate: trip.endDate 
             });
             setIsAddTripOpen(true);
           }}
@@ -6774,8 +6842,8 @@ export default function App() {
       );
       case 'explore': return (
         <ExploreView 
-          onAddTrip={(city) => {
-            setNewTrip({ id: '', location: city, startDate: '', endDate: '', lat: 0, lng: 0 });
+          onAddTrip={(place) => {
+            setNewTrip({ id: '', place: place, startDate: '', endDate: '' });
             setIsAddTripOpen(true);
           }}
         />
@@ -6817,6 +6885,12 @@ export default function App() {
             name: locationName,
             lat: latitude,
             lng: longitude,
+            city,
+            country,
+            countryCode: addr.country_code?.toUpperCase() || '',
+            address: data.display_name || locationName,
+            placeId: data.place_id?.toString() || `geo-${Date.now()}`,
+            types: data.type ? [data.type] : ['locality'],
             updatedAt: new Date().toISOString()
           }
         });
@@ -6839,37 +6913,18 @@ export default function App() {
 
   const handleManualLocation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualLocation.name) return;
-    
-    let lat = manualLocation.lat;
-    let lng = manualLocation.lng;
-
-    // Fallback: If lat/lng are 0, try to geocode the name first
-    if (lat === 0 && lng === 0) {
-      try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(manualLocation.name)}&limit=1`);
-        const data = await response.json();
-        if (data && data[0]) {
-          lat = parseFloat(data[0].lat);
-          lng = parseFloat(data[0].lon);
-        }
-      } catch (err) {
-        console.error("Manual geocoding fallback failed:", err);
-      }
-    }
+    if (!manualLocation) return;
 
     try {
       await useNomadStore.getState().updateProfile({
         currentLocation: {
-          name: manualLocation.name,
-          lat: manualLocation.lat,
-          lng: manualLocation.lng,
+          ...manualLocation,
           updatedAt: new Date().toISOString()
         }
       });
       setIsLocationModalOpen(false);
-      setManualLocation({ name: '', lat: 0, lng: 0 });
-      addToast("Locatie handmatig ingesteld!", "success");
+      setManualLocation(null);
+      addToast("Locatie ingesteld!", "success");
     } catch (err) {
       console.error("Error setting manual location:", err);
       addToast("Locatie instellen mislukt.", "error");
@@ -7254,7 +7309,7 @@ export default function App() {
       <Modal isOpen={isRecommendSpotOpen} onClose={() => setIsRecommendSpotOpen(false)} title="Recommend a Spot">
         <form className="space-y-4" onSubmit={async (e) => { 
           e.preventDefault(); 
-          if (!currentUser) return;
+          if (!currentUser || !newSpot.place) return;
 
           if (containsBlockedContent(newSpot.name) || containsBlockedContent(newSpot.description)) {
             useNomadStore.getState().addToast("Your recommendation contains inappropriate language.", "error");
@@ -7267,7 +7322,7 @@ export default function App() {
             description: cleanContent(newSpot.description),
             category: newSpot.category,
             imageUrl: newSpot.imageUrl,
-            coordinates: { lat: newSpot.lat || 0, lng: newSpot.lng || 0 },
+            place: newSpot.place,
             verifiedTags: ['Community Recommended'],
             tags: [],
             rating: 5.0,
@@ -7285,8 +7340,22 @@ export default function App() {
           };
           
           await useNomadStore.getState().addSpot(spot);
+
+          // Add to past places if checked
+          if (newSpot.personallyVisited && newSpot.place) {
+            await useNomadStore.getState().addPastPlace(newSpot.place, newSpot.visitedYear);
+          }
+
           setIsRecommendSpotOpen(false); 
-          setNewSpot({ name: '', description: '', category: 'Playground', imageUrl: '', locationName: '', lat: 0, lng: 0 });
+          setNewSpot({ 
+            name: '', 
+            description: '', 
+            category: 'Playground', 
+            imageUrl: '', 
+            place: null,
+            personallyVisited: false,
+            visitedYear: new Date().getFullYear()
+          });
           useNomadStore.getState().addToast("Bedankt voor je aanbeveling! Ons team zal het verifiëren.", "success"); 
         }}>
           <ImageUpload label="Spot Photo" onUpload={(url) => setNewSpot(prev => ({...prev, imageUrl: url}))} />
@@ -7295,13 +7364,57 @@ export default function App() {
               <img src={newSpot.imageUrl || null} alt="Preview" className="w-full h-full object-cover" />
             </div>
           )}
+          
+          <PlacesAutocomplete 
+            label="Search for the Place"
+            placeholder="Search business, park, restaurant..."
+            value={newSpot.place}
+            onChange={(place) => {
+              if (place) {
+                setNewSpot(prev => ({ 
+                  ...prev, 
+                  place, 
+                  name: prev.name || place.name 
+                }));
+              }
+            }}
+          />
+
+          {newSpot.place && !newSpot.place.types.includes('locality') && (
+            <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input 
+                  type="checkbox"
+                  className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
+                  checked={newSpot.personallyVisited}
+                  onChange={e => setNewSpot(prev => ({ ...prev, personallyVisited: e.target.checked }))}
+                />
+                <span className="text-sm font-bold text-secondary">Did you personally visit this place?</span>
+              </label>
+              
+              {newSpot.personallyVisited && (
+                <div className="flex items-center gap-3 ml-8">
+                  <span className="text-xs font-medium text-slate-500">When?</span>
+                  <select 
+                    className="bg-white border border-slate-100 rounded-lg px-2 py-1 text-xs font-bold"
+                    value={newSpot.visitedYear}
+                    onChange={e => setNewSpot(prev => ({ ...prev, visitedYear: parseInt(e.target.value) }))}
+                  >
+                    {Array.from({ length: 15 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Spot Name</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Spot Name Override (optional)</label>
             <input 
-              required 
               type="text" 
               className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all" 
-              placeholder="e.g. Best Playground Ever" 
+              placeholder={newSpot.place?.name || "e.g. Best Playground Ever"} 
               value={newSpot.name}
               onChange={e => setNewSpot({...newSpot, name: e.target.value})}
             />
@@ -7467,16 +7580,15 @@ export default function App() {
         dark={collabMode}
       >
         <form onSubmit={handleAddTrip} className="space-y-6">
-          <LocationSelector 
-            label="Location"
-            placeholder="Search city (e.g. Barcelona, Spanje)"
-            value={newTrip.location}
-            onChange={(val, coords) => setNewTrip(prev => ({ 
+          <PlacesAutocomplete 
+            label="Destination"
+            placeholder="Search city (e.g. Barcelona, Spain)"
+            value={newTrip.place}
+            onChange={(place) => setNewTrip(prev => ({ 
               ...prev, 
-              location: val, 
-              lat: coords?.lat || prev.lat, 
-              lng: coords?.lng || prev.lng 
+              place
             }))}
+            searchType="cities"
           />
           
           <div className="grid grid-cols-2 gap-4">

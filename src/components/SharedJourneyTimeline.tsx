@@ -19,8 +19,10 @@ export const SharedJourneyTimeline: React.FC<SharedJourneyTimelineProps> = ({ us
   const overlaps = useMemo(() => {
     const results: { location: string; days: number }[] = [];
     userTrips.forEach(u => {
+      const uLocName = u.location.toLowerCase();
       otherTrips.forEach(o => {
-        if (u.location.toLowerCase() === o.location.toLowerCase()) {
+        const oLocName = o.location.toLowerCase();
+        if (uLocName === oLocName) {
           const uStart = parseISO(u.startDate);
           const uEnd = parseISO(u.endDate);
           const oStart = parseISO(o.startDate);
@@ -153,7 +155,9 @@ export const SharedJourneyTimeline: React.FC<SharedJourneyTimelineProps> = ({ us
 
           {/* Overlap Highlights (Bright Green) */}
           {userTrips.map(u => otherTrips.map(o => {
-            if (u.location.toLowerCase() !== o.location.toLowerCase()) return null;
+            const uLocName = u.location.toLowerCase();
+            const oLocName = o.location.toLowerCase();
+            if (uLocName !== oLocName) return null;
             const uStart = parseISO(u.startDate);
             const uEnd = parseISO(u.endDate);
             const oStart = parseISO(o.startDate);
