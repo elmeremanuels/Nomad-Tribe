@@ -36,11 +36,20 @@ interface MapViewProps {
 
 const RecenterMap = ({ center }: { center: { lat: number; lng: number } }) => {
   const map = useMap();
+  const prevCenter = React.useRef(center);
+
   useEffect(() => {
-    if (center && typeof center.lat === 'number' && typeof center.lng === 'number' && !isNaN(center.lat) && !isNaN(center.lng)) {
-      map.setView([center.lat, center.lng]);
+    if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number' || isNaN(center.lat) || isNaN(center.lng)) return;
+
+    const latChanged = Math.abs(prevCenter.current.lat - center.lat) > 0.001;
+    const lngChanged = Math.abs(prevCenter.current.lng - center.lng) > 0.001;
+
+    if (latChanged || lngChanged) {
+      map.setView([center.lat, center.lng], map.getZoom(), { animate: true });
+      prevCenter.current = center;
     }
-  }, [center, map]);
+  }, [center.lat, center.lng, map]);
+
   return null;
 };
 
@@ -64,8 +73,8 @@ export const MapView: React.FC<MapViewProps> = ({
 }) => {
   // Guard against invalid center coordinates
   const safeCenter = {
-    lat: typeof center?.lat === 'number' && !isNaN(center.lat) ? center.lat : 0,
-    lng: typeof center?.lng === 'number' && !isNaN(center.lng) ? center.lng : 0,
+    lat: typeof center?.lat === 'number' && !isNaN(center.lat) && Math.abs(center.lat) > 0.0001 ? center.lat : 0,
+    lng: typeof center?.lng === 'number' && !isNaN(center.lng) && Math.abs(center.lng) > 0.0001 ? center.lng : 0,
   };
 
   return (
@@ -89,47 +98,52 @@ export const MapView: React.FC<MapViewProps> = ({
         className="w-full h-full"
       >
         <TileLayer
-          attribution='&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
         />
         
-        <RecenterMap center={safeCenter} />
+        {safeCenter.lat !== 0 && safeCenter.lng !== 0 && <RecenterMap center={safeCenter} />}
 
         {/* Tribe Radius Circle */}
-        <Circle 
-          center={[safeCenter.lat, safeCenter.lng]}
-          radius={radiusKm * 1000}
-          pathOptions={{ 
-            fillColor: 'var(--primary)', 
-            fillOpacity: 0.1, 
-            color: 'var(--primary)', 
-            weight: 1,
-            dashArray: '5, 10'
-          }}
-        />
+        {safeCenter.lat !== 0 && safeCenter.lng !== 0 && (
+          <Circle 
+            center={[safeCenter.lat, safeCenter.lng]}
+            radius={radiusKm * 1000}
+            pathOptions={{ 
+              fillColor: 'var(--primary)', 
+              fillOpacity: 0.1, 
+              color: 'var(--primary)', 
+              weight: 1,
+              dashArray: '5, 10'
+            }}
+          />
+        )}
 
         {/* Current Location / Focus Point (Custom Icon with User Photo) */}
-        <Marker 
-          position={[safeCenter.lat, safeCenter.lng]}
-          zIndexOffset={1000}
-          icon={new L.DivIcon({
-            className: 'custom-div-icon',
-            html: `<div class="w-12 h-12 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-primary ring-4 ring-primary/20">
-                    <img src="${userPhotoUrl || 'https://ui-avatars.com/api/?name=Me&background=random'}" class="w-full h-full object-cover shadow-inner" />
-                  </div>`,
-            iconSize: [48, 48],
-            iconAnchor: [24, 24]
-          })}
-        >
-          <Popup>
-            <div className="p-1">
-              <p className="font-black text-secondary text-xs uppercase tracking-widest text-center">Your Location</p>
-            </div>
-          </Popup>
-        </Marker>
+        {safeCenter.lat !== 0 && safeCenter.lng !== 0 && (
+          <Marker 
+            position={[safeCenter.lat, safeCenter.lng]}
+            zIndexOffset={1000}
+            icon={new L.DivIcon({
+              className: 'custom-div-icon',
+              html: `<div class="w-12 h-12 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-primary ring-4 ring-primary/20">
+                      <img src="${userPhotoUrl || 'https://ui-avatars.com/api/?name=Me&background=random'}" class="w-full h-full object-cover shadow-inner" />
+                    </div>`,
+              iconSize: [48, 48],
+              iconAnchor: [24, 24]
+            })}
+          >
+            <Popup>
+              <div className="p-1">
+                <p className="font-black text-secondary text-xs uppercase tracking-widest text-center">Your Location</p>
+              </div>
+            </Popup>
+          </Marker>
+        )}
 
         {/* Profiles */}
-        {profiles.map(profile => profile.currentLocation && typeof profile.currentLocation.lat === 'number' && typeof profile.currentLocation.lng === 'number' && (
+        {profiles.map(profile => profile.currentLocation && typeof profile.currentLocation.lat === 'number' && typeof profile.currentLocation.lng === 'number' && (Math.abs(profile.currentLocation.lat) > 0.001 || Math.abs(profile.currentLocation.lng) > 0.001) && (
           <Marker 
             key={profile.id} 
             position={[profile.currentLocation.lat, profile.currentLocation.lng]}
@@ -157,7 +171,7 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Vetted Spots */}
-        {spots.map(spot => spot.place && typeof spot.place.lat === 'number' && typeof spot.place.lng === 'number' && (
+        {spots.map(spot => spot.place && typeof spot.place.lat === 'number' && typeof spot.place.lng === 'number' && (Math.abs(spot.place.lat) > 0.001 || Math.abs(spot.place.lng) > 0.001) && (
           <Marker 
             key={spot.id} 
             position={[spot.place.lat, spot.place.lng]}
@@ -186,7 +200,7 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Deals */}
-        {deals.map(deal => typeof deal.lat === 'number' && typeof deal.lng === 'number' && (
+        {deals.map(deal => typeof deal.lat === 'number' && typeof deal.lng === 'number' && (Math.abs(deal.lat) > 0.001 || Math.abs(deal.lng) > 0.001) && (
           <Marker 
             key={deal.id} 
             position={[deal.lat, deal.lng]}
@@ -210,7 +224,7 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Events */}
-        {events.map(event => typeof event.lat === 'number' && typeof event.lng === 'number' && (
+        {events.map(event => typeof event.lat === 'number' && typeof event.lng === 'number' && (Math.abs(event.lat) > 0.001 || Math.abs(event.lng) > 0.001) && (
           <Marker 
             key={event.id} 
             position={[event.lat, event.lng]}
@@ -234,7 +248,7 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Requests (Looking For) */}
-        {requests.map(req => typeof req.lat === 'number' && typeof req.lng === 'number' && (
+        {requests.map(req => typeof req.lat === 'number' && typeof req.lng === 'number' && (Math.abs(req.lat) > 0.001 || Math.abs(req.lng) > 0.001) && (
           <Marker 
             key={req.id} 
             position={[req.lat, req.lng]}
@@ -258,7 +272,7 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Market Items */}
-        {marketItems.map(item => typeof item.lat === 'number' && typeof item.lng === 'number' && (
+        {marketItems.map(item => typeof item.lat === 'number' && typeof item.lng === 'number' && (Math.abs(item.lat) > 0.001 || Math.abs(item.lng) > 0.001) && (
           <Marker 
             key={item.id} 
             position={[item.lat, item.lng]}

@@ -9,6 +9,7 @@ import { TagInput } from './components/TagInput';
 import { SharedJourneyTimeline } from './components/SharedJourneyTimeline';
 import { PlacesAutocomplete } from './components/PlacesAutocomplete';
 import { MapView } from './components/MapView';
+import { SpotCard } from './components/SpotCard';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import { standardizeInterest } from './lib/interestUtils';
@@ -1534,6 +1535,8 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   const [isLocalFeedOpen, setIsLocalFeedOpen] = useState(false);
   const [isVibeCheckOpen, setIsVibeCheckOpen] = useState(false);
   const [tribeSearchQuery, setTribeSearchQuery] = useState('');
+  const [spotSearchQuery, setSpotSearchQuery] = useState('');
+  const [spotCategoryFilter, setSpotCategoryFilter] = useState('All');
   const [professionalOnly, setProfessionalOnly] = useState(false);
   const [activeLocationIndex, setActiveLocationIndex] = useState(0);
 
@@ -1676,6 +1679,16 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
     ];
     return items.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
   }, [localEvents, localRequests, localMarketItems]);
+
+  const searchedSpots = useMemo(() => {
+    return filteredSpots.filter(spot => {
+      const matchesSearch = spot.name.toLowerCase().includes(spotSearchQuery.toLowerCase()) || 
+                           spot.description.toLowerCase().includes(spotSearchQuery.toLowerCase()) ||
+                           spot.tags?.some(tag => tag.toLowerCase().includes(spotSearchQuery.toLowerCase()));
+      const matchesCategory = spotCategoryFilter === 'All' || spot.category === spotCategoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+  }, [filteredSpots, spotSearchQuery, spotCategoryFilter]);
 
   const placesYouMayLike = useMemo(() => {
     return spots.filter(s => s.isVetted && calculateDistance(activeLocation.lat, activeLocation.lng, s.place.lat, s.place.lng) <= tribeRadius).slice(0, 3);
@@ -2462,18 +2475,61 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
             {/* Deals & Vetted Spots Column */}
             <div className="space-y-8">
               <div className="space-y-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <ShieldCheck className="w-5 h-5 text-primary" />
-                  <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Vetted Spots</h3>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-primary" />
+                    <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Vetted Spots</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Search className="w-3.5 h-3.5 opacity-40" />
+                    <input 
+                      type="text"
+                      placeholder="Search spots..."
+                      value={spotSearchQuery}
+                      onChange={(e) => setSpotSearchQuery(e.target.value)}
+                      className="bg-transparent border-none text-[10px] font-bold focus:ring-0 p-0 w-24 placeholder:opacity-30"
+                    />
+                  </div>
                 </div>
+
+                {/* Spot Filter Pills */}
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                  {['All', 'Cafe', 'Playground', 'Workspace', 'Restaurant'].map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSpotCategoryFilter(cat)}
+                      className={cn(
+                        "px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all flex-shrink-0",
+                        spotCategoryFilter === cat 
+                          ? "bg-primary text-white" 
+                          : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                      )}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="space-y-4">
-                  {filteredSpots.length === 0 && <p className="text-xs opacity-40 italic">No vetted spots nearby.</p>}
-                  {filteredSpots.slice(0, 5).map(spot => (
-                    <div key={spot.id} className={cn("p-4 rounded-2xl border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100")}>
-                       <p className="text-[10px] font-black text-primary uppercase mb-1">{spot.category}</p>
-                       <p className="text-xs font-bold truncate">{spot.name}</p>
-                       <p className="text-[9px] opacity-60 line-clamp-1">{spot.description}</p>
+                  {searchedSpots.length === 0 && (
+                    <div className="py-8 text-center bg-slate-50/50 rounded-3xl border border-dashed border-slate-200">
+                      <p className="text-[10px] font-bold text-slate-400">No spots found matching your search.</p>
+                      <button 
+                        onClick={() => { setSpotSearchQuery(''); setSpotCategoryFilter('All'); }}
+                        className="text-[9px] font-black text-primary uppercase mt-2"
+                      >
+                        Clear Filters
+                      </button>
                     </div>
+                  )}
+                  {searchedSpots.slice(0, 8).map(spot => (
+                    <SpotCard 
+                      key={spot.id} 
+                      spot={spot} 
+                      collabMode={collabMode}
+                      currentUserId={currentUser?.id}
+                      onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
+                    />
                   ))}
                 </div>
               </div>
@@ -6191,7 +6247,7 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void })
 };
 
 const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () => void, onAddTrip: (place: PlaceResult) => void }) => {
-  const { spots, cityEvents, rsvpToCityEvent, collabMode } = useNomadStore() as any;
+  const { spots, cityEvents, rsvpToCityEvent, collabMode, currentUser } = useNomadStore() as any;
   const [activeFilter, setActiveFilter] = useState<'All' | SpotCategory>('All');
   
   const citySpots = useMemo(() => {
@@ -6289,7 +6345,21 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
              <section className="space-y-6">
                 <h2 className="text-2xl font-black text-secondary tracking-tight">Local Tribe Guide</h2>
                 <div className="h-[400px] rounded-[3rem] overflow-hidden border border-slate-100 shadow-xl">
-                   <MapView center={city.coordinates} />
+                   <MapView 
+                    center={city.coordinates} 
+                    spots={citySpots}
+                    events={events.map(e => ({
+                      ...e,
+                      organizerName: 'Hub',
+                      participants: e.rsvps || [],
+                      maxParticipants: 100,
+                      imageUrl: `https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=400&auto=format&fit=crop`,
+                      description: e.title,
+                      date: new Date().toISOString(),
+                      location: city.name,
+                      createdAt: new Date().toISOString()
+                    } as any))}
+                   />
                 </div>
              </section>
 
@@ -6349,21 +6419,18 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
                       <p className="text-slate-400 font-bold">More verified spots coming soon!</p>
                    </div>
                 ) : (
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {filteredSpots.map((spot: Spot) => (
-                        <div key={spot.id} className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-lg transition-transform hover:scale-[1.02] group cursor-pointer">
-                           <div className="h-48 rounded-2xl overflow-hidden mb-4 relative bg-slate-100">
-                              <img src={spot.imageUrl || `https://picsum.photos/seed/${spot.id}/800/600`} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                              <div className="absolute top-4 right-4 px-2 py-1 bg-white/90 backdrop-blur rounded-lg text-[9px] font-black text-secondary">
-                                 ⭐ {spot.rating}
-                              </div>
-                           </div>
-                           <h3 className="font-black text-secondary px-2">{spot.name}</h3>
-                           <p className="text-[10px] text-slate-400 font-bold px-2 mb-2 uppercase tracking-widest">{spot.category}</p>
-                           <p className="text-xs text-slate-500 font-medium px-2 line-clamp-2">{spot.description}</p>
-                        </div>
+                        <SpotCard 
+                          key={spot.id} 
+                          spot={spot} 
+                          collabMode={collabMode}
+                          currentUserId={currentUser?.id}
+                          onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
+                          className="w-full"
+                        />
                       ))}
-                   </div>
+                    </div>
                 )}
              </section>
            </div>
@@ -6546,6 +6613,11 @@ export default function App() {
 
   useEffect(() => {
     init();
+    // Inject Google Maps API key to the loader in index.html
+    const loader = document.querySelector('gmpx-api-loader');
+    if (loader) {
+      loader.setAttribute('key', import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '');
+    }
   }, []);
 
   useEffect(() => {
@@ -6863,52 +6935,77 @@ export default function App() {
 
   const handleGetLocation = async () => {
     if (!navigator.geolocation) {
-      addToast("Geolocatie wordt niet ondersteund door je browser.", "error");
+      addToast('Geolocatie wordt niet ondersteund door je browser.', 'error');
       return;
     }
 
     setIsDetectingLocation(true);
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      const { latitude, longitude } = position.coords;
-      try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-        const data = await response.json();
-        
-        // Robust address parsing
-        const addr = data.address || {};
-        const city = addr.city || addr.town || addr.village || addr.suburb || addr.municipality || addr.state_district || addr.state || 'Unknown City';
-        const country = addr.country || 'Unknown Country';
-        
-        const locationName = `${city}, ${country}`;
-        await useNomadStore.getState().updateProfile({
-          currentLocation: {
-            name: locationName,
-            lat: latitude,
-            lng: longitude,
-            city,
-            country,
-            countryCode: addr.country_code?.toUpperCase() || '',
-            address: data.display_name || locationName,
-            placeId: data.place_id?.toString() || `geo-${Date.now()}`,
-            types: data.type ? [data.type] : ['locality'],
-            updatedAt: new Date().toISOString()
+
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords: { latitude: lat, longitude: lng } }) => {
+        try {
+          // Google Geocoding API — consistenter dan Nominatim
+          const res = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json` +
+            `?latlng=${lat},${lng}` +
+            `&result_type=locality|administrative_area_level_1` +
+            `&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
+          );
+          const data = await res.json();
+
+          if (data.status !== 'OK' || !data.results?.length) {
+            throw new Error('No results from geocoder');
           }
-        });
-        setIsLocationModalOpen(false);
-        addToast(`Locatie ingesteld op ${locationName}`, "success");
-      } catch (error) {
-        console.error("Error reverse geocoding:", error);
-        addToast("Stad/land ophalen mislukt. Voer het handmatig in.", "error");
-      } finally {
+
+          const result = data.results[0];
+          const components: any[] = result.address_components || [];
+          const get = (type: string) =>
+            components.find((c: any) => c.types.includes(type))?.long_name;
+          const getShort = (type: string) =>
+            components.find((c: any) => c.types.includes(type))?.short_name;
+
+          const city =
+            get('locality') ||
+            get('administrative_area_level_2') ||
+            get('administrative_area_level_1') ||
+            'Unknown City';
+          const country = get('country') || 'Unknown';
+          const countryCode = getShort('country') || 'XX';
+
+          await useNomadStore.getState().updateProfile({
+            currentLocation: {
+              name: `${city}, ${country}`,
+              city,
+              country,
+              countryCode,
+              lat,
+              lng,
+              address: result.formatted_address,
+              placeId: result.place_id,
+              types: result.types,
+              updatedAt: new Date().toISOString()
+            }
+          });
+
+          setIsLocationModalOpen(false);
+          addToast(`Location set to ${city}, ${country}`, 'success');
+        } catch (err) {
+          console.error('Reverse geocoding failed:', err);
+          addToast('Could not detect city. Please enter it manually.', 'error');
+        } finally {
+          setIsDetectingLocation(false);
+        }
+      },
+      (err) => {
         setIsDetectingLocation(false);
-      }
-    }, (error) => {
-      console.error("Geolocation error:", error);
-      setIsDetectingLocation(false);
-      let msg = "Locatie ophalen mislukt.";
-      if (error.code === 1) msg = "Locatie toegang geweigerd door gebruiker.";
-      addToast(msg, "error");
-    }, { timeout: 10000 });
+        const msg =
+          err.code === 1 ? 'Location access denied. Please enable it in your browser settings.' :
+          err.code === 2 ? 'Location unavailable. Try again or enter manually.' :
+          'Location request timed out.';
+        addToast(msg, 'error');
+      },
+      { timeout: 12000, maximumAge: 60000 }
+    );
   };
 
   const handleManualLocation = async (e: React.FormEvent) => {
@@ -7309,7 +7406,10 @@ export default function App() {
       <Modal isOpen={isRecommendSpotOpen} onClose={() => setIsRecommendSpotOpen(false)} title="Recommend a Spot">
         <form className="space-y-4" onSubmit={async (e) => { 
           e.preventDefault(); 
-          if (!currentUser || !newSpot.place) return;
+          if (!currentUser || !newSpot.place) {
+            useNomadStore.getState().addToast("Please search for and select a valid location.", "error"); 
+            return;
+          }
 
           if (containsBlockedContent(newSpot.name) || containsBlockedContent(newSpot.description)) {
             useNomadStore.getState().addToast("Your recommendation contains inappropriate language.", "error");
@@ -7327,8 +7427,8 @@ export default function App() {
             tags: [],
             rating: 5.0,
             recommendedBy: currentUser.id,
-            citySlug: 'unknown',
-            countryCode: 'XX',
+            citySlug: newSpot.place.city ? newSpot.place.city.toLowerCase().replace(/\s+/g, '-') : 'unknown',
+            countryCode: newSpot.place.countryCode || 'XX',
             isVetted: false,
             reportCount: 0,
             isHidden: false,

@@ -1548,16 +1548,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       const data = docSnap.data();
       const votes = data.votes || { up: [], down: [] };
       
-      // Calculate weight based on badges
-      const userBadges = user.badges || [];
-      const weight = 1 + (userBadges.length * 0.5); // Each badge adds 0.5 weight
-
-      // Remove existing vote from both lists
       const up = (votes.up || []).filter((uid: string) => uid !== user.id);
       const down = (votes.down || []).filter((uid: string) => uid !== user.id);
 
-      // Add new vote (conceptually weight is handled by repeating the ID or just counting differently)
-      // For simplicity in this schema, we store the ID. The weight is calculated during display/aggregation.
       if (direction === 'up') {
         up.push(user.id);
       } else {
@@ -1566,14 +1559,24 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
       const newVotes = { up, down };
 
-      // Check auto-delete rule: if difference is -20 or worse (weighted)
-      // We'll keep the simple count for auto-delete to avoid complexity in rules
+      // Auto-delete if difference is -20 or worse
       if (up.length - down.length <= -20) {
         await deleteDoc(docRef);
         return;
       }
 
-      await updateDoc(docRef, { votes: newVotes });
+      const updates: any = { votes: newVotes };
+
+      // Herbereken rating voor spots (0-10 schaal)
+      if (type === 'spots') {
+        const total = up.length + down.length;
+        const newRating = total === 0
+          ? 5.0
+          : Math.max(0, Math.min(10, 5 + (up.length - down.length) / Math.max(total, 1) * 5));
+        updates.rating = parseFloat(newRating.toFixed(1));
+      }
+
+      await updateDoc(docRef, updates);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `${type}/${id}`);
     }
