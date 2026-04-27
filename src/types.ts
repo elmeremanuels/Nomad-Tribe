@@ -132,7 +132,7 @@ export interface FamilyProfile {
     updatedAt: string;
   };
   hasCompletedOnboarding?: boolean; // Added
-  role: 'User' | 'UserPlus' | 'SuperAdmin';
+  role: 'User' | 'UserPlus' | 'SuperAdmin' | 'Advertiser';
   collabCard?: CollabCard;
   openToCollabs: boolean;
   privacySettings: PrivacySettings;
@@ -227,7 +227,6 @@ export interface Spot {
   rating: number;
   recommendedBy?: string;
   votes?: { up: string[]; down: string[] };
-  monthlyDeal?: { title: string; discount: string; description: string };
 
   // --- NEW: Locatie & Geo ---
   coordinates: { lat: number; lng: number };
@@ -249,6 +248,12 @@ export interface Spot {
   ageRange?: { min: number; max: number }; 
   openingHours?: OpeningHours; 
   priceLevel?: 0 | 1 | 2 | 3; 
+  monthlyDeal?: {
+    discount: string;
+    description: string;
+    promoCode?: string;
+    expiresAt?: string;
+  };
   website?: string;
   phoneNumber?: string;
   verifiedTags: string[]; 
@@ -440,6 +445,84 @@ export interface PopUpEvent {
   isCollaborative?: boolean;
   upvotes?: string[];
   downvotes?: string[];
+}
+
+// ── DEALS ──────────────────────────────────────────────
+
+export type DealCategory =
+  | 'Hotel'
+  | 'Restaurant'
+  | 'VPN'
+  | 'Creditcard'
+  | 'Vluchten'
+  | 'Verzekering'
+  | 'SIM-kaart'
+  | 'Coworking'
+  | 'Activiteiten'
+  | 'Overig';
+
+export type DealStatus = 'Active' | 'Paused' | 'Expired';
+
+export interface Deal {
+  id: string;
+
+  // Content
+  name: string;
+  advertiserId: string;         // FK naar advertisers/{id}
+  advertiserName: string;       // Denormalized voor display
+  category: DealCategory;
+  description: string;
+  imageUrl: string;
+  logoUrl?: string;
+  disclaimer?: string;          // "Geldig t/m 31 dec · excl. belastingen"
+
+  // Pricing
+  originalPrice?: number;
+  dealPrice?: number;
+  currency: string;             // 'EUR' | 'USD' | 'GBP' — default 'EUR'
+  discountLabel?: string;       // "20% OFF" / "FREE 1 maand"
+
+  // CTA
+  affiliateUrl: string;
+  promoCode?: string;
+  ctaText: string;              // "Book Now" | "Get Deal" | "Claim Code" | "Apply Now"
+
+  // Targeting
+  isGlobal: boolean;
+  location?: { name: string; lat: number; lng: number };
+  radiusKm: number;             // Default 25
+
+  // Scheduling
+  startDate: string;            // ISO
+  endDate: string;              // ISO
+
+  // Status
+  status: DealStatus;
+  isFeatured: boolean;
+  targetPremiumOnly: boolean;
+
+  // Tracking (atomaire updates via increment())
+  impressions: number;
+  clicks: number;
+
+  // Meta
+  createdAt: string;
+  createdBy: string;            // Super Admin uid
+  reportToken: string;          // Unieke token voor publieke rapport-link
+}
+
+// ── ADVERTISER ─────────────────────────────────────────
+
+export interface Advertiser {
+  id: string;                   // Firebase Auth uid van het adverteerder-account
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone?: string;
+  notes?: string;               // Intern — bijv. "betaalt per kwartaal"
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string;            // Super Admin uid die het account aanmaakte
 }
 
 // Replaced by Conversation and Message above

@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import { cn } from '../lib/utils';
-import { FamilyProfile, Spot, MarketItem, PopUpEvent, LookingForRequest } from '../types';
+import { FamilyProfile, Spot, MarketItem, PopUpEvent, LookingForRequest, Deal } from '../types';
 
 // Fix for default Leaflet icons in Vite
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -23,13 +23,15 @@ interface MapViewProps {
   marketItems?: MarketItem[];
   events?: PopUpEvent[];
   requests?: LookingForRequest[];
-  deals?: Spot[];
+  deals?: Deal[];
   className?: string;
   onSelectFamily?: (family: FamilyProfile) => void;
   onSelectSpot?: (spot: Spot) => void;
   onSelectItem?: (item: MarketItem) => void;
   onSelectEvent?: (event: PopUpEvent) => void;
   onSelectRequest?: (req: LookingForRequest) => void;
+  userPhotoUrl?: string;
+  radiusKm?: number;
 }
 
 const RecenterMap = ({ center }: { center: { lat: number; lng: number } }) => {
@@ -54,7 +56,9 @@ export const MapView: React.FC<MapViewProps> = ({
   onSelectSpot,
   onSelectItem,
   onSelectEvent,
-  onSelectRequest
+  onSelectRequest,
+  userPhotoUrl,
+  radiusKm = 25
 }) => {
   return (
     <div className={cn("w-full h-full rounded-[2.5rem] overflow-hidden border-2 border-slate-100 shadow-inner relative z-0 toner-map", className)}>
@@ -83,21 +87,35 @@ export const MapView: React.FC<MapViewProps> = ({
         
         <RecenterMap center={center} />
 
-        {/* Current Location / Focus Point (Custom Icon to fix broken image in default marker) */}
+        {/* Tribe Radius Circle */}
+        <Circle 
+          center={[center.lat, center.lng]}
+          radius={radiusKm * 1000}
+          pathOptions={{ 
+            fillColor: 'var(--primary)', 
+            fillOpacity: 0.1, 
+            color: 'var(--primary)', 
+            weight: 1,
+            dashArray: '5, 10'
+          }}
+        />
+
+        {/* Current Location / Focus Point (Custom Icon with User Photo) */}
         <Marker 
           position={[center.lat, center.lng]}
+          zIndexOffset={1000}
           icon={new L.DivIcon({
             className: 'custom-div-icon',
-            html: `<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white border-4 border-white shadow-xl animate-pulse">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            html: `<div class="w-12 h-12 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-primary ring-4 ring-primary/20">
+                    <img src="${userPhotoUrl || 'https://ui-avatars.com/api/?name=Me&background=random'}" class="w-full h-full object-cover shadow-inner" />
                   </div>`,
-            iconSize: [40, 40],
-            iconAnchor: [20, 40]
+            iconSize: [48, 48],
+            iconAnchor: [24, 24]
           })}
         >
           <Popup>
             <div className="p-1">
-              <p className="font-black text-secondary text-xs uppercase tracking-widest text-center">Focus Location</p>
+              <p className="font-black text-secondary text-xs uppercase tracking-widest text-center">Your Location</p>
             </div>
           </Popup>
         </Marker>
@@ -160,10 +178,10 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Deals */}
-        {deals.map(deal => (
+        {deals.map(deal => deal.location && (
           <Marker 
             key={deal.id} 
-            position={[deal.coordinates.lat, deal.coordinates.lng]}
+            position={[deal.location.lat, deal.location.lng]}
             icon={new L.DivIcon({
               className: 'custom-div-icon',
               html: `<div class="w-8 h-8 rounded-xl bg-accent text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform border-2 border-white">
@@ -177,7 +195,7 @@ export const MapView: React.FC<MapViewProps> = ({
               <div className="p-2 min-w-[120px] text-center">
                 <p className="font-black text-[9px] text-accent uppercase mb-1">Tribe Deal</p>
                 <p className="font-bold text-secondary mb-1">{deal.name}</p>
-                <p className="text-[10px] font-bold text-accent mb-2">{deal.monthlyDeal?.discount}</p>
+                <p className="text-[10px] font-bold text-accent mb-2">{deal.discountLabel}</p>
               </div>
             </Popup>
           </Marker>

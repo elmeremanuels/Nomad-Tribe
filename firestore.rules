@@ -200,6 +200,16 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.organizerId == request.auth.uid);
     }
 
+    match /deals/{dealId} {
+      allow get: if isAuthenticated();
+      allow list: if isAuthenticated() && (isAdmin() || resource.data.status == 'Active');
+      allow write: if isAdmin();
+    }
+
+    match /advertisers/{advertiserId} {
+      allow read, write: if isAdmin();
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;

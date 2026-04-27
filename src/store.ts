@@ -24,7 +24,11 @@ import {
   CityEvent,
   SpotCategory,
   EventCategory,
-  DestinationGuidance
+  DestinationGuidance,
+  Deal,           // Added
+  Advertiser,     // Added
+  DealCategory,   // Added
+  DealStatus      // Added
 } from './types';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { 
@@ -42,11 +46,12 @@ import {
   serverTimestamp,
   orderBy,
   writeBatch,
-  arrayUnion
+  arrayUnion,
+  increment       // Added
 } from 'firebase/firestore';
 import { onAuthStateChanged, getRedirectResult, User as FirebaseUser, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth';
 
-const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; // km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -90,6 +95,9 @@ interface NomadStore {
   reviews: SpotReview[];
   collabAsks: CollabAsk[];
   collabEndorsements: CollabEndorsement[];
+  deals: Deal[];
+  adminDeals: Deal[];
+  advertisers: Advertiser[];
   
   // Actions
   init: () => void;
@@ -129,6 +137,16 @@ interface NomadStore {
   addCollabAsk: (ask: CollabAsk) => Promise<void>;
   removeCollabAsk: (askId: string) => Promise<void>;
   addCollabEndorsement: (endorsement: CollabEndorsement) => Promise<void>;
+
+  // Deals
+  addDeal: (deal: Omit<Deal, 'id' | 'createdAt' | 'impressions' | 'clicks' | 'reportToken'>) => Promise<void>;
+  updateDeal: (dealId: string, updates: Partial<Deal>) => Promise<void>;
+  trackDealClick: (dealId: string) => Promise<void>;
+  trackDealImpression: (dealId: string) => Promise<void>;
+
+  // Advertisers
+  addAdvertiser: (advertiser: Omit<Advertiser, 'id' | 'createdAt'>) => Promise<void>;
+  updateAdvertiser: (advertiserId: string, updates: Partial<Advertiser>) => Promise<void>;
   
   // Explore v2 Actions
   addCity: (city: CityProfile) => Promise<void>;
@@ -178,6 +196,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   reviews: [],
   collabAsks: [],
   collabEndorsements: [],
+  deals: [],
+  adminDeals: [],
+  advertisers: [],
   messages: {},
   appSettings: {
     maxUploadSizeKB: 500,
@@ -319,6 +340,14 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               unsubscribes.push(onSnapshot(collection(db, 'reports'), (snapshot) => {
                 set({ reports: snapshot.docs.map(d => d.data() as Report) });
               }));
+              
+              unsubscribes.push(onSnapshot(collection(db, 'deals'), (snapshot) => {
+                set({ adminDeals: snapshot.docs.map(d => d.data() as Deal) });
+              }));
+
+              unsubscribes.push(onSnapshot(collection(db, 'advertisers'), (snapshot) => {
+                set({ advertisers: snapshot.docs.map(d => d.data() as Advertiser) });
+              }));
             }
           } else {
             // Create default profile if not exists
@@ -410,6 +439,12 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         unsubscribes.push(onSnapshot(collection(db, 'collabEndorsements'), (snapshot) => {
           set({ collabEndorsements: snapshot.docs.map(d => d.data() as CollabEndorsement) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabEndorsements')));
+
+        unsubscribes.push(onSnapshot(
+          query(collection(db, 'deals'), where('status', '==', 'Active')),
+          (snapshot) => { set({ deals: snapshot.docs.map(d => d.data() as Deal) }); },
+          (err) => handleFirestoreError(err, OperationType.LIST, 'deals')
+        ));
 
         // Only admins can see reports
         if (firebaseUser.email?.toLowerCase() === 'e.emanuels@gmail.com') {
@@ -799,6 +834,93 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       await setDoc(doc(db, 'activities', newActivity.id), newActivity);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `collabEndorsements/${endorsement.id}`);
+    }
+  },
+
+  addDeal: async (dealData) => {
+    const user = get().currentUser;
+    if (user?.role !== 'SuperAdmin') return;
+    const id = `deal-${Date.now()}`;
+    // Genereer een unieke report token
+    const reportToken = `rpt-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+    const deal: Deal = {
+      ...dealData,
+      id,
+      impressions: 0,
+      clicks: 0,
+      reportToken,
+      createdAt: new Date().toISOString(),
+      createdBy: user.id
+    };
+    try {
+      await setDoc(doc(db, 'deals', id), deal);
+      get().addToast("Deal toegevoegd!", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `deals/${id}`);
+    }
+  },
+
+  updateDeal: async (dealId, updates) => {
+    try {
+      await updateDoc(doc(db, 'deals', dealId), updates);
+      get().addToast("Deal bijgewerkt!", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `deals/${dealId}`);
+    }
+  },
+
+  trackDealClick: async (dealId) => {
+    try {
+      await updateDoc(doc(db, 'deals', dealId), { clicks: increment(1) });
+    } catch (err) {
+      console.warn('[trackDealClick] non-critical:', err);
+    }
+  },
+
+  trackDealImpression: async (dealId) => {
+    try {
+      await updateDoc(doc(db, 'deals', dealId), { impressions: increment(1) });
+    } catch (err) {
+      console.warn('[trackDealImpression] non-critical:', err);
+    }
+  },
+
+  addAdvertiser: async (advertiserData) => {
+    // In een echte productie omgeving zou dit een Cloud Function aanroepen
+    // Voor deze MVP simuleren we de succesvolle aanmaak van een gebruiker
+    // Aangezien we geen cloud functions kunnen deployen in deze interface die AUTH mangelt
+    // zullen we de adverteerder direct als Firestore doc aanmaken.
+    // In de echte wereld: roep createAdvertiserAccount Cloud Function aan.
+    
+    const user = get().currentUser;
+    if (user?.role !== 'SuperAdmin') return;
+    
+    try {
+      // In deze sandbox omgeving gebruiken we een willekeurige ID als we geen Cloud Function hebben
+      // OF we verwachten dat de admin het account handmatig aanmaakt in Firebase Console
+      // Voor nu genereren we een ID en voegen we het doc toe.
+      const id = advertiserData.email.replace(/[^a-zA-Z0-9]/g, '_');
+      
+      const advertiser: Advertiser = {
+        ...advertiserData,
+        id,
+        createdAt: new Date().toISOString(),
+        createdBy: user.id
+      };
+      
+      await setDoc(doc(db, 'advertisers', id), advertiser);
+      get().addToast("Advertiser doc aangemaakt. Maak nu aub handmatig het Auth account aan in Firebase Console met dezelfde ID/Email.", "info");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'advertisers');
+    }
+  },
+
+  updateAdvertiser: async (advertiserId, updates) => {
+    try {
+      await updateDoc(doc(db, 'advertisers', advertiserId), updates);
+      get().addToast("Advertiser bijgewerkt!", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `advertisers/${advertiserId}`);
     }
   },
 

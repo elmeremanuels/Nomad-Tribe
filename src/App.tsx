@@ -16,7 +16,7 @@ import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Us
 import { motion, AnimatePresence } from 'motion/react';
 import { useNomadStore } from './store';
 import { containsBlockedContent, cleanContent } from './lib/contentFilter';
-import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance } from './types';
+import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance, Deal } from './types';
 import { format, parseISO } from 'date-fns';
 import { cn } from './lib/utils';
 import occupations from './data/occupationsSeed.json';
@@ -298,10 +298,11 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
 };
 
 import AdminSeedTab from './components/admin/AdminSeedTab';
+import AdminDealsTab from './components/admin/AdminDealsTab';
 
 const AdminDashboard = () => {
   const { appSettings, updateAppSettings, profiles, deleteUser, updateUserRole, marketItems, removeMarketItem, spots, removeSpot, reports, moderateReport, moderateUser } = useNomadStore() as any;
-  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'content' | 'reports' | 'seed'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'content' | 'reports' | 'deals' | 'seed'>('settings');
 
   const getReportSummary = (report: Report) => {
     if (report.targetType === 'User') {
@@ -356,6 +357,7 @@ const AdminDashboard = () => {
           { id: 'settings', label: 'App Settings', icon: Hammer },
           { id: 'users', label: 'User Management', icon: Users },
           { id: 'content', label: 'Content Control', icon: ShoppingBag },
+          { id: 'deals', label: 'Deals & Ads', icon: Tag },
           { id: 'reports', label: 'Safety Reports', icon: ShieldCheck },
           { id: 'seed', label: 'Seed Database', icon: Database }
         ].map(tab => (
@@ -594,6 +596,10 @@ const AdminDashboard = () => {
                   </div>
                 </div>
               </div>
+            )}
+
+            {activeTab === 'deals' && (
+              <AdminDealsTab />
             )}
 
             {activeTab === 'reports' && (
@@ -1130,7 +1136,7 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
         collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
       )}>
         <div className="flex justify-between items-center">
-          <h3 className={cn("text-xs font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Search Radius: {radius}km</h3>
+          <h3 className={cn("text-xs font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Local Tribe Radius: {radius}km</h3>
           <input 
             type="range" 
             min="5" 
@@ -1351,12 +1357,17 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
 };
 
 const DealsView = ({ onBack, onPaywall }: { onBack: () => void, onPaywall: () => void }) => {
-  const { spots, currentUser } = useNomadStore();
+  const { deals, currentUser, trackDealClick } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [filter, setFilter] = useState('All');
 
-  const deals = spots.filter(s => s.monthlyDeal);
-  const categories = ['All', 'Accommodation', 'Co-working', 'Activities'];
+  const filtered = deals.filter(d => {
+    if (d.status !== 'Active') return false;
+    if (filter === 'All') return true;
+    return d.category === filter;
+  });
+  
+  const categories = ['All', 'Accommodation', 'Workspace', 'Food', 'Activities', 'Transport', 'Shop'];
 
   return (
     <div className="p-4 md:p-8 space-y-8 max-w-5xl mx-auto pb-24 md:pb-8">
@@ -1386,42 +1397,36 @@ const DealsView = ({ onBack, onPaywall }: { onBack: () => void, onPaywall: () =>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {deals.map(spot => (
-          <div key={spot.id} className="bg-white rounded-[2.5rem] overflow-hidden border border-slate-100 card-shadow flex flex-col">
+        {filtered.map(deal => (
+          <div key={deal.id} className="bg-white rounded-[2.5rem] overflow-hidden border border-slate-100 card-shadow flex flex-col">
             <div className="h-48 relative">
               <img 
-                src={spot.imageUrl || `https://picsum.photos/seed/${spot.id}/600/400`} 
+                src={deal.imageUrl || `https://picsum.photos/seed/${deal.id}/600/400`} 
                 alt="" 
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${spot.id}/600/400`;
-                }}
               />
               <div className="absolute top-4 right-4 bg-accent text-white px-4 py-2 rounded-2xl font-black text-sm shadow-lg">
-                {spot.monthlyDeal?.discount}
+                {deal.discountLabel}
               </div>
             </div>
             <div className="p-8 flex-1 flex flex-col justify-between space-y-6">
               <div className="space-y-2">
-                <h3 className="text-2xl font-black text-secondary">{spot.name}</h3>
-                <p className="text-slate-500 font-medium leading-relaxed">{spot.monthlyDeal?.description}</p>
+                <h3 className="text-2xl font-black text-secondary">{deal.name}</h3>
+                <p className="text-slate-500 font-medium leading-relaxed">{deal.description}</p>
               </div>
               
               <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex -space-x-2">
-                    {[1, 2, 3].map(i => (
-                      <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-slate-200" />
-                    ))}
-                  </div>
-                  <span className="text-xs text-slate-400 font-bold">5 families used this</span>
+                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">by {deal.advertiserName}</p>
                 </div>
-                <PremiumAction isPremium={isPremium} onPaywall={onPaywall} onClick={() => alert("Deal Claimed! Check your dashboard for details.")}>
-                  <button 
-                    className="bg-accent text-white px-8 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-accent/20 active:scale-95 transition-transform"
-                  >
-                    Claim Deal
+                <PremiumAction isPremium={isPremium} onPaywall={onPaywall} onClick={() => {
+                  trackDealClick(deal.id);
+                  if (deal.affiliateUrl) window.open(deal.affiliateUrl, '_blank');
+                  if (deal.promoCode) alert(`Your promo code is: ${deal.promoCode}`);
+                }}>
+                  <button className="bg-accent text-white px-8 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-accent/20 active:scale-95 transition-transform">
+                    {deal.ctaText || "Claim Deal"}
                   </button>
                 </PremiumAction>
               </div>
@@ -1433,8 +1438,85 @@ const DealsView = ({ onBack, onPaywall }: { onBack: () => void, onPaywall: () =>
   );
 };
 
+const DealCard = ({ deal }: { deal: Deal }) => {
+  const { trackDealClick, trackDealImpression } = useNomadStore();
+  
+  useEffect(() => {
+    trackDealImpression(deal.id);
+  }, [deal.id, trackDealImpression]);
+
+  const onClick = () => trackDealClick(deal.id);
+
+  return (
+    <motion.div 
+      whileHover={{ y: -4 }}
+      className="bg-white rounded-[2.5rem] overflow-hidden border border-slate-100 card-shadow flex flex-col h-full"
+    >
+      <div className="h-44 relative">
+        <img src={deal.imageUrl} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+        <div className="absolute top-4 left-4 bg-accent text-white px-3 py-1 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg">
+          {deal.category}
+        </div>
+        {deal.discountLabel && (
+          <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-xl font-black text-xs uppercase text-accent border border-accent/20">
+            {deal.discountLabel}
+          </div>
+        )}
+      </div>
+      <div className="p-6 flex-1 flex flex-col">
+        <div className="flex items-center gap-3 mb-3">
+          {deal.logoUrl && (
+            <div className="w-8 h-8 rounded-lg border border-slate-100 p-1 flex-shrink-0">
+              <img src={deal.logoUrl} className="w-full h-full object-contain" alt="" referrerPolicy="no-referrer" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1 truncate">{deal.advertiserName}</p>
+            <h3 className="font-bold text-secondary text-sm leading-tight truncate">{deal.name}</h3>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 line-clamp-2 italic mb-4">"{deal.description}"</p>
+        
+        <div className="mt-auto space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              {deal.originalPrice && (
+                <span className="text-[10px] text-slate-300 line-through font-bold">{deal.currency} {deal.originalPrice}</span>
+              )}
+              <span className="text-lg font-black text-secondary">{deal.currency} {deal.dealPrice ?? 'Free'}</span>
+            </div>
+            {deal.promoCode && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-dashed border-slate-200 rounded-xl group/code relative">
+                <span className="text-[10px] font-mono font-black text-secondary tracking-wider">{deal.promoCode}</span>
+                <button onClick={() => {
+                  navigator.clipboard.writeText(deal.promoCode!);
+                  useNomadStore.getState().addToast("Code gekopieerd!", "success");
+                }} className="text-slate-400 hover:text-primary transition-colors">
+                  <Download className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+          </div>
+          <button 
+            onClick={() => {
+              onClick();
+              window.open(deal.affiliateUrl, '_blank');
+            }}
+            className="w-full py-4 bg-accent text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-accent/20 hover:scale-[1.02] active:scale-95 transition-all"
+          >
+            {deal.ctaText}
+          </button>
+          {deal.disclaimer && (
+            <p className="text-center text-[8px] font-bold text-slate-400 uppercase leading-none">{deal.disclaimer}</p>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
 const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall }: { onViewAllMarketplace: () => void, onSayHello: (family: FamilyProfile, message?: string) => void, onSelectFamily: (family: FamilyProfile) => void, onPaywall: () => void }) => {
-  const { currentUser, trips, cities: hubCities, profiles, lookingFor, addLookingFor, removeLookingFor, marketItems, removeMarketItem, reserveItem, connections, requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, collabAsks, addCollabAsk, removeCollabAsk, blocks, saveVibeCheck, spots, events, addEvent, removeEvent, tribeRadius, setTribeRadius } = useNomadStore();
+  const { currentUser, trips, cities: hubCities, profiles, lookingFor, addLookingFor, removeLookingFor, marketItems, removeMarketItem, reserveItem, connections, requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, collabAsks, addCollabAsk, removeCollabAsk, blocks, saveVibeCheck, spots, events, addEvent, removeEvent, tribeRadius, setTribeRadius, deals } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
   const [isCollabAskOpen, setIsCollabAskOpen] = useState(false);
@@ -1539,8 +1621,17 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   }, [spots, collabMode, activeLocation, tribeRadius]);
 
   const filteredDeals = useMemo(() => {
-    return filteredSpots.filter(s => s.monthlyDeal);
-  }, [filteredSpots]);
+    return deals.filter(d => {
+      if (d.status !== 'Active') return false;
+      if (d.targetPremiumOnly && !isPremium) return false;
+      if (d.isGlobal) return true;
+      if (d.location && activeLocation.lat && activeLocation.lng) {
+        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, d.location.lat, d.location.lng);
+        return dist <= d.radiusKm;
+      }
+      return false;
+    });
+  }, [deals, activeLocation, isPremium, tribeRadius]);
 
   const localEvents = useMemo(() => {
     return events.filter(e => {
@@ -1568,6 +1659,19 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
       return r.location === activeLocation.name;
     });
   }, [activeLocation, lookingFor, tribeRadius]);
+
+  const nextUpItems = useMemo(() => {
+    const items = [
+      ...localEvents.map(e => ({ ...e, type: 'event' as const, dateObj: parseISO(e.date) })),
+      ...localRequests.map(r => ({ ...r, type: 'request' as const, dateObj: r.date ? parseISO(r.date) : parseISO(r.createdAt) })),
+      ...localMarketItems.map(m => ({ ...m, type: 'market' as const, dateObj: parseISO(m.createdAt) }))
+    ];
+    return items.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+  }, [localEvents, localRequests, localMarketItems]);
+
+  const placesYouMayLike = useMemo(() => {
+    return spots.filter(s => s.isVetted && calculateDistance(activeLocation.lat, activeLocation.lng, s.coordinates.lat, s.coordinates.lng) <= tribeRadius).slice(0, 3);
+  }, [spots, activeLocation, tribeRadius]);
 
   // --- Collab Mode Monetization Gating ---
   const isCollabGated = collabMode && 
@@ -1838,7 +1942,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
             {/* Radius Slider */}
             <div className="flex items-center gap-4 px-4 py-2 bg-slate-50/50 rounded-2xl border border-slate-100/50">
               <div className="flex flex-col">
-                <p className={cn("text-[8px] font-black uppercase tracking-widest leading-none mb-1", collabMode ? "text-white/40" : "text-slate-400")}>Search Radius</p>
+                <p className={cn("text-[8px] font-black uppercase tracking-widest leading-none mb-1", collabMode ? "text-white/40" : "text-slate-400")}>Local Tribe Radius</p>
                 <div className="flex items-center gap-3">
                   <input 
                     type="range" 
@@ -1916,6 +2020,8 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                   events={localEvents}
                   requests={localRequests}
                   deals={filteredDeals}
+                  userPhotoUrl={currentUser?.photoUrl}
+                  radiusKm={tribeRadius}
                   onSelectFamily={(family) => {
                     onSelectFamily(family);
                   }}
@@ -1925,39 +2031,93 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                 />
               </div>
 
-              {/* Local Calendar Sidebar (1/3) */}
-              <div className={cn(
-                "p-6 rounded-[3rem] border flex flex-col h-[500px]",
-                collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
-              )}>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="font-bold">Next Up</h3>
-                  <Calendar className="w-4 h-4 opacity-40" />
-                </div>
-                
-                <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar pr-1">
-                  {localEvents.slice(0, 3).map(event => (
-                    <div key={event.id} className={cn("p-4 rounded-2xl border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100")}>
-                      <p className="text-[10px] font-black text-accent uppercase mb-1">{event.category}</p>
-                      <p className="text-sm font-bold truncate mb-1">{event.title}</p>
-                      <p className="text-[10px] opacity-40 font-bold">{event.date} • {event.time}</p>
+              {/* Local Calendar & Places Sidebar (1/3) */}
+              <div className="flex flex-col gap-6 h-[500px]">
+                {/* Block 1: Next Up */}
+                <div className={cn(
+                  "p-6 rounded-[3rem] border flex flex-col flex-1 min-h-0",
+                  collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
+                )}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-sm">Next Up</h3>
+                    <div className="flex gap-1">
+                      <Filter className="w-3 h-3 opacity-40" />
                     </div>
-                  ))}
-                  {localEvents.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-full opacity-40 text-center p-4">
-                      <Calendar className="w-8 h-8 mb-2" />
-                      <p className="text-xs font-medium">No upcoming events yet</p>
-                    </div>
-                  )}
+                  </div>
+                  
+                  <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar pr-1">
+                    {nextUpItems.map(item => (
+                      <div key={item.id} className={cn(
+                        "p-3 rounded-2xl border transition-all", 
+                        collabMode ? "bg-white/5 border-white/10 text-white" : 
+                        item.type === 'market' ? "bg-secondary text-white border-secondary/20" : "bg-slate-50 border-slate-100"
+                      )}>
+                        <div className="flex justify-between items-start mb-1">
+                          <p className={cn("text-[8px] font-black uppercase tracking-widest", item.type === 'market' ? "text-white/60" : "text-accent")}>
+                            {item.type === 'market' ? (item as MarketItem).mode : (item as any).category}
+                          </p>
+                          <p className={cn("text-[8px] font-bold opacity-40", item.type === 'market' ? "text-white" : "text-slate-500")}>
+                            {format(item.dateObj, 'MMM d')}
+                          </p>
+                        </div>
+                        <p className="text-xs font-bold truncate">{item.title}</p>
+                      </div>
+                    ))}
+                    {nextUpItems.length === 0 && (
+                      <div className="flex flex-col items-center justify-center h-full opacity-40 text-center p-4">
+                        <Calendar className="w-6 h-6 mb-2" />
+                        <p className="text-[10px] font-medium">Nothing planned yet</p>
+                      </div>
+                    )}
+                  </div>
+                  <button className="mt-4 text-center text-[10px] font-black uppercase text-primary hover:underline">View All</button>
                 </div>
 
-                <button 
-                  onClick={() => setIsLocalFeedOpen(true)}
-                  className={cn("mt-6 w-full py-4 rounded-2xl font-black text-[10px] uppercase transition-all", collabMode ? "bg-white text-[#006d77]" : "bg-primary text-white shadow-lg")}
-                >
-                  Open Local Guide & Deals
-                </button>
+                {/* Block 2: Places You May Like */}
+                <div className={cn(
+                  "p-6 rounded-[3rem] border flex flex-col h-[180px]",
+                  collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
+                )}>
+                  <h3 className="font-bold text-sm mb-4">Places You May Like</h3>
+                  <div className="space-y-2">
+                    {placesYouMayLike.map(spot => (
+                      <div key={spot.id} className="flex items-center gap-3 cursor-pointer group">
+                        <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-100 flex-shrink-0">
+                          <img src={spot.imageUrl} className="w-full h-full object-cover" alt="" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className={cn("text-xs font-bold truncate group-hover:text-primary transition-colors", collabMode ? "text-white" : "text-slate-900")}>{spot.name}</p>
+                          <p className={cn("text-[8px] font-bold uppercase", collabMode ? "text-white/40" : "text-slate-400")}>{spot.category}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {placesYouMayLike.length === 0 && (
+                      <p className="text-[10px] opacity-40 text-center py-4">No vetted places nearby</p>
+                    )}
+                  </div>
+                </div>
               </div>
+            </div>
+          </section>
+
+          {/* Tribe Deals Section */}
+          <section className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Tribe Deals & Partnerships</h2>
+              <button className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline">All Deals</button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+               {filteredDeals.length > 0 ? (
+                 filteredDeals.slice(0, 3).map(deal => (
+                   <DealCard key={deal.id} deal={deal} />
+                 ))
+               ) : (
+                 <div className="md:col-span-2 lg:col-span-3 py-12 text-center bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-200">
+                   <Star className="w-8 h-8 text-slate-200 mx-auto mb-3" />
+                   <p className="text-sm font-bold text-slate-400 italic">No deals active in this region. Check back soon!</p>
+                 </div>
+               )}
             </div>
           </section>
 
@@ -1989,31 +2149,6 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
             </section>
           )}
 
-          {/* Local Deals Section */}
-          {filteredDeals.length > 0 && (
-            <section className="space-y-6">
-              <div className="flex justify-between items-center">
-                 <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Local Tribe Deals</h2>
-              </div>
-              <div className="flex gap-6 overflow-x-auto pb-4 no-scrollbar">
-                {filteredDeals.map(spot => (
-                  <div key={spot.id} className={cn("flex-shrink-0 w-80 rounded-[2.5rem] overflow-hidden border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
-                     <div className="h-40 relative">
-                        <img src={spot.imageUrl || null} className="w-full h-full object-cover" alt="" />
-                        <div className="absolute top-4 right-4 bg-accent text-white px-3 py-1 rounded-xl font-black text-[10px] uppercase">{spot.monthlyDeal?.discount}</div>
-                     </div>
-                     <div className="p-6 space-y-4">
-                        <h3 className="font-bold">{spot.name}</h3>
-                        <div className="flex items-center justify-between">
-                           <span className="text-[10px] font-black text-accent uppercase tracking-widest">{spot.monthlyDeal?.description}</span>
-                           <button className="px-4 py-2 bg-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-accent/20">Claim Deal</button>
-                        </div>
-                     </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
 
           {/* Collab Asks (Only in Collab Mode) */}
           {collabMode && (
@@ -2345,9 +2480,9 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                   {filteredDeals.length === 0 && <p className="text-xs opacity-40 italic">No active deals nearby.</p>}
                   {filteredDeals.slice(0, 5).map(deal => (
                     <div key={deal.id} className={cn("p-4 rounded-2xl border transition-all border-accent/20 bg-accent/5", collabMode ? "text-accent-foreground" : "text-accent")}>
-                       <p className="text-[10px] font-black uppercase mb-1">{deal.monthlyDeal?.discount}</p>
+                       <p className="text-[10px] font-black uppercase mb-1">{deal.discountLabel}</p>
                        <p className="text-xs font-bold truncate">{deal.name}</p>
-                       <p className="text-[9px] opacity-60 line-clamp-1">{deal.monthlyDeal?.description}</p>
+                       <p className="text-[9px] opacity-60 line-clamp-1">{deal.description}</p>
                     </div>
                   ))}
                 </div>
@@ -3419,7 +3554,7 @@ const TribeNearbyView = ({
   onSelectSpot?: (spot: Spot) => void,
   onSelectItem?: (item: MarketItem) => void
 }) => {
-  const { spots, destinations, currentUser, trips, marketItems, lookingFor, addLookingFor, removeLookingFor, removeMarketItem, removeSpot, reserveItem, reviews, profiles, collabMode, blocks, tribeRadius, setTribeRadius } = useNomadStore();
+  const { spots, destinations, currentUser, trips, marketItems, lookingFor, addLookingFor, removeLookingFor, removeMarketItem, removeSpot, reserveItem, reviews, profiles, collabMode, blocks, tribeRadius, setTribeRadius, deals } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
   const [newRequest, setNewRequest] = useState({ title: '', description: '', category: 'Help' as any, location: '', lat: 0, lng: 0, date: '' });
@@ -3575,8 +3710,17 @@ const TribeNearbyView = ({
   }, [spots, collabMode, activeLocation]);
 
   const filteredDeals = useMemo(() => {
-    return filteredSpots.filter(s => s.monthlyDeal);
-  }, [filteredSpots]);
+    return deals.filter(d => {
+      if (d.status !== 'Active') return false;
+      if (d.targetPremiumOnly && !isPremium) return false;
+      if (d.isGlobal) return true;
+      if (d.location && activeLocation.lat && activeLocation.lng) {
+        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, d.location.lat, d.location.lng);
+        return dist <= d.radiusKm;
+      }
+      return false;
+    });
+  }, [deals, activeLocation, isPremium, tribeRadius]);
 
   const filteredMarketItems = useMemo(() => {
     if (!currentUser) return [];
@@ -4047,9 +4191,9 @@ const TribeNearbyView = ({
               <div className="flex-1 space-y-2">
                 <div className="flex justify-between items-start">
                   <h3 className={cn("font-bold text-lg", collabMode ? "text-white" : "text-secondary")}>{spot.name}</h3>
-                  <span className="bg-accent text-white px-2 py-1 rounded-lg text-[10px] font-black">{spot.monthlyDeal?.discount}</span>
+                  <span className="bg-accent text-white px-2 py-1 rounded-lg text-[10px] font-black">{spot.discountLabel}</span>
                 </div>
-                <p className={cn("text-sm font-medium", collabMode ? "text-white/60" : "text-slate-600")}>{spot.monthlyDeal?.description}</p>
+                <p className={cn("text-sm font-medium", collabMode ? "text-white/60" : "text-slate-600")}>{spot.description}</p>
                 <div className="flex items-center gap-2 pt-2">
                   <div className="flex -space-x-2">
                     {[1, 2, 3].map(i => (
