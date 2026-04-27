@@ -129,13 +129,19 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
       )}
       <div className="relative flex items-center gap-2">
         {/* gmpx-place-picker rendert zijn eigen input + dropdown */}
-        <gmpx-place-picker
-          ref={pickerRef}
-          placeholder={placeholder}
-          {...(pickerType ? { type: pickerType } : {})}
-          {...(countryRestrict ? { 'country-codes': countryRestrict } : {})}
-          style={{ width: '100%' }}
-        />
+        {!import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? (
+          <div className="w-full p-3 bg-red-50 border-2 border-red-100 rounded-2xl text-[10px] font-bold text-red-400">
+            Maps API Key required for search
+          </div>
+        ) : (
+          <gmpx-place-picker
+            ref={pickerRef}
+            placeholder={placeholder}
+            {...(pickerType ? { type: pickerType } : {})}
+            {...(countryRestrict ? { 'country-codes': countryRestrict } : {})}
+            style={{ width: '100%' }}
+          />
+        )}
         {showDetectButton && (
           <button
             type="button"

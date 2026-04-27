@@ -10,9 +10,11 @@ import { SharedJourneyTimeline } from './components/SharedJourneyTimeline';
 import { PlacesAutocomplete } from './components/PlacesAutocomplete';
 import { MapView } from './components/MapView';
 import { SpotCard } from './components/SpotCard';
+import { APIProvider } from '@vis.gl/react-google-maps';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import { standardizeInterest } from './lib/interestUtils';
+import { fetchFirstPlacePhoto } from './lib/googlePlaces';
 import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNomadStore } from './store';
@@ -22,6 +24,11 @@ import { format, parseISO } from 'date-fns';
 import { cn } from './lib/utils';
 import occupations from './data/occupationsSeed.json';
 import skillsSeed from './data/skillsSeed.json';
+
+const hasValidCoords = (lat?: number, lng?: number) =>
+  lat != null && lng != null &&
+  !isNaN(lat) && !isNaN(lng) &&
+  (Math.abs(lat) > 0.001 || Math.abs(lng) > 0.001);
 
 const ReportModal = ({ isOpen, onClose, target }: { isOpen: boolean, onClose: () => void, target: { id: string, type: Report['targetType'] } | null }) => {
   const { submitReport, currentUser } = useNomadStore();
@@ -1521,7 +1528,14 @@ const DealCard = ({ deal }: { deal: Deal }) => {
 };
 
 const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall }: { onViewAllMarketplace: () => void, onSayHello: (family: FamilyProfile, message?: string) => void, onSelectFamily: (family: FamilyProfile) => void, onPaywall: () => void }) => {
-  const { currentUser, trips, cities: hubCities, profiles, lookingFor, addLookingFor, removeLookingFor, marketItems, removeMarketItem, reserveItem, connections, requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, collabAsks, addCollabAsk, removeCollabAsk, blocks, saveVibeCheck, spots, events, addEvent, removeEvent, tribeRadius, setTribeRadius, deals } = useNomadStore();
+  const { 
+    currentUser, trips, cities: hubCities, profiles, lookingFor, addLookingFor, 
+    removeLookingFor, marketItems, removeMarketItem, reserveItem, connections, 
+    requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, 
+    collabAsks, addCollabAsk, removeCollabAsk, blocks, saveVibeCheck, spots, events, 
+    addEvent, removeEvent, tribeRadius, setTribeRadius, deals,
+    pastPlaces, realTimeLocation
+  } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
   const [isCollabAskOpen, setIsCollabAskOpen] = useState(false);
@@ -1555,43 +1569,80 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   };
 
   const locations = useMemo(() => {
-    const locs: { name: string; type: 'current' | 'planned' | 'default'; lat: number; lng: number, continent?: string, fullPlace?: PlaceResult }[] = [];
-    if (currentUser?.currentLocation?.placeId) {
+    const locs: { name: string; type: 'past' | 'current' | 'planned' | 'default'; lat: number; lng: number, continent?: string, fullPlace?: PlaceResult, date?: string }[] = [];
+    
+    // 1. Past Places
+    const sortedPast = [...pastPlaces]
+      .filter(p => hasValidCoords(p.lat, p.lng))
+      .sort((a, b) => a.year - b.year);
+    
+    sortedPast.forEach(p => {
+      locs.push({
+        name: p.city || p.name,
+        type: 'past',
+        lat: p.lat,
+        lng: p.lng,
+        date: `${p.year}`
+      });
+    });
+
+    // 2. Real-time Location (The Start Page)
+    if (realTimeLocation && hasValidCoords(realTimeLocation.lat, realTimeLocation.lng)) {
+      locs.push({
+        name: realTimeLocation.city || 'Current GPS',
+        type: 'current',
+        lat: realTimeLocation.lat,
+        lng: realTimeLocation.lng,
+        fullPlace: realTimeLocation
+      });
+    } else if (currentUser?.currentLocation?.placeId) {
       const locName = currentUser.currentLocation.city || currentUser.currentLocation.name;
-      const hub = hubCities.find(c => c.name.toLowerCase() === locName.toLowerCase());
       locs.push({ 
         name: locName, 
         type: 'current',
-        lat: currentUser.currentLocation.lat || 0,
-        lng: currentUser.currentLocation.lng || 0,
-        continent: hub?.continent,
+        lat: currentUser.currentLocation.lat || 18.7883,
+        lng: currentUser.currentLocation.lng || 98.9853,
         fullPlace: currentUser.currentLocation
       });
     }
+
+    // 3. Planned Trips
     const userTrips = trips
       .filter(t => t.familyId === currentUser?.id)
       .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    
     userTrips.forEach(t => {
       const tripLocName = t.location;
-      if (!locs.some(l => l.name === tripLocName)) {
-        const hub = hubCities.find(c => tripLocName.toLowerCase().includes(c.name.toLowerCase()));
-        locs.push({ 
-          name: tripLocName, 
-          type: 'planned',
-          lat: t.lat || 0,
-          lng: t.lng || 0,
-          continent: hub?.continent,
-          fullPlace: t.place
-        });
-      }
+      // Skip if already added as current to avoid duplication
+      if (locs.some(l => l.type === 'current' && l.name === tripLocName)) return;
+      
+      locs.push({ 
+        name: tripLocName, 
+        type: 'planned',
+        lat: t.lat || 0,
+        lng: t.lng || 0,
+        fullPlace: t.place,
+        date: t.startDate
+      });
     });
+
     if (locs.length === 0) {
       locs.push({ name: 'Global Tribe', type: 'default', lat: 18.7883, lng: 98.9853, continent: 'Global' });
     }
+
     return locs;
-  }, [currentUser?.currentLocation, trips, currentUser?.id, hubCities]);
+  }, [currentUser?.currentLocation, realTimeLocation, trips, currentUser?.id, pastPlaces]);
+
+  // Set initial index to the 'current' location
+  useEffect(() => {
+    const currentIndex = locations.findIndex(l => l.type === 'current');
+    if (currentIndex !== -1 && activeLocationIndex === 0) {
+      setActiveLocationIndex(currentIndex);
+    }
+  }, [locations.length]);
 
   const activeLocation = useMemo(() => {
+    if (locations.length === 0) return { name: 'Global Tribe', type: 'default' as const, lat: 18.7883, lng: 98.9853 };
     const safeIndex = activeLocationIndex % locations.length;
     return locations[safeIndex];
   }, [locations, activeLocationIndex]);
@@ -1600,11 +1651,11 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
     const loc = activeLocation;
     return {
       location: loc.name,
-      weather: loc.type === 'current' ? 'Local' : 'Planned',
+      weather: loc.type === 'current' ? 'Live' : loc.type === 'past' ? 'Past' : 'Planned',
       emergency: '112',
-      date: format(new Date(), 'EEEE, MMM do'),
+      date: loc.date || format(new Date(), 'EEEE, MMM do'),
       families: profiles.filter(p => 
-        p.currentLocation && 
+        p.currentLocation && hasValidCoords(p.currentLocation.lat, p.currentLocation.lng) &&
         calculateDistance(loc.lat, loc.lng, p.currentLocation.lat, p.currentLocation.lng) <= 50
       ).length
     };
@@ -2004,7 +2055,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
           <section className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
               {/* Map (2/3) */}
-              <div className="lg:col-span-2 min-h-[500px] w-full rounded-[3rem] overflow-hidden border border-slate-100 shadow-2xl relative">
+              <div className="lg:col-span-2 min-h-[500px] w-full">
                 <MapView 
                   center={{ lat: activeLocation.lat, lng: activeLocation.lng }} 
                   profiles={[...(currentUser ? [currentUser] : []), ...filteredProfiles]}
@@ -2012,7 +2063,6 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                   marketItems={localMarketItems}
                   events={localEvents}
                   requests={localRequests}
-                  deals={filteredDeals}
                   userPhotoUrl={currentUser?.photoUrl}
                   radiusKm={tribeRadius}
                   onSelectFamily={(family) => {
@@ -2022,7 +2072,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
               </div>
 
               {/* Next Up (1/3) */}
-              <div className="flex flex-col gap-6">
+              <div className="flex flex-col">
                 <div className={cn(
                   "p-8 rounded-[3rem] border flex flex-col flex-1 min-h-0",
                   collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
@@ -2092,6 +2142,133 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                   </button>
                 </div>
               </div>
+            </div>
+          </section>
+
+          {/* Places You May Like Section - Full Width */}
+          <section className="space-y-8">
+            <div className="flex items-center justify-between px-4">
+              <div className="flex items-center gap-3">
+                 <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-emerald-50 text-emerald-500")}>
+                    <Star className={cn("w-5 h-5", collabMode ? "fill-white text-white" : "fill-emerald-500")} />
+                 </div>
+                 <div>
+                    <h2 className={cn("text-2xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Places You May Like</h2>
+                    <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Selected curated spots for your tribe</p>
+                 </div>
+              </div>
+              
+              <div className="relative">
+                <button 
+                  onClick={() => setIsSpotDropdownOpen(!isSpotDropdownOpen)}
+                  className={cn(
+                    "px-6 py-3 border rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center gap-2",
+                    collabMode ? "bg-white/10 border-white/10 text-white" : "bg-white border-slate-100 text-slate-600"
+                  )}
+                >
+                  + Add family friendly spot
+                  <ChevronDown className={cn("w-3 h-3 transition-transform", isSpotDropdownOpen && "rotate-180")} />
+                </button>
+
+                {isSpotDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsSpotDropdownOpen(false)} />
+                    <div className={cn(
+                      "absolute right-0 mt-3 w-56 rounded-2xl shadow-2xl border p-2 z-50 animate-in fade-in slide-in-from-top-2",
+                      collabMode ? "bg-[#0b5351] border-white/10" : "bg-white border-slate-100"
+                    )}>
+                       {['Playground', 'Restaurant', 'Cafe', 'Activity', 'Education', 'Health'].map(cat => (
+                         <button 
+                          key={cat}
+                          onClick={() => { setIsRecommendSpotOpen(true); setIsSpotDropdownOpen(false); }}
+                          className="w-full text-left p-4 hover:bg-slate-50 rounded-xl transition-colors group flex items-center gap-3"
+                         >
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Add {cat}</span>
+                         </button>
+                       ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="relative">
+              <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8 px-4 scroll-smooth">
+                {filteredSpots.length === 0 ? (
+                  <div className={cn("w-full py-12 text-center rounded-[3rem] border-2 border-dashed", collabMode ? "border-white/10" : "border-slate-100")}>
+                    <MapIcon className="w-10 h-10 mx-auto mb-4 opacity-20" />
+                    <p className="text-sm font-bold opacity-30">No spots found in this area yet.</p>
+                  </div>
+                ) : (
+                  filteredSpots.map(spot => (
+                    <SpotCard 
+                      key={spot.id} 
+                      spot={spot} 
+                      collabMode={collabMode}
+                      currentUserId={currentUser?.id}
+                      onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
+                      className="w-72"
+                    />
+                  ))
+                )}
+              </div>
+              
+              <div className="flex justify-center -mt-4">
+                 <button 
+                  onClick={() => setIsAllSpotsOpen(true)}
+                  className={cn(
+                    "px-8 py-4 rounded-[2rem] text-xs font-black uppercase tracking-widest shadow-xl transition-all flex items-center gap-2 active:scale-95",
+                    collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white shadow-secondary/20"
+                  )}
+                 >
+                    <MapIcon className="w-4 h-4" />
+                    All spots around me
+                 </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Tribe Deals & Partnerships */}
+          <section className="space-y-6 pt-12">
+            <div className="flex items-center justify-between px-4">
+              <div className="flex items-center gap-3">
+                 <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-accent/10 text-accent")}>
+                    <Tag className="w-5 h-5" />
+                 </div>
+                 <div>
+                    <h2 className={cn("text-2xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Tribe Deals & Partnerships</h2>
+                    <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Exclusive perks for Nomad Tribes members</p>
+                 </div>
+              </div>
+              <button className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/60" : "text-accent")}>View all deals →</button>
+            </div>
+            
+            <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8 px-4">
+              {filteredDeals.length === 0 ? (
+                 <div className={cn("w-full py-12 text-center rounded-[3rem] border-2 border-dashed", collabMode ? "border-white/10" : "border-slate-100")}>
+                   <Tag className="w-10 h-10 mx-auto mb-4 opacity-20" />
+                   <p className="text-sm font-bold opacity-30">No deals in this location yet.</p>
+                 </div>
+              ) : (
+                filteredDeals.map(deal => (
+                  <div key={deal.id} className={cn("flex-shrink-0 w-80 rounded-[2.5rem] overflow-hidden border group", collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 shadow-sm shadow-slate-200/50")}>
+                    <div className="h-44 relative bg-slate-100 overflow-hidden">
+                       <img src={deal.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" />
+                       <div className="absolute top-4 left-4 px-3 py-1 bg-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg">
+                          {deal.discountLabel}
+                       </div>
+                    </div>
+                    <div className="p-6">
+                       <h4 className="font-black text-lg">{deal.name}</h4>
+                       <p className="text-[11px] opacity-60 line-clamp-2 mt-2">{deal.description}</p>
+                       <div className="flex items-center justify-between mt-6">
+                          <p className="text-[10px] font-black opacity-30 uppercase tracking-widest">{deal.advertiserName}</p>
+                          <button className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105", collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white")}>Redeem</button>
+                       </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </section>
 
@@ -4024,7 +4201,6 @@ const TribeNearbyView = ({
             spots={filteredSpots}
             marketItems={filteredMarketItems}
             requests={localRequests}
-            deals={filteredDeals}
             onSelectFamily={onSelectFamily}
             onSelectSpot={onSelectSpot}
             onSelectItem={onSelectItem}
@@ -6707,12 +6883,94 @@ export default function App() {
     cancelConnection,
     profiles
   } = useNomadStore();
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      async (position) => {
+        const { latitude: lat, longitude: lng } = position.coords;
+        const state = useNomadStore.getState();
+        
+        try {
+          // Gebruik Google Geocoding om city/country te krijgen voor betere UI
+          const res = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
+          );
+          const data = await res.json();
+          if (data.status === 'OK' && data.results[0]) {
+            const result = data.results[0];
+            const components = result.address_components;
+            const city = components.find((c: any) => c.types.includes('locality'))?.long_name || 
+                         components.find((c: any) => c.types.includes('administrative_area_level_2'))?.long_name || 'Nearby';
+            const country = components.find((c: any) => c.types.includes('country'))?.long_name || '';
+            
+            state.setRealTimeLocation({
+              placeId: result.place_id,
+              name: `${city}, ${country}`,
+              city,
+              country,
+              countryCode: components.find((c: any) => c.types.includes('country'))?.short_name || '',
+              lat,
+              lng,
+              address: result.formatted_address,
+              types: result.types
+            });
+          } else {
+            state.setRealTimeLocation({
+              placeId: 'gps',
+              name: 'Current Location',
+              city: 'Current',
+              country: '',
+              countryCode: '',
+              lat,
+              lng,
+              address: '',
+              types: []
+            });
+          }
+        } catch (error) {
+          console.error("GPS Reverse Geocoding failed", error);
+          state.setRealTimeLocation({
+            placeId: 'gps',
+            name: 'Current Location',
+            city: 'Current',
+            country: '',
+            countryCode: '',
+            lat,
+            lng,
+            address: '',
+            types: []
+          });
+        }
+      },
+      (error) => {
+        console.warn("Geolocation watch failed", error);
+      },
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
   const [activeTab, setActiveTab] = useState<'tribe' | 'connect' | 'tribe-nearby' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin'>('tribe');
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    // Dynamic import for gmpx-api-loader
+    const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (key && !document.querySelector('gmpx-api-loader')) {
+      const loader = document.createElement('gmpx-api-loader');
+      loader.setAttribute('key', key);
+      loader.setAttribute('solution-channel', 'GMP_GE_mapsandplacesautocomplete_v2');
+      document.head.appendChild(loader);
+    }
+  }, []);
+
+  const apiKeyMissing = !import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   const [selectedFamily, setSelectedFamily] = useState<FamilyProfile | null>(null);
   const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
   const [selectedItem, setSelectedItem] = useState<MarketItem | null>(null);
@@ -6734,6 +6992,7 @@ export default function App() {
     personallyVisited: false,
     visitedYear: new Date().getFullYear()
   });
+  const [isFetchingSpotPhoto, setIsFetchingSpotPhoto] = useState(false);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [manualLocation, setManualLocation] = useState<PlaceResult | null>(null);
 
@@ -7195,11 +7454,12 @@ export default function App() {
   };
 
   return (
-    <ErrorBoundary>
-      <div className={cn(
-        "flex flex-col md:flex-row h-screen text-slate-900 overflow-hidden transition-colors duration-500",
-        collabMode ? "bg-[#006d77]" : "bg-background"
-      )}>
+    <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY} libraries={['marker', 'places']}>
+      <ErrorBoundary>
+        <div className={cn(
+          "flex flex-col md:flex-row h-screen text-slate-900 overflow-hidden transition-colors duration-500",
+          collabMode ? "bg-[#006d77]" : "bg-background"
+        )}>
         {/* Desktop Sidebar */}
         <aside className={cn(
           "hidden md:flex flex-col w-72 border-r p-6 z-50 transition-colors duration-500",
@@ -7624,24 +7884,60 @@ export default function App() {
           });
           useNomadStore.getState().addToast("Bedankt voor je aanbeveling! Ons team zal het verifiëren.", "success"); 
         }}>
-          <ImageUpload label="Spot Photo" onUpload={(url) => setNewSpot(prev => ({...prev, imageUrl: url}))} />
-          {newSpot.imageUrl && (
-            <div className="w-full h-32 rounded-2xl overflow-hidden">
-              <img src={newSpot.imageUrl || null} alt="Preview" className="w-full h-full object-cover" />
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Spot Photo</label>
+            <div className="flex flex-col gap-3">
+              <ImageUpload label="Upload Custom Photo" onUpload={(url) => setNewSpot(prev => ({...prev, imageUrl: url}))} />
+              
+              {isFetchingSpotPhoto && (
+                <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-xl border border-primary/10">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  <span className="text-[10px] font-bold text-primary animate-pulse">Fetching photo from Google...</span>
+                </div>
+              )}
+
+              {newSpot.imageUrl && (
+                <div className="w-full h-40 rounded-2xl overflow-hidden relative group">
+                  <img src={newSpot.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <button 
+                      type="button" 
+                      onClick={() => setNewSpot(prev => ({ ...prev, imageUrl: '' }))}
+                      className="p-2 bg-white rounded-full text-red-500 shadow-xl hover:scale-110 transition-transform"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
           
           <PlacesAutocomplete 
             label="Search for the Place"
             placeholder="Search business, park, restaurant..."
             value={newSpot.place}
-            onChange={(place) => {
+            onChange={async (place) => {
               if (place) {
                 setNewSpot(prev => ({ 
                   ...prev, 
                   place, 
                   name: prev.name || place.name 
                 }));
+
+                if (place.placeId) {
+                  setIsFetchingSpotPhoto(true);
+                  try {
+                    const photoUrl = await fetchFirstPlacePhoto(place.placeId);
+                    if (photoUrl) {
+                      setNewSpot(prev => ({ ...prev, imageUrl: photoUrl }));
+                    }
+                  } catch (error) {
+                    console.error("Error fetching spot photo:", error);
+                  } finally {
+                    setIsFetchingSpotPhoto(false);
+                  }
+                }
               }
             }}
           />
@@ -7692,10 +7988,14 @@ export default function App() {
               value={newSpot.category}
               onChange={e => setNewSpot({...newSpot, category: e.target.value as any})}
             >
-              <option value="Playground">Playground</option>
-              <option value="Workspace">Workspace</option>
-              <option value="Medical">Medical</option>
-              <option value="Accommodation">Accommodation</option>
+              {[
+                'Playground', 'Workspace', 'Medical', 'Accommodation', 
+                'Cafe', 'Restaurant', 'School', 'Library', 'Beach', 
+                'Park', 'Museum', 'Supermarket', 'Pharmacy', 'Gym', 
+                'Pool', 'Event Venue'
+              ].map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
           </div>
           <div className="space-y-1">
@@ -7899,6 +8199,7 @@ export default function App() {
       </Modal>
     </div>
     </ErrorBoundary>
+    </APIProvider>
   );
 }
 

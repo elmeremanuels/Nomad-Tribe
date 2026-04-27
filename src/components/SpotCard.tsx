@@ -45,19 +45,42 @@ export const SpotCard: React.FC<SpotCardProps> = ({
       onClick={onClick}
     >
       {/* Image */}
-      <div className="h-36 relative overflow-hidden bg-slate-100">
+      <div className="h-44 relative overflow-hidden bg-slate-100">
         {spot.imageUrl ? (
-          <img
-            src={spot.imageUrl}
-            alt={spot.name}
-            className="w-full h-full object-cover"
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <MapPin className="w-8 h-8 text-slate-300" />
-          </div>
-        )}
+          <>
+            <img
+              src={spot.imageUrl}
+              alt={spot.name}
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+              onError={e => { (e.target as HTMLImageElement).parentElement!.querySelector('.fallback-gradient')?.classList.remove('hidden'); (e.target as HTMLImageElement).remove(); }}
+              referrerPolicy="no-referrer"
+            />
+            {spot.googlePlaceId && (
+              <div className="absolute bottom-2 right-2 bg-black/40 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
+                <span className="text-[8px] text-white/70 font-bold uppercase tracking-widest">© Google</span>
+              </div>
+            )}
+          </>
+        ) : null}
+        
+        {/* Category Gradient Fallback */}
+        <div className={cn(
+          "fallback-gradient absolute inset-0 bg-gradient-to-br flex items-center justify-center",
+          spot.imageUrl ? "hidden" : "",
+          spot.category === 'Playground' ? 'from-green-100 to-green-200' :
+          spot.category === 'Workspace' ? 'from-primary/10 to-primary/20' :
+          spot.category === 'Medical' ? 'from-red-50 to-red-100' :
+          spot.category === 'Accommodation' ? 'from-secondary/10 to-secondary/20' :
+          spot.category === 'Restaurant' ? 'from-amber-50 to-amber-100' : 'from-slate-100 to-slate-200'
+        )}>
+          <span className="text-5xl opacity-20">
+            {spot.category === 'Playground' ? '🛝' :
+             spot.category === 'Workspace' ? '💻' :
+             spot.category === 'Medical' ? '🏥' :
+             spot.category === 'Accommodation' ? '🏨' :
+             spot.category === 'Restaurant' ? '🍽️' : '📍'}
+          </span>
+        </div>
 
         {/* Category badge */}
         <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-xl">

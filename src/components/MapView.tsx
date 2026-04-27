@@ -1,19 +1,8 @@
-import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
-import L from 'leaflet';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
+import { ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { FamilyProfile, Spot, MarketItem, PopUpEvent, LookingForRequest, Deal } from '../types';
-
-// Fix for default Leaflet icons in Vite
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
+import { FamilyProfile, Spot, MarketItem, PopUpEvent, LookingForRequest } from '../types';
 
 interface MapViewProps {
   center: { lat: number; lng: number };
@@ -21,9 +10,8 @@ interface MapViewProps {
   profiles?: FamilyProfile[];
   spots?: Spot[];
   marketItems?: MarketItem[];
-  events?: PopUpEvent[];
+  events?: PopUpEvent[]
   requests?: LookingForRequest[];
-  deals?: Deal[];
   className?: string;
   onSelectFamily?: (family: FamilyProfile) => void;
   onSelectSpot?: (spot: Spot) => void;
@@ -34,18 +22,23 @@ interface MapViewProps {
   radiusKm?: number;
 }
 
+const hasValidCoords = (lat?: number, lng?: number) =>
+  lat != null && lng != null &&
+  !isNaN(lat) && !isNaN(lng) &&
+  (Math.abs(lat) > 0.001 || Math.abs(lng) > 0.001);
+
 const RecenterMap = ({ center }: { center: { lat: number; lng: number } }) => {
   const map = useMap();
-  const prevCenter = React.useRef(center);
+  const prevCenter = useRef(center);
 
   useEffect(() => {
-    if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number' || isNaN(center.lat) || isNaN(center.lng)) return;
+    if (!map || !center || typeof center.lat !== 'number' || typeof center.lng !== 'number' || isNaN(center.lat) || isNaN(center.lng)) return;
 
     const latChanged = Math.abs(prevCenter.current.lat - center.lat) > 0.001;
     const lngChanged = Math.abs(prevCenter.current.lng - center.lng) > 0.001;
 
     if (latChanged || lngChanged) {
-      map.setView([center.lat, center.lng], map.getZoom(), { animate: true });
+      map.panTo({ lat: center.lat, lng: center.lng });
       prevCenter.current = center;
     }
   }, [center.lat, center.lng, map]);
@@ -53,15 +46,66 @@ const RecenterMap = ({ center }: { center: { lat: number; lng: number } }) => {
   return null;
 };
 
-export const MapView: React.FC<MapViewProps> = ({ 
-  center, 
-  zoom = 13, 
-  profiles = [], 
-  spots = [], 
+const SPOT_COLORS: Record<string, string> = {
+  Playground:     'bg-green-400',
+  Workspace:      'bg-primary',
+  Medical:        'bg-red-400',
+  Accommodation:  'bg-secondary',
+  Restaurant:     'bg-amber-400',
+  Cafe:           'bg-amber-500',
+  Default:        'bg-slate-500',
+};
+
+const SpotMarker: React.FC<{ category: string; isVetted?: boolean }> = ({ category, isVetted }) => {
+  const bg = SPOT_COLORS[category] || SPOT_COLORS.Default;
+
+  return (
+    <div className={cn(
+      "w-8 h-8 rounded-xl flex items-center justify-center border-2 border-white shadow-md cursor-pointer hover:scale-110 transition-transform relative",
+      bg
+    )}>
+      <span className="text-sm">
+        {category === 'Playground' ? '🛝' :
+         category === 'Workspace' ? '💻' :
+         category === 'Medical' ? '🏥' :
+         category === 'Accommodation' ? '🏨' :
+         category === 'Restaurant' ? '🍽️' : 
+         category === 'Cafe' ? '☕' : '📍'}
+      </span>
+      {isVetted && (
+        <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-white rounded-full flex items-center justify-center shadow-sm">
+          <div className="w-2.5 h-2.5 bg-primary rounded-full" />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const MapLegend: React.FC = () => (
+  <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-md rounded-2xl px-3 py-2 shadow-lg border border-slate-100 flex flex-col gap-1.5 z-10">
+    {[
+      { color: 'bg-primary', label: 'You' },
+      { color: 'bg-green-400', label: 'Playground' },
+      { color: 'bg-primary/70', label: 'Workspace' },
+      { color: 'bg-amber-400', label: 'Event' },
+      { color: 'bg-secondary', label: 'Request' },
+    ].map(({ color, label }) => (
+      <div key={label} className="flex items-center gap-2">
+        <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", color)} />
+        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+      </div>
+    ))}
+  </div>
+);
+
+export const MapView: React.FC<MapViewProps> = ({
+  center,
+  zoom = 13,
+  profiles = [],
+  spots = [],
   marketItems = [],
   events = [],
   requests = [],
-  deals = [],
   className,
   onSelectFamily,
   onSelectSpot,
@@ -69,238 +113,237 @@ export const MapView: React.FC<MapViewProps> = ({
   onSelectEvent,
   onSelectRequest,
   userPhotoUrl,
-  radiusKm = 25
 }) => {
-  // Guard against invalid center coordinates
-  const safeCenter = {
-    lat: typeof center?.lat === 'number' && !isNaN(center.lat) && Math.abs(center.lat) > 0.0001 ? center.lat : 0,
-    lng: typeof center?.lng === 'number' && !isNaN(center.lng) && Math.abs(center.lng) > 0.0001 ? center.lng : 0,
-  };
+  const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
+  const [selectedProfile, setSelectedProfile] = useState<FamilyProfile | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<PopUpEvent | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<LookingForRequest | null>(null);
+
+  const closeAll = useCallback(() => {
+    setSelectedSpot(null);
+    setSelectedProfile(null);
+    setSelectedEvent(null);
+    setSelectedRequest(null);
+  }, []);
+
+  if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
+    return (
+      <div className={cn(
+        "w-full h-full rounded-[2.5rem] border-2 border-dashed border-red-100 flex items-center justify-center bg-red-50/30",
+        className
+      )}>
+        <div className="text-center space-y-3 px-6">
+          <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mx-auto text-red-500">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-black text-red-600 uppercase tracking-widest">Maps API Key Missing</p>
+            <p className="text-[10px] text-red-400 mt-1 max-w-[200px] mx-auto leading-relaxed">
+              Please set your <b>VITE_GOOGLE_MAPS_API_KEY</b> in the Project Settings to enable interactive maps.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasValidCoords(center.lat, center.lng)) {
+    return (
+      <div className={cn(
+        "w-full h-full rounded-[2.5rem] border-2 border-dashed border-slate-100 flex items-center justify-center bg-slate-50",
+        className
+      )}>
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto">
+            <svg className="w-6 h-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            </svg>
+          </div>
+          <p className="text-xs font-bold text-slate-400">Set your location to see the map</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className={cn("w-full h-full rounded-[2.5rem] overflow-hidden border-2 border-slate-100 shadow-inner relative z-0 toner-map", className)}>
-      <style>{`
-        .toner-map .leaflet-tile {
-          filter: grayscale(100%) contrast(150%) brightness(110%);
-        }
-        .toner-map .leaflet-container {
-          background: #000;
-        }
-        .custom-div-icon {
-          background: none;
-          border: none;
-        }
-      `}</style>
-      <MapContainer 
-        center={[safeCenter.lat, safeCenter.lng]} 
-        zoom={zoom} 
-        scrollWheelZoom={false}
+    <div className={cn("w-full h-full rounded-[2.5rem] overflow-hidden relative", className)}>
+      <Map
+        /* 
+           Note: mapId is required for AdvancedMarker. 
+           fallback to DEMO_MAP_ID which usually works for basic testing.
+           Ensure "Advanced Marker" capability is enabled in Google Cloud Console for your API Key.
+        */
+        mapId={import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
+        defaultCenter={{ lat: center.lat, lng: center.lng }}
+        center={{ lat: center.lat, lng: center.lng }}
+        defaultZoom={zoom}
+        disableDefaultUI={true}
+        gestureHandling="cooperative"
+        onClick={closeAll}
         className="w-full h-full"
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maxZoom={19}
-        />
-        
-        {safeCenter.lat !== 0 && safeCenter.lng !== 0 && <RecenterMap center={safeCenter} />}
+        <RecenterMap center={center} />
 
-        {/* Tribe Radius Circle */}
-        {safeCenter.lat !== 0 && safeCenter.lng !== 0 && (
-          <Circle 
-            center={[safeCenter.lat, safeCenter.lng]}
-            radius={radiusKm * 1000}
-            pathOptions={{ 
-              fillColor: 'var(--primary)', 
-              fillOpacity: 0.1, 
-              color: 'var(--primary)', 
-              weight: 1,
-              dashArray: '5, 10'
-            }}
-          />
+        {/* CENTER MARKER */}
+        <AdvancedMarker position={center} title="Your location">
+          <div className="w-12 h-12 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-primary ring-4 ring-primary/20 hover:scale-110 transition-transform cursor-pointer">
+            <img 
+              src={userPhotoUrl || 'https://ui-avatars.com/api/?name=Me&background=random'} 
+              className="w-full h-full object-cover shadow-inner" 
+              alt="Me"
+            />
+          </div>
+        </AdvancedMarker>
+
+        {/* FAMILY MARKERS */}
+        {profiles
+          .filter(p => p.currentLocation && hasValidCoords(p.currentLocation.lat, p.currentLocation.lng))
+          .map(profile => (
+            <AdvancedMarker
+              key={profile.id}
+              position={{ lat: profile.currentLocation!.lat, lng: profile.currentLocation!.lng }}
+              title={profile.familyName}
+              onClick={() => { closeAll(); setSelectedProfile(profile); }}
+            >
+              <div className="w-10 h-10 rounded-full border-[3px] border-white shadow-lg overflow-hidden bg-slate-100 hover:scale-110 transition-transform cursor-pointer">
+                <img
+                  src={profile.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.familyName)}&background=E2725B&color=fff&size=40`}
+                  alt={profile.familyName}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </AdvancedMarker>
+          ))}
+
+        {selectedProfile?.currentLocation && (
+          <InfoWindow
+            position={{ lat: selectedProfile.currentLocation.lat, lng: selectedProfile.currentLocation.lng }}
+            onCloseClick={closeAll}
+          >
+            <div className="p-2 text-center min-w-[120px]">
+              <p className="font-bold text-slate-800 text-sm">{selectedProfile.familyName}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">{selectedProfile.currentLocation.name}</p>
+              {onSelectFamily && (
+                <button
+                  onClick={() => { onSelectFamily(selectedProfile); closeAll(); }}
+                  className="mt-2 text-[10px] font-black text-primary uppercase tracking-wider"
+                >
+                  View Profile →
+                </button>
+              )}
+            </div>
+          </InfoWindow>
         )}
 
-        {/* Current Location / Focus Point (Custom Icon with User Photo) */}
-        {safeCenter.lat !== 0 && safeCenter.lng !== 0 && (
-          <Marker 
-            position={[safeCenter.lat, safeCenter.lng]}
-            zIndexOffset={1000}
-            icon={new L.DivIcon({
-              className: 'custom-div-icon',
-              html: `<div class="w-12 h-12 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-primary ring-4 ring-primary/20">
-                      <img src="${userPhotoUrl || 'https://ui-avatars.com/api/?name=Me&background=random'}" class="w-full h-full object-cover shadow-inner" />
-                    </div>`,
-              iconSize: [48, 48],
-              iconAnchor: [24, 24]
-            })}
+        {/* SPOT MARKERS */}
+        {spots
+          .filter(s => s.place && hasValidCoords(s.place.lat, s.place.lng))
+          .map(spot => (
+            <AdvancedMarker
+              key={spot.id}
+              position={{ lat: spot.place.lat, lng: spot.place.lng }}
+              title={spot.name}
+              onClick={() => { closeAll(); setSelectedSpot(spot); }}
+            >
+              <SpotMarker category={spot.category} isVetted={spot.isVetted} />
+            </AdvancedMarker>
+          ))}
+
+        {selectedSpot && (
+          <InfoWindow
+            position={{ lat: selectedSpot.place.lat, lng: selectedSpot.place.lng }}
+            onCloseClick={closeAll}
           >
-            <Popup>
-              <div className="p-1">
-                <p className="font-black text-secondary text-xs uppercase tracking-widest text-center">Your Location</p>
-              </div>
-            </Popup>
-          </Marker>
+            <div className="p-2 min-w-[140px]">
+              <p className="text-[9px] font-black uppercase tracking-wider text-primary mb-1">{selectedSpot.category}</p>
+              <p className="font-bold text-slate-800 text-sm mb-1">{selectedSpot.name}</p>
+              {onSelectSpot && (
+                <button
+                  onClick={() => { onSelectSpot(selectedSpot); closeAll(); }}
+                  className="text-[10px] font-black text-primary uppercase tracking-wider"
+                >
+                  View Details →
+                </button>
+              )}
+            </div>
+          </InfoWindow>
         )}
 
-        {/* Profiles */}
-        {profiles.map(profile => profile.currentLocation && typeof profile.currentLocation.lat === 'number' && typeof profile.currentLocation.lng === 'number' && (Math.abs(profile.currentLocation.lat) > 0.001 || Math.abs(profile.currentLocation.lng) > 0.001) && (
-          <Marker 
-            key={profile.id} 
-            position={[profile.currentLocation.lat, profile.currentLocation.lng]}
-            icon={new L.DivIcon({
-              className: 'custom-div-icon',
-              html: `<div class="w-10 h-10 rounded-full border-4 border-white shadow-lg overflow-hidden bg-white hover:scale-110 transition-transform">
-                      <img src="${profile.photoUrl || `https://picsum.photos/seed/${profile.id}/50/50`}" class="w-full h-full object-cover" onerror="this.src='https://ui-avatars.com/api/?name=${profile.familyName}&background=random'" />
-                    </div>`,
-              iconSize: [40, 40],
-              iconAnchor: [20, 20]
-            })}
-          >
-            <Popup>
-              <div className="p-2 min-w-[120px] text-center">
-                <p className="font-bold text-secondary mb-1">{profile.familyName}</p>
-                <button 
-                  onClick={() => onSelectFamily?.(profile)}
-                  className="text-[10px] font-black uppercase text-primary hover:underline"
-                >
-                  View Profile
-                </button>
+        {/* EVENT MARKERS */}
+        {events
+          .filter(e => hasValidCoords(e.lat, e.lng))
+          .map(event => (
+            <AdvancedMarker
+              key={event.id}
+              position={{ lat: event.lat!, lng: event.lng! }}
+              title={event.title}
+              onClick={() => { closeAll(); setSelectedEvent(event); }}
+            >
+              <div className="w-8 h-8 rounded-xl bg-amber-400 flex items-center justify-center border-2 border-white shadow-md cursor-pointer hover:scale-110 transition-transform">
+                <span className="text-xs">📅</span>
               </div>
-            </Popup>
-          </Marker>
-        ))}
+            </AdvancedMarker>
+          ))}
+          
+        {selectedEvent && (
+          <InfoWindow
+            position={{ lat: selectedEvent.lat!, lng: selectedEvent.lng! }}
+            onCloseClick={closeAll}
+          >
+            <div className="p-2 min-w-[140px]">
+              <p className="text-[9px] font-black uppercase tracking-wider text-amber-500 mb-1">{selectedEvent.category}</p>
+              <p className="font-bold text-slate-800 text-sm mb-1">{selectedEvent.title}</p>
+              <p className="text-[10px] text-slate-400">{selectedEvent.date}</p>
+            </div>
+          </InfoWindow>
+        )}
 
-        {/* Vetted Spots */}
-        {spots.map(spot => spot.place && typeof spot.place.lat === 'number' && typeof spot.place.lng === 'number' && (Math.abs(spot.place.lat) > 0.001 || Math.abs(spot.place.lng) > 0.001) && (
-          <Marker 
-            key={spot.id} 
-            position={[spot.place.lat, spot.place.lng]}
-            icon={new L.DivIcon({
-              className: 'custom-div-icon',
-              html: `<div class="w-8 h-8 rounded-xl bg-secondary text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform border-2 border-white">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                    </div>`,
-              iconSize: [32, 32],
-              iconAnchor: [16, 16]
-            })}
-          >
-            <Popup>
-              <div className="p-2 min-w-[120px] text-center">
-                <p className="font-black text-[9px] text-primary uppercase mb-1">Vetted Spot</p>
-                <p className="font-bold text-secondary mb-1">{spot.name}</p>
-                <button 
-                  onClick={() => onSelectSpot?.(spot)}
-                  className="text-[10px] font-black uppercase text-primary hover:underline"
-                >
-                  View Details
-                </button>
+        {/* REQUEST MARKERS */}
+        {requests
+          .filter(r => hasValidCoords(r.lat, r.lng))
+          .map(req => (
+            <AdvancedMarker
+              key={req.id}
+              position={{ lat: req.lat, lng: req.lng }}
+              title={req.title}
+              onClick={() => { closeAll(); setSelectedRequest(req); }}
+            >
+              <div className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center border-2 border-white shadow-md cursor-pointer hover:scale-110 transition-transform">
+                <span className="text-xs">🙋</span>
               </div>
-            </Popup>
-          </Marker>
-        ))}
+            </AdvancedMarker>
+          ))}
 
-        {/* Deals */}
-        {deals.map(deal => typeof deal.lat === 'number' && typeof deal.lng === 'number' && (Math.abs(deal.lat) > 0.001 || Math.abs(deal.lng) > 0.001) && (
-          <Marker 
-            key={deal.id} 
-            position={[deal.lat, deal.lng]}
-            icon={new L.DivIcon({
-              className: 'custom-div-icon',
-              html: `<div class="w-8 h-8 rounded-xl bg-accent text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform border-2 border-white">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
-                    </div>`,
-              iconSize: [32, 32],
-              iconAnchor: [16, 16]
-            })}
+        {selectedRequest && (
+          <InfoWindow
+            position={{ lat: selectedRequest.lat, lng: selectedRequest.lng }}
+            onCloseClick={closeAll}
           >
-            <Popup>
-              <div className="p-2 min-w-[120px] text-center">
-                <p className="font-black text-[9px] text-accent uppercase mb-1">Tribe Deal</p>
-                <p className="font-bold text-secondary mb-1">{deal.name}</p>
-                <p className="text-[10px] font-bold text-accent mb-2">{deal.discountLabel}</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+            <div className="p-2 min-w-[140px]">
+              <p className="text-[9px] font-black uppercase tracking-wider text-secondary mb-1">{selectedRequest.category}</p>
+              <p className="font-bold text-slate-800 text-sm mb-2">{selectedRequest.title}</p>
+            </div>
+          </InfoWindow>
+        )}
 
-        {/* Events */}
-        {events.map(event => typeof event.lat === 'number' && typeof event.lng === 'number' && (Math.abs(event.lat) > 0.001 || Math.abs(event.lng) > 0.001) && (
-          <Marker 
-            key={event.id} 
-            position={[event.lat, event.lng]}
-            icon={new L.DivIcon({
-              className: 'custom-div-icon',
-              html: `<div class="w-8 h-8 rounded-xl bg-amber-400 text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform border-2 border-white">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                    </div>`,
-              iconSize: [32, 32],
-              iconAnchor: [16, 16]
-            })}
-          >
-            <Popup>
-              <div className="p-2 min-w-[120px] text-center">
-                <p className="font-black text-[9px] text-amber-500 uppercase mb-1">{event.category}</p>
-                <p className="font-bold text-secondary mb-1">{event.title}</p>
-                <p className="text-[10px] opacity-60 mb-2">{event.date} • {event.time}</p>
+        {/* MARKET ITEM MARKERS */}
+        {marketItems
+          .filter(item => hasValidCoords(item.lat, item.lng))
+          .map(item => (
+            <AdvancedMarker
+              key={item.id}
+              position={{ lat: item.lat!, lng: item.lng! }}
+              title={item.title}
+              onClick={() => onSelectItem?.(item)}
+            >
+              <div className="w-8 h-8 rounded-xl bg-slate-600 flex items-center justify-center border-2 border-white shadow-md cursor-pointer hover:scale-110 transition-transform">
+                <span className="text-xs">📦</span>
               </div>
-            </Popup>
-          </Marker>
-        ))}
+            </AdvancedMarker>
+          ))}
 
-        {/* Requests (Looking For) */}
-        {requests.map(req => typeof req.lat === 'number' && typeof req.lng === 'number' && (Math.abs(req.lat) > 0.001 || Math.abs(req.lng) > 0.001) && (
-          <Marker 
-            key={req.id} 
-            position={[req.lat, req.lng]}
-            icon={new L.DivIcon({
-              className: 'custom-div-icon',
-              html: `<div class="w-8 h-8 rounded-xl bg-primary text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform border-2 border-white">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    </div>`,
-              iconSize: [32, 32],
-              iconAnchor: [16, 16]
-            })}
-          >
-            <Popup>
-              <div className="p-2 min-w-[120px] text-center">
-                <p className="font-black text-[9px] text-primary uppercase mb-1">{req.category}</p>
-                <p className="font-bold text-secondary mb-1">{req.title}</p>
-                <p className="text-[10px] opacity-60 line-clamp-2">"{req.description}"</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* Market Items */}
-        {marketItems.map(item => typeof item.lat === 'number' && typeof item.lng === 'number' && (Math.abs(item.lat) > 0.001 || Math.abs(item.lng) > 0.001) && (
-          <Marker 
-            key={item.id} 
-            position={[item.lat, item.lng]}
-            icon={new L.DivIcon({
-              className: 'custom-div-icon',
-              html: `<div class="w-8 h-8 rounded-xl bg-secondary text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform border-2 border-white">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"></path><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"></path><path d="M2 7h20"></path><path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"></path></svg>
-                    </div>`,
-              iconSize: [32, 32],
-              iconAnchor: [16, 16]
-            })}
-          >
-            <Popup>
-              <div className="p-2 min-w-[120px] text-center">
-                <p className="font-black text-[9px] text-secondary uppercase mb-1">For {item.mode}</p>
-                <p className="font-bold text-secondary mb-1">{item.title}</p>
-                <p className="text-[10px] font-black text-secondary mb-2">€{item.price}</p>
-                <button 
-                  onClick={() => onSelectItem?.(item)}
-                  className="text-[10px] font-black uppercase text-primary hover:underline"
-                >
-                  View Item
-                </button>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
+      </Map>
+      <MapLegend />
     </div>
   );
 };

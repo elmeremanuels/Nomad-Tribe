@@ -173,6 +173,8 @@ interface NomadStore {
   setIsLocationModalOpen: (open: boolean) => void;
   tribeRadius: number;
   setTribeRadius: (radius: number) => void;
+  realTimeLocation: PlaceResult | null;
+  setRealTimeLocation: (loc: PlaceResult | null) => void;
   
   // Admin Actions
   updateAppSettings: (settings: Partial<AppSettings>) => Promise<void>;
@@ -221,9 +223,11 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   toasts: [],
   isLocationModalOpen: false,
   tribeRadius: 25,
+  realTimeLocation: null,
 
   setIsLocationModalOpen: (open) => set({ isLocationModalOpen: open }),
   setTribeRadius: (radius) => set({ tribeRadius: radius }),
+  setRealTimeLocation: (loc) => set({ realTimeLocation: loc }),
 
   addToast: (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -286,7 +290,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           if (doc.exists()) {
             set({ appSettings: doc.data() as AppSettings });
           }
-        }));
+        }, (err) => handleFirestoreError(err, OperationType.GET, 'settings/global')));
 
         // Fetch user profile with real-time updates
         unsubscribes.push(onSnapshot(doc(db, 'users', firebaseUser.uid), async (snapshot) => {
@@ -347,15 +351,15 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
             if (updatedData.role === 'SuperAdmin') {
               unsubscribes.push(onSnapshot(collection(db, 'reports'), (snapshot) => {
                 set({ reports: snapshot.docs.map(d => d.data() as Report) });
-              }));
+              }, (err) => handleFirestoreError(err, OperationType.LIST, 'reports')));
               
-              unsubscribes.push(onSnapshot(collection(db, 'deals'), (snapshot) => {
+              unsubscribes.push(onSnapshot(query(collection(db, 'deals'), where('id', '>=', '')), (snapshot) => {
                 set({ adminDeals: snapshot.docs.map(d => d.data() as Deal) });
-              }));
+              }, (err) => handleFirestoreError(err, OperationType.LIST, 'deals')));
 
               unsubscribes.push(onSnapshot(collection(db, 'advertisers'), (snapshot) => {
                 set({ advertisers: snapshot.docs.map(d => d.data() as Advertiser) });
-              }));
+              }, (err) => handleFirestoreError(err, OperationType.LIST, 'advertisers')));
             }
           } else {
             // Create default profile if not exists
@@ -396,9 +400,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         // Real-time listeners
         unsubscribes.push(onSnapshot(query(collection(db, 'blocks'), where('blockerId', '==', firebaseUser.uid)), (snapshot) => {
           set({ blocks: snapshot.docs.map(d => d.data() as BlockedUser) });
-        }));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'blocks')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'destinations'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'destinations'), where('id', '>=', '')), (snapshot) => {
           set({ destinations: snapshot.docs.map(d => d.data() as DestinationGuidance) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'destinations')));
 
@@ -410,60 +414,53 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           set({ pastPlaces: snapshot.docs.map(d => d.data() as PastPlace) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'pastPlaces')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'trips'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'trips'), where('id', '>=', '')), (snapshot) => {
           set({ trips: snapshot.docs.map(d => d.data() as Trip) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'trips')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'cities'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'cities'), where('id', '>=', '')), (snapshot) => {
           set({ cities: snapshot.docs.map(d => d.data() as CityProfile) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'cities')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'cityEvents'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'cityEvents'), where('id', '>=', '')), (snapshot) => {
           set({ cityEvents: snapshot.docs.map(d => d.data() as CityEvent) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'cityEvents')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'events'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'events'), where('id', '>=', '')), (snapshot) => {
           set({ events: snapshot.docs.map(d => d.data() as PopUpEvent) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'events')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'marketplace'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'marketplace'), where('id', '>=', '')), (snapshot) => {
           set({ marketItems: snapshot.docs.map(d => d.data() as MarketItem) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'marketplace')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'lookingFor'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'lookingFor'), where('id', '>=', '')), (snapshot) => {
           set({ lookingFor: snapshot.docs.map(d => d.data() as LookingForRequest) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'lookingFor')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'users'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'users'), where('id', '>=', '')), (snapshot) => {
           const allProfiles = snapshot.docs.map(d => d.data() as FamilyProfile);
           console.log(`[Admin] Loaded ${allProfiles.length} user profiles`);
           set({ profiles: allProfiles });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'users')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'spots'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'spots'), where('id', '>=', '')), (snapshot) => {
           set({ spots: snapshot.docs.map(d => d.data() as Spot) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'spots')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'collabAsks'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'collabAsks'), where('id', '>=', '')), (snapshot) => {
           set({ collabAsks: snapshot.docs.map(d => d.data() as CollabAsk) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabAsks')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'collabEndorsements'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'collabEndorsements'), where('id', '>=', '')), (snapshot) => {
           set({ collabEndorsements: snapshot.docs.map(d => d.data() as CollabEndorsement) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabEndorsements')));
 
         unsubscribes.push(onSnapshot(
-          query(collection(db, 'deals'), where('status', '==', 'Active')),
+          query(collection(db, 'deals'), where('status', '==', 'Active'), where('id', '>=', '')),
           (snapshot) => { set({ deals: snapshot.docs.map(d => d.data() as Deal) }); },
           (err) => handleFirestoreError(err, OperationType.LIST, 'deals')
         ));
-
-        // Only admins can see reports
-        if (firebaseUser.email?.toLowerCase() === 'e.emanuels@gmail.com') {
-          unsubscribes.push(onSnapshot(collection(db, 'reports'), (snapshot) => {
-            set({ reports: snapshot.docs.map(d => d.data() as Report) });
-          }, (err) => handleFirestoreError(err, OperationType.LIST, 'reports')));
-        }
 
         // Connections: Use array-contains for participantIds
         unsubscribes.push(onSnapshot(query(collection(db, 'connections'), where('participantIds', 'array-contains', firebaseUser.uid)), (snapshot) => {

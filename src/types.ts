@@ -251,6 +251,7 @@ export interface Spot {
   category: SpotCategory;
   description: string;
   imageUrl?: string;
+  photoAttributions?: string[];
   rating: number;
   recommendedBy?: string;
   votes?: { up: string[]; down: string[] };
@@ -260,7 +261,9 @@ export interface Spot {
   citySlug: string; 
   countryCode: string; 
   osmId?: string; 
-  googlePlaceId?: string; // Keep for compatibility if needed, but redundant with place.placeId
+  googlePlaceId?: string; 
+  lat?: number;
+  lng?: number;
 
   // --- NEW: Kwaliteit & Moderatie ---
   isVetted: boolean; 
@@ -567,6 +570,9 @@ export interface Advertiser {
  */
 
 export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 999999;
+  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 999999;
+  
   const R = 6371; // km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;

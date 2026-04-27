@@ -9,11 +9,11 @@ service cloud.firestore {
     // 1. Primitive Helpers
     function isSignedIn() { return request.auth != null; }
     function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
-    function isSuper() {
-      return isSignedIn() && request.auth.token.email.lower() == 'e.emanuels@gmail.com';
-    }
     function isAdmin() { 
-      return isSuper() || (isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SuperAdmin');
+      return isSignedIn() && (
+        request.auth.token.email.lower() == 'e.emanuels@gmail.com' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SuperAdmin'
+      );
     }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
     function incoming() { return request.resource.data; }
@@ -39,7 +39,7 @@ service cloud.firestore {
       return data.keys().hasAll(['id', 'userId', 'skillNeeded', 'description', 'createdAt']) &&
              data.userId == request.auth.uid &&
              data.skillNeeded is string && data.skillNeeded.size() <= 100 &&
-             data.description is string && data.description.size() <= 600;
+             data.description is string && data.description.size() <= 500;
     }
 
     function isValidCollabEndorsement(data) {
@@ -52,8 +52,7 @@ service cloud.firestore {
     
     // USERS
     match /users/{userId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && (isSuper() || resource.data.id != null);
+      allow read: if isSignedIn();
       allow create: if isVerified() && isValidId(userId) && isValidProfile(incoming());
       allow update: if isVerified() && isOwner(userId) && (
         (incoming().diff(existing()).affectedKeys().hasOnly(['familyName', 'bio', 'travelReasons', 'nativeLanguage', 'spokenLanguages', 'parents', 'kids', 'currentLocation', 'vibeFamilyMetrics', 'lastVibeCheck', 'hasCompletedOnboarding', 'openToCollabs', 'privacySettings', 'preferences', 'collabCard', 'photoUrl'])) &&
@@ -65,19 +64,17 @@ service cloud.firestore {
 
     // NOTIFICATIONS
     match /notifications/{notificationId} {
-      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (isSuper() || resource.data.userId == request.auth.uid);
-      allow create: if isVerified() && (isValidNotification(incoming()) || isAdmin());
-      allow update: if isVerified() && (resource.data.userId == request.auth.uid || isAdmin()) && (
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isVerified() && isValidId(notificationId) && (isValidNotification(incoming()) || isAdmin());
+      allow update: if isVerified() && resource.data.userId == request.auth.uid && (
         incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
-      );
+      ) || isAdmin();
       allow delete: if isVerified() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // COLLAB ASKS
     match /collabAsks/{askId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && resource.data.id != null;
+      allow read: if isSignedIn();
       allow create: if isVerified() && isValidId(askId) && isValidCollabAsk(incoming());
       allow update: if isVerified() && (existing().userId == request.auth.uid || isAdmin()) && isValidCollabAsk(incoming());
       allow delete: if isVerified() && (existing().userId == request.auth.uid || isAdmin());
@@ -85,24 +82,21 @@ service cloud.firestore {
 
     // COLLAB ENDORSEMENTS
     match /collabEndorsements/{endorsementId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && resource.data.id != null;
+      allow read: if isSignedIn();
       allow create: if isVerified() && isValidId(endorsementId) && isValidCollabEndorsement(incoming());
       allow delete: if isVerified() && (existing().authorId == request.auth.uid || isAdmin());
     }
 
     // TRIPS
     match /trips/{tripId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow read: if isSignedIn();
       allow create: if isVerified() && isValidId(tripId) && incoming().familyId == request.auth.uid;
       allow update, delete: if isVerified() && (existing().familyId == request.auth.uid || isAdmin());
     }
 
     // SPOTS
     match /spots/{spotId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow read: if isSignedIn();
       allow create: if isVerified() && isValidId(spotId);
       allow update: if isVerified() && (
         (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'category', 'imageUrl', 'place', 'tags', 'votes']) && !incoming().diff(existing()).affectedKeys().hasAny(['isVetted', 'isHidden'])) ||
@@ -113,16 +107,14 @@ service cloud.firestore {
 
     // LOOKING FOR
     match /lookingFor/{requestId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow read: if isSignedIn();
       allow create: if isVerified() && isValidId(requestId) && incoming().userId == request.auth.uid;
       allow update, delete: if isVerified() && (existing().userId == request.auth.uid || isAdmin());
     }
 
     // MARKETPLACE
     match /marketplace/{itemId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow read: if isSignedIn();
       allow create: if isVerified() && isValidId(itemId) && incoming().sellerId == request.auth.uid;
       allow update: if isVerified() && (
         (existing().sellerId == request.auth.uid) ||
@@ -134,8 +126,7 @@ service cloud.firestore {
 
     // EVENTS
     match /events/{eventId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow read: if isSignedIn();
       allow create: if isVerified() && isValidId(eventId) && incoming().organizerId == request.auth.uid;
       allow update: if isVerified() && (
         (existing().organizerId == request.auth.uid) ||
@@ -147,59 +138,30 @@ service cloud.firestore {
 
     // CONNECTIONS
     match /connections/{connectionId} {
-      allow get, list: if isSignedIn() && request.auth.uid in resource.data.participantIds;
+      allow read: if isSignedIn() && request.auth.uid in existing().participantIds;
       allow create: if isVerified() && request.auth.uid in incoming().participantIds;
       allow update: if isVerified() && request.auth.uid in existing().participantIds;
       allow delete: if isVerified() && request.auth.uid in existing().participantIds;
     }
 
-    // MESSAGES (Top-level in code)
-    match /messages/{messageId} {
-      allow get, list: if isSignedIn() && request.auth.uid in resource.data.participantIds;
-      allow create: if isVerified() && isValidId(messageId) && request.auth.uid == incoming().senderId && request.auth.uid in incoming().participantIds;
-    }
-    
-    // CONVERSATIONS
+    // MESSAGES
     match /conversations/{conversationId} {
-      allow get, list: if isSignedIn() && request.auth.uid in resource.data.participantIds;
-      allow create: if isVerified() && request.auth.uid in incoming().participantIds;
-      allow update: if isVerified() && request.auth.uid in existing().participantIds;
+      allow read: if isSignedIn() && request.auth.uid in existing().participantIds;
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+        allow create: if isVerified() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+      }
     }
     
     // Remaining collections
-    match /destinations/{id} { 
-      allow read: if isSignedIn() && (isSuper() || resource.data.id != null);
-      allow write: if isAdmin(); 
-    }
-    match /cities/{id} { 
-      allow read: if isSignedIn() && (isSuper() || resource.data.id != null);
-      allow write: if isAdmin(); 
-    }
-    match /cityEvents/{id} { 
-      allow read: if isSignedIn() && (isSuper() || resource.data.id != null);
-      allow write: if isVerified(); 
-    }
-    match /pastPlaces/{id} { 
-      allow read, write: if isSignedIn() && (resource.data.userId == request.auth.uid || isSuper()); 
-    }
-    match /activities/{id} { 
-      allow read: if isSignedIn() && (isSuper() || resource.data.id != null);
-      allow create: if isVerified(); 
-    }
-    match /deals/{id} { 
-      allow read: if isSignedIn() && (isSuper() || resource.data.id != null);
-      allow write: if isAdmin(); 
-    }
-    match /advertisers/{id} { 
-      allow read: if isSignedIn() && (isSuper() || resource.data.id != null);
-      allow write: if isAdmin(); 
-    }
-    match /reports/{id} { 
-      allow create: if isVerified(); 
-      allow read, update: if isAdmin(); 
-    }
-    match /blocks/{id} { 
-      allow read, write: if isVerified() && (resource.data.blockerId == request.auth.uid || isSuper()); 
-    }
+    match /destinations/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /cities/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /cityEvents/{id} { allow read: if isSignedIn(); allow write: if isVerified(); }
+    match /pastPlaces/{id} { allow read, write: if isSignedIn() && (existing().userId == request.auth.uid || incoming().userId == request.auth.uid); }
+    match /activities/{id} { allow read: if isSignedIn(); allow create: if isVerified(); }
+    match /deals/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /advertisers/{id} { allow read: if isAdmin(); allow write: if isAdmin(); }
+    match /reports/{id} { allow create: if isVerified(); allow read, update: if isAdmin(); }
+    match /blocks/{id} { allow read, write: if isVerified() && (incoming().blockerId == request.auth.uid || existing().blockerId == request.auth.uid); }
   }
 }

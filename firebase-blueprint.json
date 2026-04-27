@@ -2,126 +2,140 @@
   "entities": {
     "FamilyProfile": {
       "title": "Family Profile",
-      "description": "A profile for a nomadic family",
+      "description": "Core user profile containing family details, preferences, and nomad journey data.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "familyName": { "type": "string" },
         "bio": { "type": "string" },
-        "travelReason": { "type": "string" },
+        "travelReasons": { "type": "array", "items": { "type": "string" } },
         "nativeLanguage": { "type": "string" },
         "spokenLanguages": { "type": "array", "items": { "type": "string" } },
+        "parents": { "type": "array", "items": { "$ref": "#/entities/Parent" } },
+        "kids": { "type": "array", "items": { "$ref": "#/entities/Kid" } },
         "isPremium": { "type": "boolean" },
-        "verificationLevel": { "type": "number" },
-        "vouchedBy": { "type": "array", "items": { "type": "string" } },
-        "badges": { "type": "array", "items": { "type": "string" } },
-        "askUsAbout": { "type": "string" },
-        "hasCompletedOnboarding": { "type": "boolean" }
+        "premiumType": { "type": "string", "enum": ["NONE", "MONTHLY", "ANNUAL", "LIFETIME", "TRIAL"] },
+        "role": { "type": "string", "enum": ["User", "UserPlus", "SuperAdmin", "Advertiser"] },
+        "hasCompletedOnboarding": { "type": "boolean" },
+        "currentLocation": { "$ref": "#/entities/PlaceResult" },
+        "vibeFamilyMetrics": { "type": "object" },
+        "lastVibeCheck": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "familyName", "nativeLanguage"]
+      "required": ["id", "familyName", "role"]
+    },
+    "Parent": {
+      "title": "Parent",
+      "description": "Details of a parent in a family.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "interests": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Kid": {
+      "title": "Kid",
+      "description": "Details of a kid in a family.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "age": { "type": "number" },
+        "gender": { "type": "string", "enum": ["Boy", "Girl", "Non-binary"] },
+        "interests": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "PlaceResult": {
+      "title": "Place Result",
+      "description": "Google Place data structure.",
+      "type": "object",
+      "properties": {
+        "placeId": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "country": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" }
+      }
     },
     "Trip": {
       "title": "Trip",
-      "description": "A planned trip for a family",
+      "description": "A planned or current trip for a family.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "familyId": { "type": "string" },
         "location": { "type": "string" },
-        "startDate": { "type": "string", "format": "date-time" },
-        "endDate": { "type": "string", "format": "date-time" }
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" }
       },
-      "required": ["id", "familyId", "location", "startDate", "endDate"]
+      "required": ["id", "familyId", "startDate", "endDate"]
+    },
+    "Spot": {
+      "title": "Spot",
+      "description": "A family-friendly location like a playground or restaurant.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "place": { "$ref": "#/entities/PlaceResult" },
+        "isVetted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "category", "place"]
+    },
+    "LookingForRequest": {
+      "title": "Looking For Request",
+      "description": "A community request for help, playdates, or gear.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "createdAt"]
     },
     "MarketItem": {
-      "title": "Marketplace Item",
-      "description": "An item for sale or trade in the marketplace",
+      "title": "Market Item",
+      "description": "An item for sale or swap in the marketplace.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "sellerId": { "type": "string" },
         "title": { "type": "string" },
         "price": { "type": "number" },
-        "category": { "type": "string" },
         "status": { "type": "string", "enum": ["Available", "Reserved", "Sold"] },
-        "reservedBy": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "sellerId", "title", "price", "status", "createdAt"]
+      "required": ["id", "sellerId", "title", "status"]
     },
-    "LookingForRequest": {
-      "title": "Looking For Request",
-      "description": "A community request for help, playdates, or gear",
+    "PopUpEvent": {
+      "title": "Pop-Up Event",
+      "description": "A community-organized event.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "familyName": { "type": "string" },
-        "location": { "type": "string" },
-        "category": { "type": "string" },
+        "organizerId": { "type": "string" },
         "title": { "type": "string" },
-        "description": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "date": { "type": "string", "format": "date" },
+        "participants": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["id", "userId", "familyName", "title", "createdAt"]
-    },
-    "Chat": {
-      "title": "Chat",
-      "description": "A conversation between families",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "participantIds": { "type": "array", "items": { "type": "string" } },
-        "lastMessage": { "type": "string" },
-        "lastMessageAt": { "type": "string", "format": "date-time" },
-        "relatedItemId": { "type": "string" }
-      },
-      "required": ["id", "participantIds"]
-    },
-    "Message": {
-      "title": "Message",
-      "description": "A single message in a chat",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "senderId": { "type": "string" },
-        "text": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "senderId", "text", "createdAt"]
-    },
-    "Report": {
-      "title": "Report",
-      "description": "A report against a user or item",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "reporterId": { "type": "string" },
-        "targetId": { "type": "string" },
-        "targetType": { "type": "string", "enum": ["User", "MarketItem", "Spot"] },
-        "reason": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "reporterId", "targetId", "targetType", "reason", "createdAt"]
-    },
-    "Spot": {
-      "title": "Spot",
-      "description": "A family-friendly spot",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "category": { "type": "string", "enum": ["Medical", "Workspace", "Playground", "Accommodation"] },
-        "description": { "type": "string" },
-        "imageUrl": { "type": "string" },
-        "rating": { "type": "number" },
-        "recommendedBy": { "type": "string" }
-      },
-      "required": ["id", "name", "category", "description"]
+      "required": ["id", "organizerId", "title", "date"]
     },
     "CollabAsk": {
-      "title": "Collaboration Ask",
-      "description": "A request for professional collaboration or help",
+      "title": "Collab Ask",
+      "description": "A professional help request.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -131,11 +145,11 @@
         "locationSlug": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "userId", "skillNeeded", "description", "locationSlug", "createdAt"]
+      "required": ["id", "userId", "skillNeeded", "createdAt"]
     },
     "CollabEndorsement": {
-      "title": "Professional Endorsement",
-      "description": "A professional vouch/endorsement for a skill",
+      "title": "Collab Endorsement",
+      "description": "Professional feedback/vouching.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -147,86 +161,66 @@
       },
       "required": ["id", "targetUserId", "authorId", "skill", "createdAt"]
     },
-    "CityProfile": {
-      "title": "City Profile",
-      "description": "A profile for a nomad city hub",
+    "AppNotification": {
+      "title": "App Notification",
+      "description": "User notification.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" },
-        "country": { "type": "string" },
-        "continent": { "type": "string" },
-        "coverImageUrl": { "type": "string" },
-        "nomadScore": { "type": "number" },
-        "vibeScore": { "type": "number" },
-        "familyCount": { "type": "number" },
-        "spotCount": { "type": "number" }
-      },
-      "required": ["id", "name", "country", "continent"]
-    },
-    "CityEvent": {
-      "title": "City Event",
-      "description": "An event happening in a city hub",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "citySlug": { "type": "string" },
+        "userId": { "type": "string" },
         "title": { "type": "string" },
-        "description": { "type": "string" },
-        "date": { "type": "string", "format": "date-time" },
-        "rsvps": { "type": "array", "items": { "type": "string" } }
+        "message": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "type": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "citySlug", "title", "date"]
+      "required": ["id", "userId", "title", "isRead", "createdAt"]
     }
   },
   "firestore": {
-    "/users/{userId}": {
+    "users/{userId}": {
       "schema": "FamilyProfile",
-      "description": "Private user profiles"
+      "description": "Collection of user profiles."
     },
-    "/trips/{tripId}": {
+    "trips/{tripId}": {
       "schema": "Trip",
-      "description": "Public trip plans"
+      "description": "Collection of all family trips."
     },
-    "/marketplace/{itemId}": {
-      "schema": "MarketItem",
-      "description": "Marketplace listings"
-    },
-    "/lookingFor/{requestId}": {
-      "schema": "LookingForRequest",
-      "description": "Community requests"
-    },
-    "/chats/{chatId}": {
-      "schema": "Chat",
-      "description": "Chat metadata"
-    },
-    "/chats/{chatId}/messages/{messageId}": {
-      "schema": "Message",
-      "description": "Messages within a chat"
-    },
-    "/reports/{reportId}": {
-      "schema": "Report",
-      "description": "Community reports for moderation"
-    },
-    "/spots/{spotId}": {
+    "spots/{spotId}": {
       "schema": "Spot",
-      "description": "Vetted community spots"
+      "description": "Collection of community-recommended spots."
     },
-    "/collabAsks/{askId}": {
+    "lookingFor/{requestId}": {
+      "schema": "LookingForRequest",
+      "description": "Collection of community requests."
+    },
+    "marketplace/{itemId}": {
+      "schema": "MarketItem",
+      "description": "Collection of items in the marketplace."
+    },
+    "events/{eventId}": {
+      "schema": "PopUpEvent",
+      "description": "Collection of community events."
+    },
+    "connections/{connectionId}": {
+      "schema": "object",
+      "description": "User connections/friendships."
+    },
+    "conversations/{conversationId}": {
+      "schema": "object",
+      "description": "Chat conversations."
+    },
+    "collabAsks/{askId}": {
       "schema": "CollabAsk",
-      "description": "Professional collaboration requests"
+      "description": "Professional asks/requests."
     },
-    "/collabEndorsements/{endorsementId}": {
+    "collabEndorsements/{endorsementId}": {
       "schema": "CollabEndorsement",
-      "description": "Professional endorsements for skills"
+      "description": "Professional endorsements."
     },
-    "/cities/{cityId}": {
-      "schema": "CityProfile",
-      "description": "City hub profiles and stats"
-    },
-    "/cityEvents/{eventId}": {
-      "schema": "CityEvent",
-      "description": "Local events in city hubs"
+    "notifications/{notificationId}": {
+      "schema": "AppNotification",
+      "description": "User notifications."
     }
   }
 }
