@@ -68,7 +68,7 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
       const p = place;
       const json = p.toJSON ? p.toJSON() : {} as any;
       
-      const components: any[] = p.addressComponents || json.addressComponents || [];
+      const components: any[] = p.addressComponents || json.addressComponents || p.address_components || json.address_components || [];
       const getC = (type: string) => components.find((c: any) => c.types?.includes(type));
 
       const cityVal = 
@@ -103,14 +103,17 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
   // Sync initial/updated value from prop to the web component
   useEffect(() => {
     if (pickerRef.current && value?.placeId) {
-      pickerRef.current.setAttribute('for-place', value.placeId);
+      // Use the 'place' attribute to set the initial location
+      pickerRef.current.setAttribute('place', value.placeId);
+    } else if (pickerRef.current && !value) {
+      pickerRef.current.removeAttribute('place');
     }
-  }, [value?.placeId]);
+  }, [value?.placeId, value]);
 
   // GPS detectie → reverse geocode via Geocoding API
   const detectLocation = () => {
     if (!navigator.geolocation) {
-      addToast("Geolocatie wordt niet ondersteund door je browser.", "error");
+      addToast("Geolocation is not supported by your browser.", "error");
       return;
     }
 
@@ -127,7 +130,7 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
         }
         if (!r) { 
           setIsDetecting(false); 
-          addToast("Kon stad niet bepalen op basis van GPS coördinaten. Controleer je Google Cloud console instellingen.", "error");
+          addToast("Could not determine city from GPS coordinates. Check your Google Cloud console settings.", "error");
           return; 
         }
 
@@ -154,14 +157,14 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
         });
       } catch (error) {
         console.error("Geocoding failed:", error);
-        addToast("Geocoding mislukt. Probeer handmatig te zoeken.", "error");
+        addToast("Geocoding failed. Please search manually.", "error");
       } finally {
         setIsDetecting(false);
       }
     }, (error) => {
       console.error("Geolocation error:", error);
       setIsDetecting(false);
-      addToast(`GPS Fout: ${error.message}. Controleer je browser-instellingen.`, "error");
+      addToast(`GPS Error: ${error.message}. Please check your browser settings.`, "error");
     }, { timeout: 10000 });
   };
 

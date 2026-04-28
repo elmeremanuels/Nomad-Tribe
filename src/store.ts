@@ -276,11 +276,11 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         });
         
         if (error.code === 'auth/unauthorized-domain') {
-          get().addToast(`403 Fout: Domein '${window.location.hostname}' niet geautoriseerd. Voeg dit exact toe aan 'Authorized Domains' in de Firebase Console (onder Authentication > Settings).`, "error");
+          get().addToast(`403 Error: Domain '${window.location.hostname}' not authorized. Add this exactly to 'Authorized Domains' in the Firebase Console (under Authentication > Settings).`, "error");
         } else if (error.message?.includes('403')) {
-          get().addToast(`403 Fout bij inloggen voor '${window.location.hostname}'. Controleer je Firebase Authorized Domains of open de app in een nieuw tabblad.`, "error");
+          get().addToast(`403 Login error for '${window.location.hostname}'. Check your Firebase Authorized Domains or open the app in a new tab.`, "error");
         } else if (error.code !== 'auth/cancelled-popup-request') {
-          get().addToast(`Inloggen mislukt: ${error.message}`, "error");
+          get().addToast(`Login failed: ${error.message}`, "error");
         }
       });
 
@@ -501,7 +501,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         vibeFamilyMetrics: metrics,
         lastVibeCheck: new Date().toISOString()
       });
-      get().addToast("Vibe preferences opgeslagen!", "success");
+      get().addToast("Vibe preferences saved!", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `profiles/${user.id}`);
     }
@@ -592,6 +592,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   addTrip: async (trip) => {
     try {
       await setDoc(doc(db, 'trips', trip.id), trip);
+      get().addToast(`Trip to ${trip.location} added!`, "success");
       
       // Sync with Explore list (destinations)
       const destinations = get().destinations;
@@ -704,6 +705,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   updateTrip: async (trip) => {
     try {
       await setDoc(doc(db, 'trips', trip.id), trip, { merge: true });
+      get().addToast(`Trip space updated!`, "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
     }
@@ -712,8 +714,10 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   removeTrip: async (tripId) => {
     try {
       await deleteDoc(doc(db, 'trips', tripId));
+      get().addToast("Trip removed.", "info");
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `trips/${tripId}`);
+      console.error('removeTrip failed:', err);
+      get().addToast("Could not remove trip. Please try again.", "error");
     }
   },
 
@@ -769,8 +773,10 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   removeMarketItem: async (itemId) => {
     try {
       await deleteDoc(doc(db, 'marketplace', itemId));
+      get().addToast("Item removed from marketplace.", "info");
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `marketplace/${itemId}`);
+      console.error('removeMarketItem failed:', err);
+      get().addToast("Could not remove item. Please try again.", "error");
     }
   },
 
@@ -873,7 +879,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     };
     try {
       await setDoc(doc(db, 'deals', id), deal);
-      get().addToast("Deal toegevoegd!", "success");
+      get().addToast("Deal added!", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `deals/${id}`);
     }
@@ -882,7 +888,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   updateDeal: async (dealId, updates) => {
     try {
       await updateDoc(doc(db, 'deals', dealId), updates);
-      get().addToast("Deal bijgewerkt!", "success");
+      get().addToast("Deal updated!", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `deals/${dealId}`);
     }
@@ -928,7 +934,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       };
       
       await setDoc(doc(db, 'advertisers', id), advertiser);
-      get().addToast("Advertiser doc aangemaakt. Maak nu aub handmatig het Auth account aan in Firebase Console met dezelfde ID/Email.", "info");
+      get().addToast("Advertiser doc created. Please manually create the Auth account in Firebase Console.", "info");
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'advertisers');
     }
@@ -937,7 +943,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   updateAdvertiser: async (advertiserId, updates) => {
     try {
       await updateDoc(doc(db, 'advertisers', advertiserId), updates);
-      get().addToast("Advertiser bijgewerkt!", "success");
+      get().addToast("Advertiser updated!", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `advertisers/${advertiserId}`);
     }
@@ -1846,12 +1852,22 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   addPastPlace: async (place, year) => {
     const user = get().currentUser;
     if (!user) return;
+    
+    // Robust location name extraction
+    let locationName = place.name;
+    if (locationName === 'Selected Location' || locationName === 'Current Location') {
+      locationName = place.city || place.country || 'Travel Adventure';
+    }
+    if (place.city && place.country && !locationName.includes(place.city)) {
+      locationName = `${place.city}, ${place.country}`;
+    }
+
     const id = `pp-${user.id}-${place.placeId}-${year}`;
     const pastPlace: PastPlace = {
       id,
       userId: user.id,
       placeId: place.placeId,
-      name: place.name,
+      name: locationName,
       city: place.city,
       country: place.country,
       countryCode: place.countryCode,
@@ -1862,7 +1878,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     };
     try {
       await setDoc(doc(db, 'pastPlaces', id), pastPlace);
-      get().addToast(`Added ${place.name} to your journey!`, "success");
+      get().addToast(`Added ${locationName} to your journey!`, "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `pastPlaces/${id}`);
     }

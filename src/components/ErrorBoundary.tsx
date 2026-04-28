@@ -39,14 +39,14 @@ export default class ErrorBoundary extends Component<Props, State> {
               <span className="text-4xl">⚠️</span>
             </div>
             <div className="space-y-2">
-              <h2 className="text-2xl font-black text-secondary">Oeps! Er ging iets mis</h2>
-              <p className="text-slate-500 font-medium">De app is tegen een onverwachte fout aangelopen. Geen zorgen, je data is veilig.</p>
+              <h2 className="text-2xl font-black text-secondary">Oops! Something went wrong</h2>
+              <p className="text-slate-500 font-medium">The app encountered an unexpected error. Don't worry, your data is safe.</p>
             </div>
             <button 
               onClick={() => window.location.reload()}
               className="w-full py-4 bg-primary text-white rounded-2xl font-bold shadow-lg shadow-primary/20 active:scale-95 transition-transform"
             >
-              App herstarten
+              Restart App
             </button>
             {process.env.NODE_ENV === 'development' && (
               <div className="mt-4 p-4 bg-red-50 rounded-xl text-left overflow-auto max-h-40">

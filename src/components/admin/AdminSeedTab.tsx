@@ -14,16 +14,16 @@ const AdminSeedTab: React.FC = () => {
 
   const handleSeed = async () => {
     if (!confirmed) {
-      addToast('Bevestig eerst dat je wilt seeden', 'error');
+      addToast('Please confirm to proceed with seeding', 'error');
       return;
     }
     setStatus('loading');
-    setLoadingStep('Initialiseren...');
+    setLoadingStep('Initializing...');
     setError(null);
     setSeedResult(null);
     
     try {
-      setLoadingStep('Bestanden laden...');
+      setLoadingStep('Loading files...');
       const result = await runFullSeed((msg) => {
         setLoadingStep(msg);
         console.log('[Seed Progress]:', msg);
@@ -33,12 +33,12 @@ const AdminSeedTab: React.FC = () => {
         spotsSeeded: result.spotsSeeded || 0
       });
       setStatus('success');
-      addToast('Database succesvol geseed!', 'success');
+      addToast('Database successfully seeded!', 'success');
     } catch (err: any) {
       console.error('Seeding error:', err);
       setStatus('error');
-      setError(err.message || 'Onbekende fout tijdens seeding. Check de console.');
-      addToast('Seeding mislukt', 'error');
+      setError(err.message || 'Unknown error during seeding. Check the console.');
+      addToast('Seeding failed', 'error');
     }
   };
 
@@ -50,20 +50,20 @@ const AdminSeedTab: React.FC = () => {
         </div>
         <div>
           <h2 className="text-xl font-bold text-secondary">Database Seed</h2>
-          <p className="text-slate-500 text-sm">Importeer 530 steden en 629 spots in Firestore</p>
+          <p className="text-slate-500 text-sm">Import 530 cities and 629 spots into Firestore</p>
         </div>
       </div>
 
       <div className="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100">
         <h3 className="font-bold text-secondary mb-2 flex items-center gap-2">
           <AlertCircle size={18} className="text-amber-500" />
-          Belangrijke informatie
+          Important Information
         </h3>
         <ul className="text-sm text-slate-600 space-y-2 list-disc ml-5">
-          <li>Dit proces kan enkele minuten duren voor 1000+ records.</li>
-          <li>Data wordt verdeeld in chunks van 400 om Firestore limieten te respecteren.</li>
-          <li>Bestaande steden met dezelfde ID worden bijgewerkt (merge).</li>
-          <li>Open de browser console (F12) om gedetailleerde logs te zien.</li>
+          <li>This process can take a few minutes for 1000+ records.</li>
+          <li>Data is split into chunks of 400 to respect Firestore limits.</li>
+          <li>Existing cities with the same ID will be updated (merge).</li>
+          <li>Open the browser console (F12) to see detailed logs.</li>
         </ul>
       </div>
 
@@ -71,23 +71,23 @@ const AdminSeedTab: React.FC = () => {
         <div className="flex flex-col items-center justify-center py-12">
           <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
           <p className="font-bold text-secondary">{loadingStep}</p>
-          <p className="text-slate-500 text-sm mt-1">Steden en spots worden geüpload naar Firestore</p>
+          <p className="text-slate-500 text-sm mt-1">Cities and spots are being uploaded to Firestore</p>
         </div>
       ) : status === 'success' ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
             <CheckCircle2 size={32} />
           </div>
-          <h3 className="text-xl font-bold text-secondary mb-2">Seed Voltooid!</h3>
+          <h3 className="text-xl font-bold text-secondary mb-2">Seed Complete!</h3>
           <p className="text-slate-500 max-w-xs mx-auto mb-4">
-            {seedResult?.citiesSeeded} steden en {seedResult?.spotsSeeded} spots zijn succesvol geüpload naar Firestore.
+            {seedResult?.citiesSeeded} cities and {seedResult?.spotsSeeded} spots were successfully uploaded to Firestore.
           </p>
-          <p className="text-slate-500 text-sm max-w-xs mx-auto">Alle data staat nu in Firestore. Je kunt de steden bekijken in de Explore tab.</p>
+          <p className="text-slate-500 text-sm max-w-xs mx-auto">All data is now in Firestore. You can view cities in the Explore tab.</p>
           <button 
             onClick={() => setStatus('idle')}
             className="mt-6 text-primary font-bold hover:underline"
           >
-            Nogmaals uitvoeren
+            Run again
           </button>
         </div>
       ) : (
@@ -95,7 +95,7 @@ const AdminSeedTab: React.FC = () => {
           {status === 'error' && (
             <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm border border-red-100 flex gap-3">
               <AlertCircle size={18} className="shrink-0" />
-              <p><strong>Fout:</strong> {error}</p>
+              <p><strong>Error:</strong> {error}</p>
             </div>
           )}
           
@@ -108,7 +108,7 @@ const AdminSeedTab: React.FC = () => {
               className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
             />
             <label htmlFor="confirm-seed" className="text-sm font-medium text-slate-600 cursor-pointer">
-              Ik begrijp dat dit bestaande data kan overschrijven en wil doorgaan.
+              I understand this may overwrite existing data and wish to proceed.
             </label>
           </div>
 

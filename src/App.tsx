@@ -13,6 +13,8 @@ import { SpotCard } from './components/SpotCard';
 import { APIProvider } from '@vis.gl/react-google-maps';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
+import { DateRangePicker } from './components/DateRangePicker';
+import { TimelineStrip } from './components/TimelineStrip';
 import { standardizeInterest } from './lib/interestUtils';
 import { fetchFirstPlacePhoto } from './lib/googlePlaces';
 import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon, Locate } from 'lucide-react';
@@ -1169,11 +1171,20 @@ const VoteControls = ({ post, collection, dark }: { post: any, collection: 'mark
   );
 };
 
-const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { onBack: () => void, onContactSeller: (item: MarketItem) => void, collabMode?: boolean, onPaywall: () => void }) => {
+const MarketplaceView = ({ 
+  onBack, onContactSeller, collabMode, onPaywall,
+  isAddItemOpen, setIsAddItemOpen
+}: { 
+  onBack: () => void, 
+  onContactSeller: (item: MarketItem) => void, 
+  collabMode?: boolean, 
+  onPaywall: () => void,
+  isAddItemOpen: boolean,
+  setIsAddItemOpen: (open: boolean) => void
+}) => {
   const { marketItems, currentUser, reserveItem, cancelReservation, addItem, addLookingFor, processPayment, addToast } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [radius, setRadius] = useState(20);
-  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [isRequestItemOpen, setIsRequestItemOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
@@ -1382,7 +1393,7 @@ const MarketplaceView = ({ onBack, onContactSeller, collabMode, onPaywall }: { o
           });
           setIsAddItemOpen(false);
           setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', place: null });
-          addToast("Item geplaatst!", "success");
+          addToast("Item posted!", "success");
         }}>
           <ImageUpload label="Item Photo" onUpload={(url) => setNewItem(prev => ({...prev, imageUrl: url}))} />
           {newItem.imageUrl && (
@@ -1612,7 +1623,12 @@ const DealCard = ({ deal }: { deal: Deal }) => {
   );
 };
 
-const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall, setIsAddPastPlaceOpen, setActiveTab, onSetLocation, onAddTrip, onEditTrip }: { 
+const TribeView = ({ 
+  onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall, 
+  setIsAddPastPlaceOpen, setActiveTab, onSetLocation, onAddTrip, onEditTrip,
+  isLookingForOpen, setIsLookingForOpen, isAddItemOpen, setIsAddItemOpen,
+  isAddEventOpen, setIsAddEventOpen, isRecommendSpotOpen, setIsRecommendSpotOpen
+}: { 
   onViewAllMarketplace: () => void, 
   onSayHello: (family: FamilyProfile, message?: string) => void, 
   onSelectFamily: (family: FamilyProfile) => void, 
@@ -1621,7 +1637,15 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   setActiveTab: (tab: any) => void,
   onSetLocation: () => void,
   onAddTrip: () => void,
-  onEditTrip: (trip: Trip) => void
+  onEditTrip: (trip: Trip) => void,
+  isLookingForOpen: boolean,
+  setIsLookingForOpen: (open: boolean) => void,
+  isAddItemOpen: boolean,
+  setIsAddItemOpen: (open: boolean) => void,
+  isAddEventOpen: boolean,
+  setIsAddEventOpen: (open: boolean) => void,
+  isRecommendSpotOpen: boolean,
+  setIsRecommendSpotOpen: (open: boolean) => void
 }) => {
   const { 
     currentUser, trips, cities: hubCities, profiles, lookingFor, addLookingFor, 
@@ -1632,11 +1656,9 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
     pastPlaces, realTimeLocation, removePastPlace, removeTrip
   } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
-  const [isLookingForOpen, setIsLookingForOpen] = useState(false);
   const [isCollabAskOpen, setIsCollabAskOpen] = useState(false);
-  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
-  const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [isMyPostsOpen, setIsMyPostsOpen] = useState(false);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [newRequest, setNewRequest] = useState<{ title: string; description: string; category: LookingForRequest['category']; place: PlaceResult | null; date: string }>({ title: '', description: '', category: 'Help', place: null, date: '' });
   const [newCollabAsk, setNewCollabAsk] = useState({ skillNeeded: '', description: '' });
   const [newItem, setNewItem] = useState<{ title: string; description: string; price: number; category: MarketItem['category']; mode: 'Sell' | 'Swap'; imageUrl: string; place: PlaceResult | null }>({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', place: null });
@@ -1652,9 +1674,6 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   const [isAllSpotsOpen, setIsAllSpotsOpen] = useState(false);
   const [isActionDropdownOpen, setIsActionDropdownOpen] = useState(false);
   const [isSpotDropdownOpen, setIsSpotDropdownOpen] = useState(false);
-  const [isPostEventOpen, setIsPostEventOpen] = useState(false);
-  const [isPostMarketItemOpen, setIsPostMarketItemOpen] = useState(false);
-  const [isRecommendSpotOpen, setIsRecommendSpotOpen] = useState(false);
 
   const [exploreLocation, setExploreLocation] = useState<PlaceResult | null>(null);
   const [isTeleportOpen, setIsTeleportOpen] = useState(false);
@@ -2037,39 +2056,6 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                     )}
                   </div>
                 </div>
-
-                <div className="flex items-center bg-white/10 backdrop-blur-md rounded-3xl p-2 border border-white/5 ml-auto gap-1">
-                  <button 
-                    onClick={() => setActiveIndex(prev => (prev <= 0 ? timeline.length - 1 : prev - 1))}
-                    className={cn("p-2.5 rounded-2xl transition-all shadow-sm", collabMode ? "bg-white/5 hover:bg-white/10 text-white" : "bg-white hover:bg-slate-50 text-secondary border border-slate-100")}
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-                  <div className={cn("px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2", collabMode ? "text-white/40" : "text-slate-400")}>
-                    <span>{activeIndex + 1}</span>
-                    <span className="opacity-20 text-[8px]">/</span>
-                    <span>{timeline.length}</span>
-                  </div>
-                  <button 
-                    onClick={() => setActiveIndex(prev => (prev === timeline.length - 1 ? 0 : prev + 1))}
-                    className={cn("p-2.5 rounded-2xl transition-all shadow-sm", collabMode ? "bg-white/5 hover:bg-white/10 text-white" : "bg-white hover:bg-slate-50 text-secondary border border-slate-100")}
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                </div>
-                
-                <button 
-                  onClick={() => setIsTeleportOpen(!isTeleportOpen)}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                    collabMode 
-                      ? "bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white" 
-                      : "bg-slate-50 text-slate-300 border border-slate-100 hover:bg-white hover:text-primary hover:card-shadow"
-                  )}
-                >
-                  <Search className="w-4 h-4" />
-                  Explore City
-                </button>
               </div>
 
               {isTeleportOpen && (
@@ -2115,44 +2101,9 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
               </p>
             </div>
             
-            <div className="hidden md:flex flex-col items-end gap-3 shrink-0">
-               <div className="flex items-center gap-4">
-                 <div className="flex gap-1.5 p-1 bg-white/5 rounded-2xl border border-white/5 backdrop-blur-md">
-                   {timeline.map((node, i) => (
-                     <button 
-                       key={node.id} 
-                       onClick={() => setActiveIndex(i)}
-                       className={cn(
-                         "w-2 h-2 rounded-full transition-all",
-                         activeIndex === i ? (collabMode ? "bg-white w-6" : "bg-primary w-6") : (collabMode ? "bg-white/20 hover:bg-white/40" : "bg-slate-200 hover:bg-slate-300")
-                       )} 
-                       title={`${node.label} (${node.type})`}
-                     />
-                   ))}
-                 </div>
-                 
-                 <div className="flex items-center gap-1">
-                   <button 
-                    onClick={() => setActiveIndex(prev => (prev <= 0 ? timeline.length - 1 : prev - 1))}
-                    className={cn(
-                      "p-2.5 rounded-2xl transition-all border shadow-lg active:scale-90",
-                      collabMode ? "bg-white/10 border-white/10 hover:bg-white/20 text-white" : "bg-white border-slate-100 text-slate-400 hover:text-primary"
-                    )}
-                   >
-                    <ChevronLeft className="w-5 h-5" />
-                   </button>
-                   <button 
-                    onClick={() => setActiveIndex(prev => (prev === timeline.length - 1 ? 0 : prev + 1))}
-                    className={cn(
-                      "p-2.5 rounded-2xl transition-all border shadow-lg active:scale-90",
-                      collabMode ? "bg-white/10 border-white/10 hover:bg-white/20 text-white" : "bg-white border-slate-100 text-slate-400 hover:text-primary"
-                    )}
-                   >
-                    <ChevronRight className="w-5 h-5" />
-                   </button>
-                 </div>
-               </div>
-               <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-40">Navigate Timeline</p>
+            <div className="flex flex-col items-center md:items-end gap-2 shrink-0">
+               <TimelineStrip timeline={timeline} activeIndex={activeIndex} setActiveIndex={setActiveIndex} dark={collabMode} />
+               <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-30">Journey Timeline</p>
             </div>
           </header>
 
@@ -3154,14 +3105,32 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                       <p className="font-bold truncate">{item.title}</p>
                       <p className="text-[10px] opacity-40 font-black uppercase">{item.category} • €{item.price}</p>
                     </div>
-                    <button 
-                      onClick={() => {
-                        if (confirm('Are you sure you want to remove this item?')) removeMarketItem(item.id);
-                      }}
-                      className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {confirmingDeleteId === item.id ? (
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setConfirmingDeleteId(null)}
+                          className="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase"
+                        >
+                          No
+                        </button>
+                        <button 
+                          onClick={() => {
+                            removeMarketItem(item.id);
+                            setConfirmingDeleteId(null);
+                          }}
+                          className="px-3 py-2 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase"
+                        >
+                          Yes
+                        </button>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={() => setConfirmingDeleteId(item.id)}
+                        className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ))}
                 {marketItems.filter(i => i.sellerId === currentUser?.id).length === 0 && (
@@ -3187,14 +3156,32 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                       <p className="font-bold truncate">{request.title}</p>
                       <p className="text-[10px] opacity-40 font-black uppercase">{request.category} • {request.location}</p>
                     </div>
-                    <button 
-                      onClick={() => {
-                        if (confirm('Are you sure you want to remove this request?')) removeLookingFor(request.id);
-                      }}
-                      className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {confirmingDeleteId === request.id ? (
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setConfirmingDeleteId(null)}
+                          className="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase"
+                        >
+                          No
+                        </button>
+                        <button 
+                          onClick={() => {
+                            removeLookingFor(request.id);
+                            setConfirmingDeleteId(null);
+                          }}
+                          className="px-3 py-2 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase"
+                        >
+                          Yes
+                        </button>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={() => setConfirmingDeleteId(request.id)}
+                        className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ))}
                 {lookingFor.filter(r => r.userId === currentUser?.id).length === 0 && (
@@ -3221,14 +3208,32 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                       <p className="text-[10px] opacity-40 font-black uppercase">{event.date} • {event.location}</p>
                     </div>
                     <div className="flex gap-2">
-                      <button 
-                        onClick={() => {
-                          if (confirm('Are you sure you want to cancel this event?')) removeEvent(event.id);
-                        }}
-                        className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {confirmingDeleteId === event.id ? (
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => setConfirmingDeleteId(null)}
+                            className="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase"
+                          >
+                            No
+                          </button>
+                          <button 
+                            onClick={() => {
+                              removeEvent(event.id);
+                              setConfirmingDeleteId(null);
+                            }}
+                            className="px-3 py-2 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase"
+                          >
+                            Yes
+                          </button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => setConfirmingDeleteId(event.id)}
+                          className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -4069,7 +4074,15 @@ const TribeNearbyView = ({
   onSetLocation,
   onSelectFamily,
   onSelectSpot,
-  onSelectItem
+  onSelectItem,
+  isLookingForOpen,
+  setIsLookingForOpen,
+  isAddItemOpen,
+  setIsAddItemOpen,
+  isAddEventOpen,
+  setIsAddEventOpen,
+  isRecommendSpotOpen,
+  setIsRecommendSpotOpen
 }: { 
   onPaywall: () => void, 
   onViewAllDeals: () => void, 
@@ -4079,11 +4092,18 @@ const TribeNearbyView = ({
   onSetLocation: () => void,
   onSelectFamily?: (family: FamilyProfile) => void,
   onSelectSpot?: (spot: Spot) => void,
-  onSelectItem?: (item: MarketItem) => void
+  onSelectItem?: (item: MarketItem) => void,
+  isLookingForOpen: boolean,
+  setIsLookingForOpen: (open: boolean) => void,
+  isAddItemOpen: boolean,
+  setIsAddItemOpen: (open: boolean) => void,
+  isAddEventOpen: boolean,
+  setIsAddEventOpen: (open: boolean) => void,
+  isRecommendSpotOpen: boolean,
+  setIsRecommendSpotOpen: (open: boolean) => void
 }) => {
   const { spots, destinations, currentUser, trips, marketItems, lookingFor, addLookingFor, removeLookingFor, removeMarketItem, removeSpot, reserveItem, reviews, profiles, collabMode, blocks, tribeRadius, setTribeRadius, deals } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
-  const [isLookingForOpen, setIsLookingForOpen] = useState(false);
   const [newRequest, setNewRequest] = useState<{ title: string; description: string; category: LookingForRequest['category']; place: PlaceResult | null; date: string }>({ title: '', description: '', category: 'Help', place: null, date: '' });
   const [activeLocationIndex, setActiveLocationIndex] = useState(0);
 
@@ -5123,7 +5143,12 @@ const VibeCheckModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose:
   );
 };
 
-const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificationCenterOpen, isNotificationCenterOpen, setIsConnectOpen, onSetLocation, setIsAddPastPlaceOpen }: { 
+const ProfileView = ({ 
+  onShare, onLogout, onAddTrip, onEditTrip, setIsNotificationCenterOpen, 
+  isNotificationCenterOpen, setIsConnectOpen, onSetLocation, setIsAddPastPlaceOpen,
+  isLookingForOpen, setIsLookingForOpen, isAddItemOpen, setIsAddItemOpen,
+  isAddEventOpen, setIsAddEventOpen, isRecommendSpotOpen, setIsRecommendSpotOpen
+}: { 
   onShare: () => void, 
   onLogout: () => void, 
   onAddTrip: () => void, 
@@ -5132,7 +5157,15 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
   isNotificationCenterOpen: boolean, 
   setIsConnectOpen: (open: boolean) => void, 
   onSetLocation: () => void,
-  setIsAddPastPlaceOpen: (open: boolean) => void
+  setIsAddPastPlaceOpen: (open: boolean) => void,
+  isLookingForOpen: boolean,
+  setIsLookingForOpen: (open: boolean) => void,
+  isAddItemOpen: boolean,
+  setIsAddItemOpen: (open: boolean) => void,
+  isAddEventOpen: boolean,
+  setIsAddEventOpen: (open: boolean) => void,
+  isRecommendSpotOpen: boolean,
+  setIsRecommendSpotOpen: (open: boolean) => void
 }) => {
   const { 
     currentUser, 
@@ -5158,6 +5191,7 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isEditCollabCardOpen, setIsEditCollabCardOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   
   const [editProfile, setEditProfile] = useState<Partial<FamilyProfile>>({
     collabCard: { occupation: '', superpowers: [], currentMission: '', linkedInUrl: '' },
@@ -5952,15 +5986,42 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                         <Calendar className="w-5 h-5" />
                       </div>
                       <div className="flex gap-2">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeTrip(trip.id);
-                          }}
-                          className={cn("p-2 transition-colors", collabMode ? "text-white/40 hover:text-red-400" : "text-slate-300 hover:text-red-500")}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {confirmingDeleteId === trip.id ? (
+                          <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center p-3 text-center space-y-2 animate-in fade-in zoom-in duration-200 rounded-[2.5rem]">
+                            <p className="text-[10px] font-black text-secondary uppercase tracking-widest">Delete?</p>
+                            <div className="flex gap-2 w-full px-4">
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmingDeleteId(null);
+                                }}
+                                className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-tight hover:bg-slate-200"
+                              >
+                                No
+                              </button>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeTrip(trip.id);
+                                  setConfirmingDeleteId(null);
+                                }}
+                                className="flex-1 py-2 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-tight shadow-lg shadow-red-500/20 hover:bg-red-600"
+                              >
+                                Yes
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmingDeleteId(trip.id);
+                            }}
+                            className={cn("p-2 transition-colors relative z-10", collabMode ? "text-white/40 hover:text-red-400" : "text-slate-300 hover:text-red-500")}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     <h4 className="font-bold text-lg relative z-10">
@@ -6044,21 +6105,48 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                 .sort((a, b) => b.year - a.year)
                 .map((place) => (
                   <div key={place.id} className={cn("p-4 rounded-3xl border group relative overflow-hidden", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100")}>
-                    <button 
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        if (confirm("Remove this adventure?")) removePastPlace(place.id); 
-                      }}
-                      className={cn(
-                        "absolute top-2 right-2 p-1.5 transition-all rounded-lg z-20",
-                        collabMode 
-                          ? "bg-white/10 text-white/40 hover:text-red-400 hover:bg-white/20" 
-                          : "bg-red-50 text-red-300 hover:text-red-500 hover:bg-red-100"
-                      )}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
                     <div className="space-y-1">
+                      {confirmingDeleteId === place.id ? (
+                        <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center p-3 text-center space-y-2 animate-in fade-in zoom-in duration-200">
+                          <p className="text-[10px] font-black text-secondary uppercase tracking-widest">Delete?</p>
+                          <div className="flex gap-2 w-full">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmingDeleteId(null);
+                              }}
+                              className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-tight hover:bg-slate-200"
+                            >
+                              No
+                            </button>
+                            <button 
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await removePastPlace(place.id);
+                                setConfirmingDeleteId(null);
+                              }}
+                              className="flex-1 py-2 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-tight shadow-lg shadow-red-500/20 hover:bg-red-600"
+                            >
+                              Yes
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setConfirmingDeleteId(place.id);
+                          }}
+                          className={cn(
+                            "absolute top-2 right-2 p-1.5 transition-all rounded-lg z-20 opacity-0 group-hover:opacity-100",
+                            collabMode 
+                              ? "bg-white/10 text-white/40 hover:text-red-400 hover:bg-white/20" 
+                              : "bg-red-50 text-red-300 hover:text-red-500 hover:bg-red-100"
+                          )}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                       <p className="text-[10px] font-black opacity-40 uppercase tracking-widest">{place.year}</p>
                       <h4 className="font-bold text-sm line-clamp-1">
                         {(() => {
@@ -7167,7 +7255,6 @@ export default function App() {
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     // Dynamic import for gmpx-api-loader
@@ -7185,6 +7272,9 @@ export default function App() {
   const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
   const [selectedItem, setSelectedItem] = useState<MarketItem | null>(null);
   const [isRecommendSpotOpen, setIsRecommendSpotOpen] = useState(false);
+  const [isLookingForOpen, setIsLookingForOpen] = useState(false);
+  const [isAddEventOpen, setIsAddEventOpen] = useState(false);
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [newSpot, setNewSpot] = useState<{
     name: string;
     description: string;
@@ -7205,6 +7295,30 @@ export default function App() {
   const [isFetchingSpotPhoto, setIsFetchingSpotPhoto] = useState(false);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [manualLocation, setManualLocation] = useState<PlaceResult | null>(null);
+
+  const [isPostMenuOpen, setIsPostMenuOpen] = useState(false);
+  const [isFocusMenuOpen, setIsFocusMenuOpen] = useState(false);
+  const fabPressTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const handleFabPressStart = () => {
+    fabPressTimer.current = setTimeout(() => {
+      setIsFocusMenuOpen(true);
+    }, 500);
+  };
+
+  const handleFabPressEnd = () => {
+    if (fabPressTimer.current) {
+      clearTimeout(fabPressTimer.current);
+      fabPressTimer.current = null;
+    }
+  };
+
+  const handleFabTap = () => {
+    if (!isFocusMenuOpen) {
+      setIsPostMenuOpen(true);
+    }
+    setIsFocusMenuOpen(false);
+  };
 
   const [isAddTripOpen, setIsAddTripOpen] = useState(false);
   const [newTrip, setNewTrip] = useState<{
@@ -7329,7 +7443,7 @@ export default function App() {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
     if (isIframe && isMobile) {
-      addToast("Tip: Als het inloggen in dit venster niet lukt, gebruik dan de 'Open in nieuw tabblad' knop.", "info");
+      addToast("Tip: If login fails in this window, please use the 'Open in new tab' button.", "info");
     }
 
     setIsLoggingIn(true);
@@ -7525,7 +7639,7 @@ export default function App() {
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(window.location.href).then(() => {
-      addToast('Profiel link gekopieerd!', 'success');
+      addToast('Profile link copied!', 'success');
     }).catch(() => {
       addToast('Copy failed. Please copy the URL from the address bar.', 'error');
     });
@@ -7557,6 +7671,14 @@ export default function App() {
             });
             setIsAddTripOpen(true);
           }}
+          isLookingForOpen={isLookingForOpen}
+          setIsLookingForOpen={setIsLookingForOpen}
+          isAddItemOpen={isAddItemOpen}
+          setIsAddItemOpen={setIsAddItemOpen}
+          isAddEventOpen={isAddEventOpen}
+          setIsAddEventOpen={setIsAddEventOpen}
+          isRecommendSpotOpen={isRecommendSpotOpen}
+          setIsRecommendSpotOpen={setIsRecommendSpotOpen}
         />
       );
       case 'profile': return (
@@ -7581,6 +7703,14 @@ export default function App() {
           isNotificationCenterOpen={isNotificationCenterOpen}
           setIsConnectOpen={setIsConnectOpen}
           setIsAddPastPlaceOpen={setIsAddPastPlaceOpen}
+          isLookingForOpen={isLookingForOpen}
+          setIsLookingForOpen={setIsLookingForOpen}
+          isAddItemOpen={isAddItemOpen}
+          setIsAddItemOpen={setIsAddItemOpen}
+          isAddEventOpen={isAddEventOpen}
+          setIsAddEventOpen={setIsAddEventOpen}
+          isRecommendSpotOpen={isRecommendSpotOpen}
+          setIsRecommendSpotOpen={setIsRecommendSpotOpen}
         />
       );
       case 'explore': return (
@@ -7591,7 +7721,16 @@ export default function App() {
           }}
         />
       );
-      case 'marketplace': return <MarketplaceView onBack={() => setActiveTab('tribe')} onContactSeller={handleContactSeller} collabMode={collabMode} onPaywall={() => setIsPaywallOpen(true)} />;
+      case 'marketplace': return (
+        <MarketplaceView 
+          onBack={() => setActiveTab('tribe')} 
+          onContactSeller={handleContactSeller} 
+          collabMode={collabMode} 
+          onPaywall={() => setIsPaywallOpen(true)}
+          isAddItemOpen={isAddItemOpen}
+          setIsAddItemOpen={setIsAddItemOpen}
+        />
+      );
       case 'admin': return <AdminDashboard />;
       default: return (
         <TribeView 
@@ -7615,6 +7754,14 @@ export default function App() {
             });
             setIsAddTripOpen(true);
           }}
+          isLookingForOpen={isLookingForOpen}
+          setIsLookingForOpen={setIsLookingForOpen}
+          isAddItemOpen={isAddItemOpen}
+          setIsAddItemOpen={setIsAddItemOpen}
+          isAddEventOpen={isAddEventOpen}
+          setIsAddEventOpen={setIsAddEventOpen}
+          isRecommendSpotOpen={isRecommendSpotOpen}
+          setIsRecommendSpotOpen={setIsRecommendSpotOpen}
         />
       );
     }
@@ -7622,7 +7769,7 @@ export default function App() {
 
   const handleGetLocation = async () => {
     if (!navigator.geolocation) {
-      addToast('Geolocatie wordt niet ondersteund door je browser.', 'error');
+      addToast('Geolocation is not supported by your browser.', 'error');
       return;
     }
 
@@ -7753,6 +7900,19 @@ export default function App() {
           {currentUser?.role === 'SuperAdmin' && (
             <SidebarLink active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} icon={<Shield className="w-5 h-5" />} label="Super Admin" />
           )}
+
+          <button
+            onClick={() => setIsPostMenuOpen(true)}
+            className={cn(
+              "w-full flex items-center justify-center gap-3 px-4 py-4 rounded-2xl font-black text-sm transition-all shadow-xl active:scale-95 mt-8",
+              collabMode
+                ? "bg-[#e9c46a] text-[#264653] shadow-[#e9c46a]/20"
+                : "bg-primary text-white shadow-primary/20"
+            )}
+          >
+            <Plus className="w-6 h-6" />
+            Post Something
+          </button>
         </nav>
 
         <div className="space-y-4 pt-6">
@@ -7764,7 +7924,7 @@ export default function App() {
                 !collabMode ? "bg-white text-secondary shadow-md" : "text-slate-400 hover:text-slate-600"
               )}
             >
-              Family Focus
+              Family
             </button>
             <button 
               onClick={() => setCollabMode(true)}
@@ -7774,7 +7934,7 @@ export default function App() {
               )}
             >
               <Briefcase className={cn("w-4 h-4", collabMode ? "text-white" : "text-slate-400")} />
-              Collab Focus
+              Collab
               <span className="ml-auto bg-amber-400 text-[#264653] text-[8px] px-1 py-0.5 rounded-md font-black shadow-sm">BETA</span>
             </button>
           </div>
@@ -7807,26 +7967,62 @@ export default function App() {
 
       {/* Mobile Bottom Navigation */}
       <nav className={cn(
-        "fixed transition-all duration-500 ease-in-out left-0 right-0 md:hidden bottom-nav-shadow border-t z-[100]",
-        isMenuOpen ? "bottom-0 h-48" : "bottom-0 h-20",
+        "fixed transition-all duration-500 ease-in-out left-0 right-0 md:hidden bottom-nav-shadow border-t z-[100] bottom-0 h-20",
         collabMode ? "bg-[#006d77] border-[#005f6a]" : "bg-white border-slate-100"
       )}>
         <div className="flex items-center justify-around h-20 px-2 pb-6">
           <NavButton active={activeTab === 'tribe'} onClick={() => setActiveTab('tribe')} icon={<MapIcon className="w-6 h-6" />} label="Local Tribe" dark={collabMode} />
-          <div className="flex flex-col items-center">
-             <button 
-               onClick={() => setIsMenuOpen(!isMenuOpen)}
-               className={cn(
-                 "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg active:scale-90",
-                 collabMode ? "bg-white text-[#006d77] shadow-white/10" : "bg-primary text-white shadow-primary/20",
-                 isMenuOpen && "rotate-180"
-               )}
-             >
-               <ChevronUp className="w-6 h-6" />
-             </button>
-             <span className="text-[8px] font-black uppercase tracking-widest mt-1 opacity-40">Focus</span>
-          </div>
           <NavButton active={activeTab === 'explore'} onClick={() => setActiveTab('explore')} icon={<Globe className="w-6 h-6" />} label="Explore" dark={collabMode} />
+
+          {/* Center FAB */}
+          <div className="relative flex flex-col items-center">
+            {/* Focus menu (long press) */}
+            {isFocusMenuOpen && (
+              <div className="absolute bottom-full mb-3 flex gap-2 animate-in fade-in slide-in-from-bottom-2">
+                <button
+                  onClick={() => { setCollabMode(false); setIsFocusMenuOpen(false); }}
+                  className={cn(
+                    'flex items-center gap-1.5 px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl border transition-all',
+                    !collabMode ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200'
+                  )}
+                >
+                  <Home className="w-4 h-4" /> Family
+                </button>
+                <button
+                  onClick={() => { setCollabMode(true); setIsFocusMenuOpen(false); }}
+                  className={cn(
+                    'flex items-center gap-1.5 px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl border transition-all',
+                    collabMode ? 'bg-[#e9c46a] text-[#264653] border-[#e9c46a]' : 'bg-white text-[#006d77] border-[#006d77]/20'
+                  )}
+                >
+                  <Briefcase className="w-4 h-4" /> Collab
+                </button>
+              </div>
+            )}
+
+            {/* FAB */}
+            <button
+              onPointerDown={handleFabPressStart}
+              onPointerUp={handleFabPressEnd}
+              onPointerLeave={handleFabPressEnd}
+              onClick={handleFabTap}
+              className={cn(
+                '-translate-y-4 w-15 h-15 rounded-[1.4rem] flex items-center justify-center shadow-2xl transition-all active:scale-90',
+                collabMode
+                  ? 'bg-[#e9c46a] text-[#264653] shadow-[#e9c46a]/30'
+                  : 'bg-primary text-white shadow-primary/30'
+              )}
+            >
+              <Plus className="w-8 h-8" />
+              {collabMode && (
+                <div className="absolute top-1 right-1 w-3 h-3 bg-[#006d77] rounded-full border-2 border-[#e9c46a]" />
+              )}
+            </button>
+            <span className={cn("text-[8px] font-black uppercase tracking-widest -mt-3", collabMode ? "text-white/40" : "text-slate-400")}>
+              {collabMode ? 'Switch' : 'Post'}
+            </span>
+          </div>
+
           <NavButton active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={
             <div className="relative">
               <User className="w-6 h-6" />
@@ -7835,62 +8031,67 @@ export default function App() {
               )}
             </div>
           } label="Journey" dark={collabMode} />
-        </div>
-
-        {/* Expanded Focus Menu */}
-        <div className={cn(
-          "px-6 pt-2 pb-8 grid grid-cols-2 gap-4 transition-all duration-500",
-          isMenuOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
-        )}>
-           <button 
-             onClick={() => {
-               setCollabMode(false);
-               setIsMenuOpen(false);
-             }}
-             className={cn(
-               "flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all",
-               !collabMode 
-                 ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" 
-                 : "bg-white/5 border-white/10 text-white/60"
-             )}
-           >
-             <Home className="w-5 h-5" />
-             <span className="text-[10px] font-black uppercase tracking-widest">Family Focus</span>
-           </button>
-            <button 
-              onClick={() => {
-                setCollabMode(true);
-                setIsMenuOpen(false);
-              }}
-              className={cn(
-                "flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all",
-                collabMode 
-                  ? "bg-[#e9c46a] text-[#264653] border-[#e9c46a] shadow-lg shadow-[#e9c46a]/20" 
-                  : "bg-[#006d77]/5 border-[#006d77]/10 text-[#006d77]"
-              )}
-            >
-              <Briefcase className="w-5 h-5" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Collab Focus</span>
-            </button>
-            {currentUser?.role === 'SuperAdmin' && (
-              <button 
-                onClick={() => {
-                  setActiveTab('admin');
-                  setIsMenuOpen(false);
-                }}
-                className={cn(
-                  "col-span-2 flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all",
-                  activeTab === 'admin'
-                    ? "bg-secondary text-white border-secondary shadow-lg shadow-secondary/20"
-                    : "bg-slate-50 border-slate-100 text-slate-400"
-                )}
-              >
-                <Shield className="w-5 h-5" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Super Admin Panel</span>
-              </button>
-            )}
+          <NavButton active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} icon={<Shield className="w-6 h-6" />} label="Admin" dark={collabMode} />
         </div>
       </nav>
+
+      {/* Post Menu Bottom Sheet */}
+      <AnimatePresence>
+        {isPostMenuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[140] bg-secondary/40 backdrop-blur-sm"
+              onClick={() => setIsPostMenuOpen(false)}
+            />
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 left-0 right-0 z-[150] bg-white rounded-t-[3rem] shadow-2xl p-8 pb-12"
+            >
+              <div className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-8" />
+              
+              <h2 className="text-xl font-black text-secondary tracking-tight mb-6">What do you want to share?</h2>
+
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { icon: MessageSquare, label: 'Post Request', description: 'Ask for advice or help', color: 'text-[#006d77]', bg: 'bg-[#006d77]/10', action: () => { setIsLookingForOpen(true); setIsPostMenuOpen(false); } },
+                  { icon: Calendar, label: 'Post Event', description: 'Organize a local meetup', color: 'text-[#e2725b]', bg: 'bg-[#e2725b]/10', action: () => { setIsAddEventOpen(true); setIsPostMenuOpen(false); } },
+                  { icon: ShoppingBag, label: 'Sell / Swap', description: 'Marketplace items', color: 'text-amber-600', bg: 'bg-amber-50', action: () => { setIsAddItemOpen(true); setIsPostMenuOpen(false); } },
+                  { icon: MapPin, label: 'Recommend Spot', description: 'Vetted family place', color: 'text-[#006d77]', bg: 'bg-[#006d77]/10', action: () => { setIsRecommendSpotOpen(true); setIsPostMenuOpen(false); } },
+                ].map(({ icon: Icon, label, description, color, bg, action }) => (
+                  <button
+                    key={label}
+                    onClick={action}
+                    className="flex flex-col items-start text-left gap-4 p-6 rounded-3xl border border-slate-50 bg-slate-50/50 hover:bg-white hover:shadow-xl transition-all active:scale-95 group"
+                  >
+                    <div className={cn('w-12 h-12 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform', bg)}>
+                      <Icon className={cn('w-6 h-6', color)} />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-black uppercase tracking-widest text-secondary leading-none mb-1">
+                        {label}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">{description}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setIsPostMenuOpen(false)}
+                className="w-full mt-8 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-secondary transition-colors"
+              >
+                Cancel
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Global Modals */}
       <ToastContainer />
@@ -8454,34 +8655,12 @@ export default function App() {
             searchType="cities"
           />
           
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className={cn("text-xs font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Startdatum</label>
-              <input 
-                required
-                type="date" 
-                className={cn(
-                  "w-full p-4 rounded-2xl focus:outline-none focus:ring-2 transition-all font-bold",
-                  collabMode ? "bg-white/10 border-white/10 text-white focus:ring-white/20" : "bg-slate-50 border-slate-100 text-secondary focus:ring-primary/20"
-                )}
-                value={newTrip.startDate}
-                onChange={e => setNewTrip(prev => ({ ...prev, startDate: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className={cn("text-xs font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Einddatum</label>
-              <input 
-                required
-                type="date" 
-                className={cn(
-                  "w-full p-4 rounded-2xl focus:outline-none focus:ring-2 transition-all font-bold",
-                  collabMode ? "bg-white/10 border-white/10 text-white focus:ring-white/20" : "bg-slate-50 border-slate-100 text-secondary focus:ring-primary/20"
-                )}
-                value={newTrip.endDate}
-                onChange={e => setNewTrip(prev => ({ ...prev, endDate: e.target.value }))}
-              />
-            </div>
-          </div>
+          <DateRangePicker 
+            startDate={newTrip.startDate}
+            endDate={newTrip.endDate}
+            onChange={(start, end) => setNewTrip(prev => ({ ...prev, startDate: start, endDate: end }))}
+            minDate={new Date().toISOString().split('T')[0]}
+          />
 
           <button 
             type="submit" 
@@ -8490,7 +8669,7 @@ export default function App() {
               collabMode ? "bg-[#e9c46a] text-[#264653]" : "bg-primary text-white shadow-primary/20"
             )}
           >
-            {newTrip.id ? "Update Trip" : "Reis Toevoegen"}
+            {newTrip.id ? "Update Trip" : "Add Trip"}
           </button>
         </form>
       </Modal>

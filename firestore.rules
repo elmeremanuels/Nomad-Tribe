@@ -56,7 +56,7 @@ service cloud.firestore {
       allow list: if isSignedIn() && (isSuper() || resource.data.id != null);
       allow create: if isVerified() && isValidId(userId) && isValidProfile(incoming());
       allow update: if isVerified() && isOwner(userId) && (
-        (incoming().diff(existing()).affectedKeys().hasOnly(['familyName', 'bio', 'travelReasons', 'nativeLanguage', 'spokenLanguages', 'parents', 'kids', 'currentLocation', 'vibeFamilyMetrics', 'lastVibeCheck', 'hasCompletedOnboarding', 'openToCollabs', 'privacySettings', 'preferences', 'collabCard', 'photoUrl'])) &&
+        (incoming().diff(existing()).affectedKeys().hasOnly(['familyName', 'bio', 'travelReasons', 'nativeLanguage', 'spokenLanguages', 'parents', 'kids', 'currentLocation', 'vibeFamilyMetrics', 'lastVibeCheck', 'hasCompletedOnboarding', 'openToCollabs', 'privacySettings', 'preferences', 'collabCard', 'photoUrl', 'isPremium', 'premiumType', 'premiumUntil', 'verificationLevel', 'badges', 'gamification', 'vouchedBy'])) &&
         incoming().role == existing().role &&
         incoming().id == existing().id
       ) || isAdmin();
@@ -189,7 +189,7 @@ service cloud.firestore {
     match /pastPlaces/{id} { 
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isSuper()); 
       allow create: if isVerified() && incoming().userId == request.auth.uid;
-      allow update, delete: if isVerified() && (resource.data.userId == request.auth.uid || isSuper());
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isSuper());
     }
     match /activities/{id} { 
       allow read: if isSignedIn() && (isSuper() || resource.data.id != null);
@@ -211,6 +211,11 @@ service cloud.firestore {
       allow read: if isVerified() && (resource.data.blockerId == request.auth.uid || isSuper()); 
       allow create: if isVerified() && incoming().blockerId == request.auth.uid;
       allow update, delete: if isVerified() && (resource.data.blockerId == request.auth.uid || isSuper()); 
+    }
+
+    // TEST COLLECTION (Connectivity Check)
+    match /test/connection {
+      allow read: if true;
     }
   }
 }

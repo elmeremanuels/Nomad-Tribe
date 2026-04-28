@@ -123,6 +123,7 @@ export const OnboardingFlow: React.FC = () => {
       setActiveTab('tribe');
     } catch (error) {
       console.error("Onboarding failed", error);
+      useNomadStore.getState().addToast("Could not complete onboarding. Please check your connection.", "error");
     } finally {
       setIsLoading(false);
     }
