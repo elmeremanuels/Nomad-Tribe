@@ -6063,7 +6063,7 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                       <h4 className="font-bold text-sm line-clamp-1">
                         {(() => {
                            const city = place.city || place.name || "";
-                           if (city === "Selected Place" || city === "Adventure" || city === "Travel Adventure") return place.country || "Unknown Adventure";
+                           if (city === "Selected Place" || city === "Selected Location" || city === "Adventure" || city === "Travel Adventure") return place.country || "Unknown Adventure";
                            return city;
                         })()}
                       </h4>

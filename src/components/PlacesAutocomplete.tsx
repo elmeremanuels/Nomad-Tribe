@@ -58,35 +58,39 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
     if (!picker) return;
 
     const handlePlaceChange = () => {
-      const place = picker.value;
+      const place = picker.value as any;
       if (!place) { 
         onChange(null); 
         return; 
       }
 
-      const p = place.toJSON ? place.toJSON() : place;
-      const components: any[] = p.addressComponents || p.address_components || [];
+      // Try to use properties directly from the Place object, handle toJSON fallbacks
+      const p = place;
+      const json = p.toJSON ? p.toJSON() : {} as any;
+      
+      const components: any[] = p.addressComponents || json.addressComponents || [];
       const getC = (type: string) => components.find((c: any) => c.types?.includes(type));
 
       const cityVal = 
         getC('locality')?.longText || getC('locality')?.long_name ||
         getC('administrative_area_level_1')?.longText || getC('administrative_area_level_1')?.long_name ||
         getC('administrative_area_level_2')?.longText || getC('administrative_area_level_2')?.long_name ||
-        (p.formattedAddress || p.formatted_address || '').split(',')[0] || '';
+        (p.formattedAddress || json.formattedAddress || '').split(',')[0] || '';
 
-      const nameVal = p.displayName?.text || p.name || cityVal || 'Selected Location';
+      const displayName = p.displayName || json.displayName?.text || p.name || json.name;
+      const nameVal = (typeof displayName === 'object' ? (displayName?.text || displayName?.long_name) : displayName) || cityVal || 'Selected Location';
 
       const result: PlaceResult = {
-        placeId: p.id || p.place_id || '',
+        placeId: p.id || json.id || '',
         name: nameVal,
-        address: p.formattedAddress || p.formatted_address || '',
+        address: p.formattedAddress || json.formattedAddress || '',
         city: cityVal,
         country: getC('country')?.longText || getC('country')?.long_name || 
-          (p.formattedAddress || p.formatted_address || '').split(',').pop()?.trim() || '',
+          (p.formattedAddress || json.formattedAddress || '').split(',').pop()?.trim() || '',
         countryCode: getC('country')?.shortText || getC('country')?.short_name || '',
-        lat: typeof p.location?.lat === 'function' ? p.location.lat() : (p.geometry?.location?.lat ?? 0),
-        lng: typeof p.location?.lng === 'function' ? p.location.lng() : (p.geometry?.location?.lng ?? 0),
-        types: p.types || []
+        lat: typeof p.location?.lat === 'function' ? p.location.lat() : (p.location?.lat ?? 0),
+        lng: typeof p.location?.lng === 'function' ? p.location.lng() : (p.location?.lng ?? 0),
+        types: p.types || json.types || []
       };
 
       onChange(result);
@@ -95,6 +99,13 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
     picker.addEventListener('gmpx-placechange', handlePlaceChange);
     return () => picker.removeEventListener('gmpx-placechange', handlePlaceChange);
   }, [onChange]);
+
+  // Sync initial/updated value from prop to the web component
+  useEffect(() => {
+    if (pickerRef.current && value?.placeId) {
+      pickerRef.current.setAttribute('for-place', value.placeId);
+    }
+  }, [value?.placeId]);
 
   // GPS detectie → reverse geocode via Geocoding API
   const detectLocation = () => {
