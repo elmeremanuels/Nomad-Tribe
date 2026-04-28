@@ -24,8 +24,7 @@ interface MapViewProps {
 
 const hasValidCoords = (lat?: number, lng?: number) =>
   lat != null && lng != null &&
-  !isNaN(lat) && !isNaN(lng) &&
-  (Math.abs(lat) > 0.001 || Math.abs(lng) > 0.001);
+  !isNaN(lat) && !isNaN(lng);
 
 const RecenterMap = ({ center }: { center: { lat: number; lng: number } }) => {
   const map = useMap();
@@ -139,7 +138,7 @@ export const MapView: React.FC<MapViewProps> = ({
           <div>
             <p className="text-xs font-black text-red-600 uppercase tracking-widest">Maps API Key Missing</p>
             <p className="text-[10px] text-red-400 mt-1 max-w-[200px] mx-auto leading-relaxed">
-              Please set your <b>VITE_GOOGLE_MAPS_API_KEY</b> in the Project Settings to enable interactive maps.
+              Please set your <b>VITE_GOOGLE_MAPS_API_KEY</b> in the Project Settings and ensure <b>Maps JavaScript API</b> and <b>Places API</b> are enabled in the Google Cloud Console.
             </p>
           </div>
         </div>
@@ -173,7 +172,7 @@ export const MapView: React.FC<MapViewProps> = ({
            fallback to DEMO_MAP_ID which usually works for basic testing.
            Ensure "Advanced Marker" capability is enabled in Google Cloud Console for your API Key.
         */
-        mapId={import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
+        mapId={import.meta.env.VITE_GOOGLE_MAPS_MAP_ID && import.meta.env.VITE_GOOGLE_MAPS_MAP_ID !== 'undefined' ? import.meta.env.VITE_GOOGLE_MAPS_MAP_ID : "DEMO_MAP_ID"}
         defaultCenter={{ lat: center.lat, lng: center.lng }}
         center={{ lat: center.lat, lng: center.lng }}
         defaultZoom={zoom}

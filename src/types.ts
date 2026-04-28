@@ -26,7 +26,8 @@ export interface PastPlace {
   countryCode: string;
   lat: number;
   lng: number;
-  year: number;             // Jaar van bezoek (geen exacte datum — privacy + geheugen)
+  year: number;             // Jaar van bezoek
+  month?: number;           // Maand van bezoek (1-12)
   linkedSpotId?: string;    // Als deze plek ook een Spot is in de spots-collectie
   addedAt: string;          // ISO — wanneer toegevoegd aan de journey
 }
@@ -53,6 +54,7 @@ export interface Trip {
   location: string;
   lat: number;
   lng: number;
+  coordinates?: { lat: number; lng: number };
   place?: PlaceResult;
   citySlug?: string;
   countryCode?: string;
@@ -124,6 +126,8 @@ export interface CollabAsk {
   skillNeeded: string; // 1 tag from skillsSeed.json (The "Demand")
   description: string; // Max 150 chars: "I need help with..."
   locationSlug: string; // For local matching
+  lat?: number;
+  lng?: number;
   createdAt: string;
 }
 
@@ -568,6 +572,11 @@ export interface Advertiser {
 /**
  * ADVANCED MATCHMAKING ALGORITHM
  */
+
+export const hasValidCoords = (lat?: number, lng?: number) =>
+  lat != null && lng != null &&
+  !isNaN(lat) && !isNaN(lng) &&
+  (Math.abs(lat) > 0.001 || Math.abs(lng) > 0.001);
 
 export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 999999;

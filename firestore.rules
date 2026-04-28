@@ -167,6 +167,13 @@ service cloud.firestore {
     }
     
     // Remaining collections
+    match /settings/global {
+      allow read: if true;
+    }
+    match /settings/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
     match /destinations/{id} { 
       allow read: if isSignedIn() && (isSuper() || resource.data.id != null);
       allow write: if isAdmin(); 
@@ -180,7 +187,9 @@ service cloud.firestore {
       allow write: if isVerified(); 
     }
     match /pastPlaces/{id} { 
-      allow read, write: if isSignedIn() && (resource.data.userId == request.auth.uid || isSuper()); 
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isSuper()); 
+      allow create: if isVerified() && incoming().userId == request.auth.uid;
+      allow update, delete: if isVerified() && (resource.data.userId == request.auth.uid || isSuper());
     }
     match /activities/{id} { 
       allow read: if isSignedIn() && (isSuper() || resource.data.id != null);
@@ -199,7 +208,9 @@ service cloud.firestore {
       allow read, update: if isAdmin(); 
     }
     match /blocks/{id} { 
-      allow read, write: if isVerified() && (resource.data.blockerId == request.auth.uid || isSuper()); 
+      allow read: if isVerified() && (resource.data.blockerId == request.auth.uid || isSuper()); 
+      allow create: if isVerified() && incoming().blockerId == request.auth.uid;
+      allow update, delete: if isVerified() && (resource.data.blockerId == request.auth.uid || isSuper()); 
     }
   }
 }

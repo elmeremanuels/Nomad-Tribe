@@ -15,20 +15,105 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import { standardizeInterest } from './lib/interestUtils';
 import { fetchFirstPlacePhoto } from './lib/googlePlaces';
-import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon } from 'lucide-react';
+import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon, Locate } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNomadStore } from './store';
 import { containsBlockedContent, cleanContent } from './lib/contentFilter';
-import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance, Deal, PlaceResult } from './types';
+import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance, Deal, PlaceResult, BlockedUser, hasValidCoords } from './types';
 import { format, parseISO } from 'date-fns';
 import { cn } from './lib/utils';
 import occupations from './data/occupationsSeed.json';
 import skillsSeed from './data/skillsSeed.json';
 
-const hasValidCoords = (lat?: number, lng?: number) =>
-  lat != null && lng != null &&
-  !isNaN(lat) && !isNaN(lng) &&
-  (Math.abs(lat) > 0.001 || Math.abs(lng) > 0.001);
+import { buildTimeline, LocationNode } from './lib/timeline';
+
+const isBlocked = (targetId: string, currentUser: FamilyProfile | null, blocks: BlockedUser[]) => {
+  if (!currentUser) return false;
+  return blocks.some(b => 
+    (b.blockerId === currentUser.id && b.blockedId === targetId) || 
+    (b.blockerId === targetId && b.blockedId === currentUser.id)
+  );
+};
+
+const FamilyCard = ({ 
+  family, 
+  connectionStatus, 
+  onConnect, 
+  onMessage, 
+  onSelect,
+  specialBadge 
+}: { 
+  family: FamilyProfile, 
+  connectionStatus?: string, 
+  onConnect: () => void, 
+  onMessage: () => void, 
+  onSelect: () => void,
+  specialBadge?: string
+}) => {
+  return (
+    <div 
+      onClick={onSelect}
+      className="w-64 bg-white border border-slate-100 rounded-[2.5rem] p-5 card-shadow group cursor-pointer hover:-translate-y-1 transition-all relative overflow-hidden"
+    >
+      <div className="flex items-center gap-4 mb-4">
+        <div className="relative">
+          <img 
+            src={family.photoUrl || '/avatar-placeholder.png'} 
+            className="w-14 h-14 rounded-2xl object-cover shadow-md" 
+            alt={family.familyName} 
+          />
+          {family.verificationLevel >= 2 && (
+            <div className="absolute -top-2 -right-2 bg-primary text-white p-1 rounded-lg border-2 border-white shadow-lg">
+              <ShieldCheck className="w-3 h-3" />
+            </div>
+          )}
+        </div>
+        <div className="min-w-0">
+          <h4 className="font-black text-secondary truncate">{family.familyName}</h4>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{family.nativeLanguage} Family</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mb-5 h-6 overflow-hidden">
+        {family.kids.map(kid => (
+          <span key={kid.id} className="px-2 py-1 bg-slate-50 text-[9px] font-black uppercase text-slate-400 rounded-lg">
+            {kid.age} {kid.gender === 'Boy' ? '👦' : kid.gender === 'Girl' ? '👧' : '👶'}
+          </span>
+        ))}
+      </div>
+
+      {specialBadge && (
+        <div className="absolute top-4 right-4 bg-accent text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest animate-pulse">
+          {specialBadge}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        {connectionStatus === 'accepted' ? (
+          <button 
+            onClick={(e) => { e.stopPropagation(); onMessage(); }}
+            className="flex-1 py-3 bg-secondary text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-secondary/90 transition-all"
+          >
+            Message
+          </button>
+        ) : (
+          <button 
+            onClick={(e) => { e.stopPropagation(); onConnect(); }}
+            disabled={connectionStatus === 'pending'}
+            className={cn(
+              "flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
+              connectionStatus === 'pending' 
+                ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
+                : "bg-primary text-white hover:bg-primary/90"
+            )}
+          >
+            {connectionStatus === 'pending' ? 'Pending' : 'Connect'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const ReportModal = ({ isOpen, onClose, target }: { isOpen: boolean, onClose: () => void, target: { id: string, type: Report['targetType'] } | null }) => {
   const { submitReport, currentUser } = useNomadStore();
@@ -1527,14 +1612,24 @@ const DealCard = ({ deal }: { deal: Deal }) => {
   );
 };
 
-const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall }: { onViewAllMarketplace: () => void, onSayHello: (family: FamilyProfile, message?: string) => void, onSelectFamily: (family: FamilyProfile) => void, onPaywall: () => void }) => {
+const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall, setIsAddPastPlaceOpen, setActiveTab, onSetLocation, onAddTrip, onEditTrip }: { 
+  onViewAllMarketplace: () => void, 
+  onSayHello: (family: FamilyProfile, message?: string) => void, 
+  onSelectFamily: (family: FamilyProfile) => void, 
+  onPaywall: () => void,
+  setIsAddPastPlaceOpen: (open: boolean) => void,
+  setActiveTab: (tab: any) => void,
+  onSetLocation: () => void,
+  onAddTrip: () => void,
+  onEditTrip: (trip: Trip) => void
+}) => {
   const { 
     currentUser, trips, cities: hubCities, profiles, lookingFor, addLookingFor, 
     removeLookingFor, marketItems, removeMarketItem, reserveItem, connections, 
     requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, 
     collabAsks, addCollabAsk, removeCollabAsk, blocks, saveVibeCheck, spots, events, 
     addEvent, removeEvent, tribeRadius, setTribeRadius, deals,
-    pastPlaces, realTimeLocation
+    pastPlaces, realTimeLocation, removePastPlace, removeTrip
   } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
@@ -1552,7 +1647,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   const [spotSearchQuery, setSpotSearchQuery] = useState('');
   const [spotCategoryFilter, setSpotCategoryFilter] = useState('All');
   const [professionalOnly, setProfessionalOnly] = useState(false);
-  const [activeLocationIndex, setActiveLocationIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isAllSpotsOpen, setIsAllSpotsOpen] = useState(false);
   const [isActionDropdownOpen, setIsActionDropdownOpen] = useState(false);
@@ -1561,6 +1656,35 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   const [isPostMarketItemOpen, setIsPostMarketItemOpen] = useState(false);
   const [isRecommendSpotOpen, setIsRecommendSpotOpen] = useState(false);
 
+  const [exploreLocation, setExploreLocation] = useState<PlaceResult | null>(null);
+  const [isTeleportOpen, setIsTeleportOpen] = useState(false);
+
+  const { nodes: timeline, currentIndex } = useMemo(() => {
+    return buildTimeline(currentUser, pastPlaces, trips, realTimeLocation, exploreLocation);
+  }, [currentUser, pastPlaces, trips, realTimeLocation, exploreLocation]);
+
+  // Initialise or follow location change (home node index)
+  useEffect(() => {
+    if (currentIndex !== -1) {
+      setActiveIndex(currentIndex);
+    }
+  }, [currentIndex]);
+
+  const activeLocation = useMemo(() => {
+    if (timeline.length === 0) return { id: 'default', type: 'current' as const, label: 'Global Tribe', name: 'Global Tribe', sublabel: 'Now', lat: 18.7883, lng: 98.9853 };
+    const idx = activeIndex === -1 ? currentIndex : activeIndex;
+    const safeIndex = ((idx % timeline.length) + timeline.length) % timeline.length;
+    const node = timeline[safeIndex];
+    return { 
+      ...node, 
+      name: node.label,
+      lat: node.lat ?? 18.7883,
+      lng: node.lng ?? 98.9853
+    };
+  }, [timeline, activeIndex, currentIndex]);
+
+  const activeNode = activeLocation;
+
   const getConnection = (otherId: string) => {
     return connections.find(c => 
       (c.requesterId === currentUser?.id && c.recipientId === otherId) ||
@@ -1568,112 +1692,75 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
     );
   };
 
-  const locations = useMemo(() => {
-    const locs: { name: string; type: 'past' | 'current' | 'planned' | 'default'; lat: number; lng: number, continent?: string, fullPlace?: PlaceResult, date?: string }[] = [];
-    
-    // 1. Past Places
-    const sortedPast = [...pastPlaces]
-      .filter(p => hasValidCoords(p.lat, p.lng))
-      .sort((a, b) => a.year - b.year);
-    
-    sortedPast.forEach(p => {
-      locs.push({
-        name: p.city || p.name,
-        type: 'past',
-        lat: p.lat,
-        lng: p.lng,
-        date: `${p.year}`
-      });
-    });
-
-    // 2. Real-time Location (The Start Page)
-    if (realTimeLocation && hasValidCoords(realTimeLocation.lat, realTimeLocation.lng)) {
-      locs.push({
-        name: realTimeLocation.city || 'Current GPS',
-        type: 'current',
-        lat: realTimeLocation.lat,
-        lng: realTimeLocation.lng,
-        fullPlace: realTimeLocation
-      });
-    } else if (currentUser?.currentLocation?.placeId) {
-      const locName = currentUser.currentLocation.city || currentUser.currentLocation.name;
-      locs.push({ 
-        name: locName, 
-        type: 'current',
-        lat: currentUser.currentLocation.lat || 18.7883,
-        lng: currentUser.currentLocation.lng || 98.9853,
-        fullPlace: currentUser.currentLocation
-      });
-    }
-
-    // 3. Planned Trips
-    const userTrips = trips
-      .filter(t => t.familyId === currentUser?.id)
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    
-    userTrips.forEach(t => {
-      const tripLocName = t.location;
-      // Skip if already added as current to avoid duplication
-      if (locs.some(l => l.type === 'current' && l.name === tripLocName)) return;
-      
-      locs.push({ 
-        name: tripLocName, 
-        type: 'planned',
-        lat: t.lat || 0,
-        lng: t.lng || 0,
-        fullPlace: t.place,
-        date: t.startDate
-      });
-    });
-
-    if (locs.length === 0) {
-      locs.push({ name: 'Global Tribe', type: 'default', lat: 18.7883, lng: 98.9853, continent: 'Global' });
-    }
-
-    return locs;
-  }, [currentUser?.currentLocation, realTimeLocation, trips, currentUser?.id, pastPlaces]);
-
-  // Set initial index to the 'current' location
-  useEffect(() => {
-    const currentIndex = locations.findIndex(l => l.type === 'current');
-    if (currentIndex !== -1 && activeLocationIndex === 0) {
-      setActiveLocationIndex(currentIndex);
-    }
-  }, [locations.length]);
-
-  const activeLocation = useMemo(() => {
-    if (locations.length === 0) return { name: 'Global Tribe', type: 'default' as const, lat: 18.7883, lng: 98.9853 };
-    const safeIndex = activeLocationIndex % locations.length;
-    return locations[safeIndex];
-  }, [locations, activeLocationIndex]);
-
   const currentMetrics = useMemo(() => {
-    const loc = activeLocation;
+    const node = activeNode;
     return {
-      location: loc.name,
-      weather: loc.type === 'current' ? 'Live' : loc.type === 'past' ? 'Past' : 'Planned',
+      location: node.label,
+      weather: node.type === 'current' ? 'Live' : node.type === 'past' ? 'Past' : 'Planned',
       emergency: '112',
-      date: loc.date || format(new Date(), 'EEEE, MMM do'),
+      date: node.sublabel || format(new Date(), 'EEEE, MMM do'),
       families: profiles.filter(p => 
         p.currentLocation && hasValidCoords(p.currentLocation.lat, p.currentLocation.lng) &&
-        calculateDistance(loc.lat, loc.lng, p.currentLocation.lat, p.currentLocation.lng) <= 50
+        calculateDistance(node.lat, node.lng, p.currentLocation.lat, p.currentLocation.lng) <= 50
       ).length
     };
-  }, [activeLocation, profiles]);
+  }, [activeNode, profiles]);
 
   const filteredProfiles = useMemo(() => {
-    if (!currentUser) return [];
+    if (!currentUser || !activeNode) return [];
     return profiles.filter(p => {
        if (p.id === currentUser.id) return false;
        if (p.privacySettings?.isIncognito) return false;
-       if (blocks.some(b => (b.blockerId === currentUser.id && b.blockedId === p.id) || (b.blockerId === p.id && b.blockedId === currentUser.id))) return false;
-       if (p.currentLocation && activeLocation.lat && activeLocation.lng) {
-         const dist = calculateDistance(activeLocation.lat, activeLocation.lng, p.currentLocation.lat, p.currentLocation.lng);
+       
+       // Always show connects regardless of location
+       const conn = getConnection(p.id);
+       if (conn?.status === 'accepted') return true;
+
+       if (isBlocked(p.id, currentUser, blocks)) return false;
+
+       if (p.currentLocation && hasValidCoords(p.currentLocation.lat, p.currentLocation.lng) && hasValidCoords(activeNode.lat, activeNode.lng)) {
+         const dist = calculateDistance(activeNode.lat, activeNode.lng, p.currentLocation.lat, p.currentLocation.lng);
          return dist <= tribeRadius;
        }
-       return true;
+       return false;
     });
-  }, [currentUser, profiles, blocks, activeLocation, tribeRadius]);
+  }, [currentUser, profiles, blocks, activeNode, tribeRadius, connections]);
+
+  const comingTogether = useMemo(() => {
+    if (activeNode?.type !== 'future' || !activeNode.trip) return [];
+
+    const myStart = new Date(activeNode.trip.startDate).getTime();
+    const myEnd = new Date(activeNode.trip.endDate).getTime();
+
+    return profiles.filter(p => {
+      if (p.id === currentUser?.id) return false;
+      if (p.privacySettings?.isIncognito) return false;
+      if (isBlocked(p.id, currentUser, blocks)) return false;
+
+      // Check if they have a trip to the same city with overlap
+      const theirTrips = trips.filter(t => {
+        if (t.familyId !== p.id) return false;
+
+        // Same city (radius check)
+        const nodeLat = activeNode.lat;
+        const nodeLng = activeNode.lng;
+        const tripLat = t.lat || 0;
+        const tripLng = t.lng || 0;
+        
+        if (!hasValidCoords(nodeLat, nodeLng) || !hasValidCoords(tripLat, tripLng)) return false;
+
+        const dist = calculateDistance(nodeLat, nodeLng, tripLat, tripLng);
+        if (dist > 50) return false; 
+
+        // Date overlap
+        const theirStart = new Date(t.startDate).getTime();
+        const theirEnd = new Date(t.endDate).getTime();
+        return theirStart <= myEnd && theirEnd >= myStart;
+      });
+
+      return theirTrips.length > 0;
+    });
+  }, [activeNode, profiles, trips, currentUser, blocks]);
 
   const filteredSpots = useMemo(() => {
     return spots.filter(spot => {
@@ -1681,53 +1768,53 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
       const isSpeciallyFeatured = spot.isVetted || !!spot.monthlyDeal;
       if (collabMode && !isSpeciallyFeatured && (spot.category !== 'Workspace' && spot.category !== 'Accommodation')) return false;
       
-      if (spot.place && activeLocation.lat && activeLocation.lng) {
-        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, spot.place.lat, spot.place.lng);
+      if (spot.place && hasValidCoords(spot.place.lat, spot.place.lng) && hasValidCoords(activeNode.lat, activeNode.lng)) {
+        const dist = calculateDistance(activeNode.lat, activeNode.lng, spot.place.lat, spot.place.lng);
         return dist <= tribeRadius;
       }
-      return true;
+      return false;
     });
-  }, [spots, collabMode, activeLocation, tribeRadius]);
+  }, [spots, collabMode, activeNode, tribeRadius]);
 
   const filteredDeals = useMemo(() => {
     return deals.filter(d => {
       if (d.status !== 'Active') return false;
       if (d.targetPremiumOnly && !isPremium) return false;
       if (d.isGlobal) return true;
-      if (d.lat !== undefined && d.lng !== undefined && activeLocation.lat && activeLocation.lng) {
-        const dist = calculateDistance(activeLocation.lat, activeLocation.lng, d.lat, d.lng);
+      if (d.lat !== undefined && d.lng !== undefined && hasValidCoords(activeNode.lat, activeNode.lng)) {
+        const dist = calculateDistance(activeNode.lat, activeNode.lng, d.lat, d.lng);
         return dist <= d.radiusKm;
       }
       return false;
     });
-  }, [deals, activeLocation, isPremium, tribeRadius]);
+  }, [deals, activeNode, isPremium, tribeRadius]);
 
   const localEvents = useMemo(() => {
     return events.filter(e => {
-       if (e.lat && e.lng && activeLocation.lat && activeLocation.lng) {
-         return calculateDistance(activeLocation.lat, activeLocation.lng, e.lat, e.lng) <= tribeRadius;
+       if (e.lat && e.lng && hasValidCoords(activeNode.lat, activeNode.lng)) {
+         return calculateDistance(activeNode.lat, activeNode.lng, e.lat, e.lng) <= tribeRadius;
        }
-       return e.location === activeLocation.name;
+       return e.location === activeNode.label;
     });
-  }, [activeLocation, events, tribeRadius]);
+  }, [activeNode, events, tribeRadius]);
 
   const localMarketItems = useMemo(() => {
     return marketItems.filter(item => {
-       if (item.lat && item.lng && activeLocation.lat && activeLocation.lng) {
-         return calculateDistance(activeLocation.lat, activeLocation.lng, item.lat, item.lng) <= tribeRadius;
+       if (item.lat && item.lng && hasValidCoords(activeNode.lat, activeNode.lng)) {
+         return calculateDistance(activeNode.lat, activeNode.lng, item.lat, item.lng) <= tribeRadius;
        }
-       return item.location === activeLocation.name;
+       return item.location === activeNode.label;
     });
-  }, [activeLocation, marketItems, tribeRadius]);
+  }, [activeNode, marketItems, tribeRadius]);
 
   const localRequests = useMemo(() => {
     return lookingFor.filter(r => {
-      if (r.lat && r.lng && activeLocation.lat && activeLocation.lng) {
-        return calculateDistance(activeLocation.lat, activeLocation.lng, r.lat, r.lng) <= tribeRadius;
+      if (r.lat && r.lng && hasValidCoords(activeNode.lat, activeNode.lng)) {
+        return calculateDistance(activeNode.lat, activeNode.lng, r.lat, r.lng) <= tribeRadius;
       }
-      return r.location === activeLocation.name;
+      return r.location === activeNode.label;
     });
-  }, [activeLocation, lookingFor, tribeRadius]);
+  }, [activeNode, lookingFor, tribeRadius]);
 
   const nextUpItems = useMemo(() => {
     const items = [
@@ -1749,8 +1836,8 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
   }, [filteredSpots, spotSearchQuery, spotCategoryFilter]);
 
   const placesYouMayLike = useMemo(() => {
-    return spots.filter(s => s.isVetted && calculateDistance(activeLocation.lat, activeLocation.lng, s.place.lat, s.place.lng) <= tribeRadius).slice(0, 3);
-  }, [spots, activeLocation, tribeRadius]);
+    return spots.filter(s => s.isVetted && calculateDistance(activeNode.lat, activeNode.lng, s.place.lat, s.place.lng) <= tribeRadius).slice(0, 3);
+  }, [spots, activeNode, tribeRadius]);
 
   // --- Collab Mode Monetization Gating ---
   const isCollabGated = collabMode && 
@@ -1791,9 +1878,9 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
         userId: currentUser.id,
         familyName: currentUser.familyName,
         place: newRequest.place || undefined,
-        location: newRequest.place ? `${newRequest.place.city}, ${newRequest.place.country}` : activeLocation.name,
-        lat: newRequest.place?.lat || activeLocation.lat,
-        lng: newRequest.place?.lng || activeLocation.lng,
+        location: newRequest.place ? `${newRequest.place.city}, ${newRequest.place.country}` : activeNode.label,
+        lat: newRequest.place?.lat || activeNode.lat,
+        lng: newRequest.place?.lng || activeNode.lng,
         category: newRequest.category,
         title: cleanContent(newRequest.title),
         description: cleanContent(newRequest.description),
@@ -1850,9 +1937,9 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
       imageUrl: newItem.imageUrl || '',
       status: 'Available',
       place: newItem.place || undefined,
-      location: newItem.place ? `${newItem.place.city}, ${newItem.place.country}` : activeLocation.name,
-      lat: newItem.place?.lat || activeLocation.lat,
-      lng: newItem.place?.lng || activeLocation.lng,
+      location: newItem.place ? `${newItem.place.city}, ${newItem.place.country}` : activeNode.label,
+      lat: newItem.place?.lat || activeNode.lat,
+      lng: newItem.place?.lng || activeNode.lng,
       createdAt: new Date().toISOString()
     };
     await addItem(item);
@@ -1873,9 +1960,9 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
       date: newEvent.date,
       time: newEvent.time,
       place: newEvent.place || undefined,
-      location: newEvent.place ? `${newEvent.place.city}, ${newEvent.place.country}` : activeLocation.name,
-      lat: newEvent.place?.lat || activeLocation.lat,
-      lng: newEvent.place?.lng || activeLocation.lng,
+      location: newEvent.place ? `${newEvent.place.city}, ${newEvent.place.country}` : activeNode.label,
+      lat: newEvent.place?.lat || activeNode.lat,
+      lng: newEvent.place?.lng || activeNode.lng,
       category: newEvent.category,
       imageUrl: newEvent.imageUrl || '',
       participants: [currentUser.id],
@@ -1936,51 +2023,136 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
           {/* Header & Location Management */}
           <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex-1 space-y-2">
-              <div className="flex items-center gap-2">
-                <h1 className={cn("text-3xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>
-                  {activeLocation.name} 
-                  {activeLocation.continent && (
-                    <span className={cn("ml-2 text-sm font-bold opacity-30", collabMode ? "text-white" : "text-secondary")}>
-                      • {activeLocation.continent}
-                    </span>
+              <div className="flex items-center gap-4">
+                <div className="flex flex-col">
+                  <h1 className={cn("text-4xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>
+                    {activeLocation.name}
+                  </h1>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className={cn("text-[10px] font-bold uppercase tracking-[0.2em] leading-none", collabMode ? "text-white/40" : "text-slate-400")}>
+                      {activeLocation.type === 'current' ? 'Dynamic Tribe' : activeLocation.sublabel}
+                    </p>
+                    {activeLocation.type === 'current' && (
+                      <span className="flex h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center bg-white/10 backdrop-blur-md rounded-3xl p-2 border border-white/5 ml-auto gap-1">
+                  <button 
+                    onClick={() => setActiveIndex(prev => (prev <= 0 ? timeline.length - 1 : prev - 1))}
+                    className={cn("p-2.5 rounded-2xl transition-all shadow-sm", collabMode ? "bg-white/5 hover:bg-white/10 text-white" : "bg-white hover:bg-slate-50 text-secondary border border-slate-100")}
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <div className={cn("px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2", collabMode ? "text-white/40" : "text-slate-400")}>
+                    <span>{activeIndex + 1}</span>
+                    <span className="opacity-20 text-[8px]">/</span>
+                    <span>{timeline.length}</span>
+                  </div>
+                  <button 
+                    onClick={() => setActiveIndex(prev => (prev === timeline.length - 1 ? 0 : prev + 1))}
+                    className={cn("p-2.5 rounded-2xl transition-all shadow-sm", collabMode ? "bg-white/5 hover:bg-white/10 text-white" : "bg-white hover:bg-slate-50 text-secondary border border-slate-100")}
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <button 
+                  onClick={() => setIsTeleportOpen(!isTeleportOpen)}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                    collabMode 
+                      ? "bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white" 
+                      : "bg-slate-50 text-slate-300 border border-slate-100 hover:bg-white hover:text-primary hover:card-shadow"
                   )}
-                </h1>
-                {activeLocation.type === 'current' && (
-                  <span className="bg-accent text-white text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-widest">Current</span>
-                )}
-                {activeLocation.type === 'planned' && (
-                  <span className="bg-primary text-white text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-widest">Planned</span>
-                )}
+                >
+                  <Search className="w-4 h-4" />
+                  Explore City
+                </button>
               </div>
+
+              {isTeleportOpen && (
+                <div className="mt-3 animate-in fade-in slide-in-from-top-2">
+                  <div className={cn(
+                    "flex flex-col gap-3 p-4 rounded-3xl border",
+                    collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 shadow-xl"
+                  )}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Transitions to Explore Hubs</p>
+                      {exploreLocation && (
+                        <button 
+                          onClick={() => {
+                            setExploreLocation(null);
+                            setIsTeleportOpen(false);
+                          }}
+                          className="text-[10px] font-black uppercase tracking-widest text-red-500 hover:underline"
+                        >
+                          Clear Exploration
+                        </button>
+                      )}
+                    </div>
+                    <PlacesAutocomplete
+                      label=""
+                      placeholder="Search a city to explore tribes..."
+                      value={exploreLocation}
+                      onChange={(place) => {
+                        if (place) {
+                          useNomadStore.getState().exploreCity(place.city);
+                          setIsTeleportOpen(false);
+                        }
+                      }}
+                      searchType="cities"
+                    />
+                    <p className="text-[9px] opacity-50 italic text-center">Redirecting to Explore Page for full Hub details.</p>
+                  </div>
+                </div>
+              )}
               <p className={cn("font-medium", collabMode ? "text-white/60" : "text-slate-500")}>
-                {activeLocation.type === 'current' ? 'Explore your neighborhood and connect with the tribe.' : 'Checking the vibes for your upcoming adventure.'}
+                {activeNode.type === 'current' ? 'Explore your neighborhood and connect with the tribe.' : 
+                 activeNode.type === 'past' ? `Relive your memories from ${activeNode.label}.` :
+                 `Planning your tribe setup for ${activeNode.label}.`}
               </p>
             </div>
             
-            <div className="flex items-center gap-2">
-               <div className="flex gap-1 mr-2">
-                 {locations.map((_, i) => (
-                   <div 
-                     key={i} 
-                     className={cn(
-                       "w-1.5 h-1.5 rounded-full transition-all",
-                       activeLocationIndex === i ? (collabMode ? "bg-white w-4" : "bg-primary w-4") : (collabMode ? "bg-white/20" : "bg-slate-200")
-                     )} 
-                   />
-                 ))}
+            <div className="hidden md:flex flex-col items-end gap-3 shrink-0">
+               <div className="flex items-center gap-4">
+                 <div className="flex gap-1.5 p-1 bg-white/5 rounded-2xl border border-white/5 backdrop-blur-md">
+                   {timeline.map((node, i) => (
+                     <button 
+                       key={node.id} 
+                       onClick={() => setActiveIndex(i)}
+                       className={cn(
+                         "w-2 h-2 rounded-full transition-all",
+                         activeIndex === i ? (collabMode ? "bg-white w-6" : "bg-primary w-6") : (collabMode ? "bg-white/20 hover:bg-white/40" : "bg-slate-200 hover:bg-slate-300")
+                       )} 
+                       title={`${node.label} (${node.type})`}
+                     />
+                   ))}
+                 </div>
+                 
+                 <div className="flex items-center gap-1">
+                   <button 
+                    onClick={() => setActiveIndex(prev => (prev <= 0 ? timeline.length - 1 : prev - 1))}
+                    className={cn(
+                      "p-2.5 rounded-2xl transition-all border shadow-lg active:scale-90",
+                      collabMode ? "bg-white/10 border-white/10 hover:bg-white/20 text-white" : "bg-white border-slate-100 text-slate-400 hover:text-primary"
+                    )}
+                   >
+                    <ChevronLeft className="w-5 h-5" />
+                   </button>
+                   <button 
+                    onClick={() => setActiveIndex(prev => (prev === timeline.length - 1 ? 0 : prev + 1))}
+                    className={cn(
+                      "p-2.5 rounded-2xl transition-all border shadow-lg active:scale-90",
+                      collabMode ? "bg-white/10 border-white/10 hover:bg-white/20 text-white" : "bg-white border-slate-100 text-slate-400 hover:text-primary"
+                    )}
+                   >
+                    <ChevronRight className="w-5 h-5" />
+                   </button>
+                 </div>
                </div>
-               <button 
-                onClick={() => setActiveLocationIndex(prev => (prev === 0 ? locations.length - 1 : prev - 1))}
-                className={cn("p-3 rounded-2xl transition-all", collabMode ? "bg-white/10 hover:bg-white/20" : "bg-white border border-slate-100 card-shadow hover:bg-slate-50")}
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <button 
-                onClick={() => setActiveLocationIndex(prev => (prev === locations.length - 1 ? 0 : prev + 1))}
-                className={cn("p-3 rounded-2xl transition-all", collabMode ? "bg-white/10 hover:bg-white/20" : "bg-white border border-slate-100 card-shadow hover:bg-slate-50")}
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
+               <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-40">Navigate Timeline</p>
             </div>
           </header>
 
@@ -2057,7 +2229,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
               {/* Map (2/3) */}
               <div className="lg:col-span-2 min-h-[500px] w-full">
                 <MapView 
-                  center={{ lat: activeLocation.lat, lng: activeLocation.lng }} 
+                  center={{ lat: activeNode.lat, lng: activeNode.lng }} 
                   profiles={[...(currentUser ? [currentUser] : []), ...filteredProfiles]}
                   spots={filteredSpots}
                   marketItems={localMarketItems}
@@ -2100,9 +2272,14 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                             "absolute right-0 mt-3 w-52 rounded-2xl shadow-2xl border p-2 z-50 animate-in fade-in slide-in-from-top-2",
                             collabMode ? "bg-[#0b5351] border-white/10" : "bg-white border-slate-100"
                           )}>
-                             <button onClick={() => { setIsLookingForOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 transition-colors">Post Request</button>
-                             <button onClick={() => { setIsAddEventOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 transition-colors">Post Event</button>
-                             <button onClick={() => { setIsAddItemOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 transition-colors">Sell / Swap Gear</button>
+                             {activeNode.type !== 'past' && (
+                               <>
+                                 <button onClick={() => { setIsLookingForOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors">Post Request</button>
+                                 <button onClick={() => { setIsAddEventOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors">Post Event</button>
+                                 <button onClick={() => { setIsAddItemOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors">Sell / Swap Gear</button>
+                               </>
+                             )}
+                             <button onClick={() => { setIsRecommendSpotOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-[#00b4d8] transition-colors">Recommend Spot</button>
                           </div>
                         </>
                       )}
@@ -2145,6 +2322,81 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
             </div>
           </section>
 
+          {/* Profiles Section */}
+          <section className="space-y-8">
+            <div className="flex items-center justify-between px-4">
+              <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
+                {activeNode.type === 'current' ? 'Nearby Families' : 
+                 activeNode.type === 'past' ? 'Families currently here' : 
+                 `Families currently in ${activeNode.label}`}
+              </h2>
+            </div>
+            
+            <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 -mx-4 px-4 snap-x">
+              {filteredProfiles.length > 0 ? (
+                filteredProfiles.map((family) => {
+                  const conn = getConnection(family.id);
+                  return (
+                    <motion.div 
+                      key={family.id} 
+                      className="snap-start"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                    >
+                      <FamilyCard 
+                        family={family} 
+                        connectionStatus={conn?.status}
+                        onConnect={() => requestConnection(family.id)}
+                        onMessage={() => onSayHello(family)}
+                        onSelect={() => onSelectFamily(family)}
+                      />
+                    </motion.div>
+                  );
+                })
+              ) : (
+                <div className={cn(
+                  "w-full py-12 rounded-[2.5rem] border-2 border-dashed flex flex-col items-center justify-center text-center px-6 mx-4",
+                  collabMode ? "border-white/10" : "border-slate-100 bg-slate-50/50"
+                )}>
+                  <p className="font-bold text-slate-400 text-sm">No families found within {tribeRadius}km yet.</p>
+                  <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-widest font-black">BE THE FIRST TO REACH OUT!</p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Also Coming To Section (Future Only) */}
+          {activeNode.type === 'future' && comingTogether.length > 0 && (
+            <motion.section 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-8"
+            >
+              <div className="flex items-center justify-between px-4">
+                <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
+                  Also coming to {activeNode.label}
+                </h2>
+              </div>
+              <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 -mx-4 px-4 snap-x">
+                {comingTogether.map((family) => (
+                  <motion.div 
+                    key={family.id} 
+                    className="snap-start"
+                  >
+                    <FamilyCard 
+                      family={family} 
+                      connectionStatus={getConnection(family.id)?.status}
+                      onConnect={() => requestConnection(family.id)}
+                      onMessage={() => onSayHello(family)}
+                      onSelect={() => onSelectFamily(family)}
+                      specialBadge="🎯 Matching Dates"
+                    />
+                  </motion.div>
+                ))}
+              </div>
+            </motion.section>
+          )}
+
           {/* Places You May Like Section - Full Width */}
           <section className="space-y-8">
             <div className="flex items-center justify-between px-4">
@@ -2271,139 +2523,11 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
               )}
             </div>
           </section>
-
-          {/* Places You May Like Section - Full Width */}
-          <section className="space-y-8">
-            <div className="flex items-center justify-between px-4">
-              <div className="flex items-center gap-3">
-                 <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-emerald-50 text-emerald-500")}>
-                    <Star className={cn("w-5 h-5", collabMode ? "fill-white text-white" : "fill-emerald-500")} />
-                 </div>
-                 <div>
-                    <h2 className={cn("text-2xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Places You May Like</h2>
-                    <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Selected curated spots for your tribe</p>
-                 </div>
-              </div>
-              
-              <div className="relative">
-                <button 
-                  onClick={() => setIsSpotDropdownOpen(!isSpotDropdownOpen)}
-                  className={cn(
-                    "px-6 py-3 border rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center gap-2",
-                    collabMode ? "bg-white/10 border-white/10 text-white" : "bg-white border-slate-100 text-slate-600"
-                  )}
-                >
-                  + Add family friendly spot
-                  <ChevronDown className={cn("w-3 h-3 transition-transform", isSpotDropdownOpen && "rotate-180")} />
-                </button>
-
-                {isSpotDropdownOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setIsSpotDropdownOpen(false)} />
-                    <div className={cn(
-                      "absolute right-0 mt-3 w-56 rounded-2xl shadow-2xl border p-2 z-50 animate-in fade-in slide-in-from-top-2",
-                      collabMode ? "bg-[#0b5351] border-white/10" : "bg-white border-slate-100"
-                    )}>
-                       {['Playground', 'Restaurant', 'Cafe', 'Activity', 'Education', 'Health'].map(cat => (
-                         <button 
-                          key={cat}
-                          onClick={() => { setIsRecommendSpotOpen(true); setIsSpotDropdownOpen(false); }}
-                          className="w-full text-left p-4 hover:bg-slate-50 rounded-xl transition-colors group flex items-center gap-3"
-                         >
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Add {cat}</span>
-                         </button>
-                       ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="relative">
-              <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8 px-4 scroll-smooth">
-                {filteredSpots.length === 0 ? (
-                  <div className={cn("w-full py-12 text-center rounded-[3rem] border-2 border-dashed", collabMode ? "border-white/10" : "border-slate-100")}>
-                    <MapIcon className="w-10 h-10 mx-auto mb-4 opacity-20" />
-                    <p className="text-sm font-bold opacity-30">No spots found in this area yet.</p>
-                  </div>
-                ) : (
-                  filteredSpots.map(spot => (
-                    <SpotCard 
-                      key={spot.id} 
-                      spot={spot} 
-                      collabMode={collabMode}
-                      currentUserId={currentUser?.id}
-                      onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
-                      className="w-72"
-                    />
-                  ))
-                )}
-              </div>
-              
-              <div className="flex justify-center -mt-4">
-                 <button 
-                  onClick={() => setIsAllSpotsOpen(true)}
-                  className={cn(
-                    "px-8 py-4 rounded-[2rem] text-xs font-black uppercase tracking-widest shadow-xl transition-all flex items-center gap-2 active:scale-95",
-                    collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white shadow-secondary/20"
-                  )}
-                 >
-                    <MapIcon className="w-4 h-4" />
-                    All spots around me
-                 </button>
-              </div>
-            </div>
-          </section>
-
-          {/* Tribe Deals & Partnerships */}
-          <section className="space-y-6 pt-12">
-            <div className="flex items-center justify-between px-4">
-              <div className="flex items-center gap-3">
-                 <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-accent/10 text-accent")}>
-                    <Tag className="w-5 h-5" />
-                 </div>
-                 <div>
-                    <h2 className={cn("text-2xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Tribe Deals & Partnerships</h2>
-                    <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Exclusive perks for Nomad Tribes members</p>
-                 </div>
-              </div>
-              <button className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/60" : "text-accent")}>View all deals →</button>
-            </div>
-            
-            <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8 px-4">
-              {filteredDeals.length === 0 ? (
-                 <div className={cn("w-full py-12 text-center rounded-[3rem] border-2 border-dashed", collabMode ? "border-white/10" : "border-slate-100")}>
-                   <Tag className="w-10 h-10 mx-auto mb-4 opacity-20" />
-                   <p className="text-sm font-bold opacity-30">No deals in this location yet.</p>
-                 </div>
-              ) : (
-                filteredDeals.map(deal => (
-                  <div key={deal.id} className={cn("flex-shrink-0 w-80 rounded-[2.5rem] overflow-hidden border group", collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 shadow-sm shadow-slate-200/50")}>
-                    <div className="h-44 relative bg-slate-100 overflow-hidden">
-                       <img src={deal.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" />
-                       <div className="absolute top-4 left-4 px-3 py-1 bg-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg">
-                          {deal.discountLabel}
-                       </div>
-                    </div>
-                    <div className="p-6">
-                       <h4 className="font-black text-lg">{deal.name}</h4>
-                       <p className="text-[11px] opacity-60 line-clamp-2 mt-2">{deal.description}</p>
-                       <div className="flex items-center justify-between mt-6">
-                          <p className="text-[10px] font-black opacity-30 uppercase tracking-widest">{deal.advertiserName}</p>
-                          <button className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105", collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white")}>Redeem</button>
-                       </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
 
           {/* Collab Asks (Only in Collab Mode) */}
           {collabMode && (
             <section className="space-y-6">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center px-4">
                 <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Local Collab Corner</h2>
                 <button 
                   onClick={() => setIsCollabAskOpen(true)}
@@ -2412,9 +2536,9 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                   <Plus className="w-3 h-3" /> Post Ask
                 </button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4">
                  {collabAsks
-                   .filter(a => a.userId !== currentUser?.id && a.locationSlug === activeLocation.name)
+                   .filter(a => a.userId !== currentUser?.id && (a.locationSlug === activeNode.label || (a.lat && a.lng && calculateDistance(activeNode.lat, activeNode.lng, a.lat, a.lng) <= tribeRadius)))
                    .slice(0, 3)
                    .map(ask => {
                      const family = profiles.find(p => p.id === ask.userId);
@@ -2435,9 +2559,9 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
                        </div>
                      );
                    })}
-                 {collabAsks.filter(a => a.userId !== currentUser?.id && a.locationSlug === activeLocation.name).length === 0 && (
+                 {collabAsks.filter(a => a.userId !== currentUser?.id && (a.locationSlug === activeNode.label || (a.lat && a.lng && calculateDistance(activeNode.lat, activeNode.lng, a.lat, a.lng) <= tribeRadius))).length === 0 && (
                    <div className="col-span-full py-8 text-center bg-white/5 rounded-[2rem] border border-dashed border-white/10">
-                     <p className="text-xs text-white/40 font-medium tracking-tight">Be the first to post a collab ask in {activeLocation.name}!</p>
+                     <p className="text-xs text-white/40 font-medium tracking-tight">Be the first to post a collab ask in {activeNode.label}!</p>
                    </div>
                  )}
               </div>
@@ -2797,7 +2921,7 @@ const TribeView = ({ onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <p className={cn("text-sm font-bold opacity-60", collabMode ? "text-white" : "text-secondary")}>Discover what's happening in</p>
-              <h2 className="text-4xl font-black italic">{activeLocation.name}</h2>
+              <h2 className="text-4xl font-black italic">{activeNode.label}</h2>
             </div>
             <div className="flex items-center gap-4 w-full md:w-auto">
               <Search className="w-5 h-5 opacity-40" />
@@ -4999,7 +5123,17 @@ const VibeCheckModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose:
   );
 };
 
-const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificationCenterOpen, isNotificationCenterOpen, setIsConnectOpen, onSetLocation }: { onShare: () => void, onLogout: () => void, onAddTrip: () => void, onEditTrip: (trip: Trip) => void, setIsNotificationCenterOpen: (open: boolean) => void, isNotificationCenterOpen: boolean, setIsConnectOpen: (open: boolean) => void, onSetLocation: () => void }) => {
+const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificationCenterOpen, isNotificationCenterOpen, setIsConnectOpen, onSetLocation, setIsAddPastPlaceOpen }: { 
+  onShare: () => void, 
+  onLogout: () => void, 
+  onAddTrip: () => void, 
+  onEditTrip: (trip: Trip) => void, 
+  setIsNotificationCenterOpen: (open: boolean) => void, 
+  isNotificationCenterOpen: boolean, 
+  setIsConnectOpen: (open: boolean) => void, 
+  onSetLocation: () => void,
+  setIsAddPastPlaceOpen: (open: boolean) => void
+}) => {
   const { 
     currentUser, 
     trips, 
@@ -5054,7 +5188,7 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
       setIsEditProfileOpen(false);
     } catch (err) {
       console.error("Error updating profile:", err);
-      addToast("Profiel bijwerken mislukt.", "error");
+      addToast("Failed to update profile.", "error");
     }
   };
 
@@ -5070,7 +5204,7 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
       setIsEditTribeOpen(false);
     } catch (err) {
       console.error("Error updating tribe:", err);
-      addToast("Tribe bijwerken mislukt.", "error");
+      addToast("Failed to update tribe.", "error");
     }
   };
 
@@ -5830,7 +5964,7 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                       </div>
                     </div>
                     <h4 className="font-bold text-lg relative z-10">
-                      {typeof trip.location === 'string' ? trip.location : (trip.location as any)?.name || 'Unknown Location'}
+                      {trip.location && trip.location.trim() !== '' && trip.location !== ', ' ? trip.location : (trip.place?.name || trip.place?.city || 'Travel Adventure')}
                     </h4>
                     <div className="flex items-center gap-2 relative z-10">
                       <p className={cn("text-xs font-bold", collabMode ? "text-white/40" : "text-slate-500")}>
@@ -5843,7 +5977,8 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                         })()}
                       </p>
                       {(() => {
-                        const locationStr = trip.location.toLowerCase();
+                        const locationStr = (trip.location || '').toLowerCase();
+                        if (!locationStr || locationStr === ', ') return null;
                         const hub = hubCities.find(c => locationStr.includes(c.name.toLowerCase()));
                         if (hub) return <span className={cn("text-[8px] font-black uppercase px-1.5 py-0.5 rounded-lg", collabMode ? "bg-white/10 text-white/60" : "bg-slate-100 text-slate-400")}>{hub.continent}</span>;
                         return null;
@@ -5877,7 +6012,7 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
             </div>
           </section>
 
-        {/* My Journey (Past Places) */}
+             {/* Past Adventures (formerly My Journey) */}
         <section className={cn(
           "p-8 rounded-[2.5rem] border space-y-6",
           collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 card-shadow"
@@ -5888,10 +6023,19 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                 <HistoryIcon className="w-5 h-5" />
               </div>
               <div>
-                <h2 className={cn("text-xl font-black", collabMode ? "text-white" : "text-secondary")}>My Journey</h2>
-                <p className={cn("text-xs", collabMode ? "text-white/40" : "text-slate-500")}>Places we've explored as a family.</p>
+                <h2 className={cn("text-xl font-black", collabMode ? "text-white" : "text-secondary")}>Past Adventures</h2>
+                <p className={cn("text-xs", collabMode ? "text-white/40" : "text-slate-500")}>Cities you've explored as a nomad family.</p>
               </div>
             </div>
+            <button 
+              onClick={() => setIsAddPastPlaceOpen(true)}
+              className={cn(
+                "px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all",
+                collabMode ? "bg-white/10 text-white hover:bg-white/20" : "bg-slate-50 text-secondary border border-slate-100 hover:bg-white hover:card-shadow"
+              )}
+            >
+              <Plus className="w-4 h-4" /> Add City
+            </button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -5901,21 +6045,35 @@ const ProfileView = ({ onShare, onLogout, onAddTrip, onEditTrip, setIsNotificati
                 .map((place) => (
                   <div key={place.id} className={cn("p-4 rounded-3xl border group relative overflow-hidden", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100")}>
                     <button 
-                      onClick={(e) => { e.stopPropagation(); removePastPlace(place.id); }}
-                      className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-red-100 text-red-500 rounded-lg"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        if (confirm("Remove this adventure?")) removePastPlace(place.id); 
+                      }}
+                      className={cn(
+                        "absolute top-2 right-2 p-1.5 transition-all rounded-lg z-20",
+                        collabMode 
+                          ? "bg-white/10 text-white/40 hover:text-red-400 hover:bg-white/20" 
+                          : "bg-red-50 text-red-300 hover:text-red-500 hover:bg-red-100"
+                      )}
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
                     <div className="space-y-1">
                       <p className="text-[10px] font-black opacity-40 uppercase tracking-widest">{place.year}</p>
-                      <h4 className="font-bold text-sm line-clamp-1">{place.name}</h4>
-                      <p className="text-[10px] font-medium opacity-60 line-clamp-1">{place.city}, {place.country}</p>
+                      <h4 className="font-bold text-sm line-clamp-1">
+                        {(() => {
+                           const city = place.city || place.name || "";
+                           if (city === "Selected Place" || city === "Adventure" || city === "Travel Adventure") return place.country || "Unknown Adventure";
+                           return city;
+                        })()}
+                      </h4>
+                      <p className="text-[10px] font-medium opacity-60 line-clamp-1">{place.country}</p>
                     </div>
                   </div>
                 ))
             ) : (
-              <div className={cn("col-span-full py-8 text-center rounded-3xl border border-dashed", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100")}>
-                <p className="text-xs opacity-40 italic">Geen reishistorie gevonden. Voeg plekken toe via Aanbevelingen of Trips!</p>
+              <div className={cn("col-span-full py-8 text-center rounded-3xl border border-dashed", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+                <p className="text-xs opacity-40 italic">No travel history found. Add cities to build your nomad timeline!</p>
               </div>
             )}
           </div>
@@ -6259,17 +6417,37 @@ const EditLocationModal = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Current Location">
       <div className="space-y-6">
+        <button 
+          onClick={onDetect} 
+          disabled={isDetecting}
+          className="w-full h-24 bg-primary/10 border-2 border-dashed border-primary/30 rounded-3xl flex flex-col items-center justify-center gap-2 hover:bg-primary/20 transition-all group"
+        >
+          <Locate className={cn("w-8 h-8 text-primary group-hover:scale-110 transition-transform", isDetecting && "animate-spin")} />
+          <span className="text-secondary font-black text-sm uppercase tracking-widest">
+            {isDetecting ? "Detecting..." : "Detect my Location"}
+          </span>
+        </button>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-100"></div>
+          </div>
+          <div className="relative flex justify-center text-xs uppercase tracking-widest font-black text-slate-300">
+            <span className="bg-white px-4">Or search manually</span>
+          </div>
+        </div>
+
         <form onSubmit={onManual} className="space-y-4">
           <PlacesAutocomplete 
-            label="Stad, Land"
-            placeholder="Bijv. Lissabon, Portugal"
+            label="City, Country"
+            placeholder="e.g. Lisbon, Portugal"
             value={manualLocation}
             onChange={(place) => setManualLocation(place)}
             searchType="cities"
-            showDetectButton={true}
+            showDetectButton={false}
           />
-          <button type="submit" disabled={!manualLocation} className="w-full bg-secondary text-white py-4 rounded-2xl font-bold shadow-lg shadow-secondary/20 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale">
-            Set Location
+          <button type="submit" disabled={!manualLocation || isDetecting} className="w-full bg-secondary text-white py-4 rounded-2xl font-bold shadow-lg shadow-secondary/20 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale">
+            Set Manually
           </button>
         </form>
       </div>
@@ -6337,8 +6515,23 @@ const EmptyStatePioneer = ({ cityName, onAddSpot }: { cityName: string, onAddSpo
   );
 };
 const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void }) => {
-  const { spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent, fetchCities } = useNomadStore() as any;
+  const { spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent, fetchCities, exploreHubQuery, setExploreHubQuery } = useNomadStore() as any;
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (exploreHubQuery) {
+      setSearchQuery(exploreHubQuery);
+      // Try to find the city and select it
+      const city = cityProfiles.find((c: any) => 
+        c.name.toLowerCase() === exploreHubQuery.toLowerCase() ||
+        c.country.toLowerCase() === exploreHubQuery.toLowerCase()
+      );
+      if (city) {
+        setSelectedCity(city);
+      }
+      setExploreHubQuery(''); // Clear it after consuming
+    }
+  }, [exploreHubQuery, cityProfiles]);
   const [selectedCity, setSelectedCity] = useState<CityProfile | null>(null);
   const [activeContinent, setActiveContinent] = useState<'All' | 'Asia' | 'Europe' | 'Americas' | 'Africa' | 'Oceania'>('All');
   const [filters, setFilters] = useState({
@@ -6952,6 +7145,23 @@ export default function App() {
 
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
+  const [isAddPastPlaceOpen, setIsAddPastPlaceOpen] = useState(false);
+  const [newPastPlace, setNewPastPlace] = useState<{ place: PlaceResult | null, year: number }>({ place: null, year: new Date().getFullYear() });
+
+  const handleAddPastPlace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !newPastPlace.place) return;
+    try {
+      await useNomadStore.getState().addPastPlace(newPastPlace.place, newPastPlace.year);
+      setIsAddPastPlaceOpen(false);
+      setNewPastPlace({ place: null, year: new Date().getFullYear() });
+      addToast(`Added ${newPastPlace.place.city} to your past adventures!`, "success");
+    } catch (err) {
+      console.error("Error saving past place:", err);
+      addToast("Save failed.", "error");
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<'tribe' | 'connect' | 'tribe-nearby' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin'>('tribe');
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isConnectOpen, setIsConnectOpen] = useState(false);
@@ -7009,15 +7219,34 @@ export default function App() {
     e.preventDefault();
     if (!currentUser || !newTrip.place) return;
     try {
+      let location = '';
+      const city = newTrip.place.city || '';
+      const name = newTrip.place.name || '';
+      const country = newTrip.place.country || '';
+      const address = newTrip.place.address || '';
+      
+      const placeholders = ['Selected Place', 'Selected Location', 'Adventure', 'Travel Adventure'];
+      const validCity = city && !placeholders.includes(city) ? city : (name && !placeholders.includes(name) ? name : address.split(',')[0]);
+      
+      if (validCity && country && validCity !== country) {
+        location = `${validCity}, ${country}`;
+      } else if (validCity || country) {
+        location = validCity || country;
+      } else {
+        location = address.split(',')[0] || 'Travel Adventure';
+      }
+      
+      const citySlug = (validCity || country || 'unknown').toLowerCase().replace(/\s+/g, '-');
+
       const trip: Trip = {
         id: newTrip.id || `trip-${Date.now()}`,
         familyId: currentUser.id,
         place: newTrip.place,
-        location: `${newTrip.place.city}, ${newTrip.place.country}`,
+        location: location,
         lat: newTrip.place.lat,
         lng: newTrip.place.lng,
-        citySlug: newTrip.place.city.toLowerCase().replace(/\s+/g, '-'),
-        countryCode: newTrip.place.countryCode,
+        citySlug: citySlug,
+        countryCode: newTrip.place.countryCode || '',
         startDate: newTrip.startDate,
         endDate: newTrip.endDate
       };
@@ -7032,7 +7261,7 @@ export default function App() {
       setNewTrip({ id: '', place: null, startDate: '', endDate: '' });
     } catch (err) {
       console.error("Error saving trip:", err);
-      addToast("Trip opslaan mislukt.", "error");
+      addToast("Failed to save trip.", "error");
     }
   };
 
@@ -7131,7 +7360,7 @@ export default function App() {
             await signInWithRedirect(auth, authProvider);
           } catch (redirectError: any) {
              console.error("Redirect fallback failed:", redirectError);
-             addToast("Inloggen mislukt. Open de app in een nieuw tabblad.", "error");
+             addToast("Login failed. Please open the app in a new tab.", "error");
           }
         } else {
           addToast("Inlogvenster gesloten of geblokkeerd.", "error");
@@ -7139,7 +7368,7 @@ export default function App() {
       } else if (error.code === 'auth/unauthorized-domain') {
         addToast(`403 Fout: Domein niet geautoriseerd. Voeg exact '${window.location.hostname}' toe aan 'Authorized Domains'.`, "error");
       } else {
-        addToast(`Login mislukt: ${error.message}.`, "error");
+        addToast(`Login failed: ${error.message}.`, "error");
       }
     }
   };
@@ -7298,7 +7527,7 @@ export default function App() {
     navigator.clipboard.writeText(window.location.href).then(() => {
       addToast('Profiel link gekopieerd!', 'success');
     }).catch(() => {
-      addToast('Kopiëren mislukt. Kopieer de URL uit de adresbalk.', 'error');
+      addToast('Copy failed. Please copy the URL from the address bar.', 'error');
     });
   };
 
@@ -7312,6 +7541,22 @@ export default function App() {
           onSayHello={handleSayHello}
           onSelectFamily={setSelectedFamily}
           onPaywall={() => setIsPaywallOpen(true)}
+          setIsAddPastPlaceOpen={setIsAddPastPlaceOpen}
+          setActiveTab={setActiveTab}
+          onSetLocation={() => setIsLocationModalOpen(true)}
+          onAddTrip={() => {
+            setNewTrip({ id: '', place: null, startDate: '', endDate: '' });
+            setIsAddTripOpen(true);
+          }}
+          onEditTrip={(trip) => {
+            setNewTrip({ 
+              id: trip.id, 
+              place: trip.place || null, 
+              startDate: trip.startDate, 
+              endDate: trip.endDate 
+            });
+            setIsAddTripOpen(true);
+          }}
         />
       );
       case 'profile': return (
@@ -7335,6 +7580,7 @@ export default function App() {
           setIsNotificationCenterOpen={setIsNotificationCenterOpen}
           isNotificationCenterOpen={isNotificationCenterOpen}
           setIsConnectOpen={setIsConnectOpen}
+          setIsAddPastPlaceOpen={setIsAddPastPlaceOpen}
         />
       );
       case 'explore': return (
@@ -7353,6 +7599,22 @@ export default function App() {
           onSayHello={handleSayHello}
           onSelectFamily={setSelectedFamily}
           onPaywall={() => setIsPaywallOpen(true)}
+          setIsAddPastPlaceOpen={setIsAddPastPlaceOpen}
+          setActiveTab={setActiveTab}
+          onSetLocation={() => setIsLocationModalOpen(true)}
+          onAddTrip={() => {
+            setNewTrip({ id: '', place: null, startDate: '', endDate: '' });
+            setIsAddTripOpen(true);
+          }}
+          onEditTrip={(trip) => {
+            setNewTrip({ 
+              id: trip.id, 
+              place: trip.place || null, 
+              startDate: trip.startDate, 
+              endDate: trip.endDate 
+            });
+            setIsAddTripOpen(true);
+          }}
         />
       );
     }
@@ -7377,6 +7639,11 @@ export default function App() {
             `&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
           );
           const data = await res.json();
+          
+          if (data.status === 'REQUEST_DENIED') {
+             addToast(`Google Maps API Error: ${data.error_message || 'Verify your API Key and enabled services.'}`, 'error');
+             throw new Error(data.error_message || 'REQUEST_DENIED');
+          }
 
           if (data.status !== 'OK' || !data.results?.length) {
             throw new Error('No results from geocoder');
@@ -7449,12 +7716,12 @@ export default function App() {
       addToast("Locatie ingesteld!", "success");
     } catch (err) {
       console.error("Error setting manual location:", err);
-      addToast("Locatie instellen mislukt.", "error");
+      addToast("Failed to set location.", "error");
     }
   };
 
   return (
-    <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY} libraries={['marker', 'places']}>
+    <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY} libraries={['marker', 'places']} version="beta">
       <ErrorBoundary>
         <div className={cn(
           "flex flex-col md:flex-row h-screen text-slate-900 overflow-hidden transition-colors duration-500",
@@ -7482,7 +7749,7 @@ export default function App() {
                 <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-accent rounded-full border-2 border-white" />
               )}
             </div>
-          } label={collabMode ? "Collab Card" : "My Journey"} />
+          } label={collabMode ? "Collab Card" : "Journey"} />
           {currentUser?.role === 'SuperAdmin' && (
             <SidebarLink active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} icon={<Shield className="w-5 h-5" />} label="Super Admin" />
           )}
@@ -7567,7 +7834,7 @@ export default function App() {
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full border-2 border-white" />
               )}
             </div>
-          } label="Profile" dark={collabMode} />
+          } label="Journey" dark={collabMode} />
         </div>
 
         {/* Expanded Focus Menu */}
@@ -8127,6 +8394,36 @@ export default function App() {
       </div>
 
       <MultiTierPaywall isOpen={isPaywallOpen} onClose={() => setIsPaywallOpen(false)} />
+
+      <Modal isOpen={isAddPastPlaceOpen} onClose={() => setIsAddPastPlaceOpen(false)} title="Add to Past Adventures">
+        <form onSubmit={handleAddPastPlace} className="space-y-6">
+          <PlacesAutocomplete 
+             label="Where did you go?"
+             placeholder="Search city..."
+             value={newPastPlace.place}
+             onChange={place => setNewPastPlace(prev => ({ ...prev, place }))}
+             searchType="cities"
+          />
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Year</label>
+            <input 
+              type="number" 
+              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold"
+              value={newPastPlace.year}
+              min="1980"
+              max={new Date().getFullYear()}
+              onChange={e => setNewPastPlace(prev => ({ ...prev, year: parseInt(e.target.value) || new Date().getFullYear() }))}
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={!newPastPlace.place}
+            className="w-full bg-accent text-white py-4 rounded-2xl font-bold shadow-lg shadow-accent/20 active:scale-95 transition-all disabled:opacity-50"
+          >
+            Add to Journey
+          </button>
+        </form>
+      </Modal>
 
       <EditLocationModal 
         isOpen={isLocationModalOpen} 

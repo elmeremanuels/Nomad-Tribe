@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Locate } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { PlaceResult } from '../types';
+import { useNomadStore } from '../store';
 
 declare global {
   namespace JSX {
@@ -37,6 +38,7 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
   countryRestrict,
   showDetectButton = false,
 }) => {
+  const { addToast } = useNomadStore();
   const pickerRef = useRef<HTMLElement & {
     value?: { toJSON: () => any };
     addEventListener: (event: string, handler: (e: any) => void) => void;
@@ -66,15 +68,21 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
       const components: any[] = p.addressComponents || p.address_components || [];
       const getC = (type: string) => components.find((c: any) => c.types?.includes(type));
 
+      const cityVal = 
+        getC('locality')?.longText || getC('locality')?.long_name ||
+        getC('administrative_area_level_1')?.longText || getC('administrative_area_level_1')?.long_name ||
+        getC('administrative_area_level_2')?.longText || getC('administrative_area_level_2')?.long_name ||
+        (p.formattedAddress || p.formatted_address || '').split(',')[0] || '';
+
+      const nameVal = p.displayName?.text || p.name || cityVal || 'Selected Location';
+
       const result: PlaceResult = {
         placeId: p.id || p.place_id || '',
-        name: p.displayName?.text || p.name || '',
+        name: nameVal,
         address: p.formattedAddress || p.formatted_address || '',
-        city:
-          getC('locality')?.longText || getC('locality')?.long_name ||
-          getC('administrative_area_level_2')?.longText || getC('administrative_area_level_2')?.long_name ||
-          getC('administrative_area_level_1')?.longText || getC('administrative_area_level_1')?.long_name || '',
-        country: getC('country')?.longText || getC('country')?.long_name || '',
+        city: cityVal,
+        country: getC('country')?.longText || getC('country')?.long_name || 
+          (p.formattedAddress || p.formatted_address || '').split(',').pop()?.trim() || '',
         countryCode: getC('country')?.shortText || getC('country')?.short_name || '',
         lat: typeof p.location?.lat === 'function' ? p.location.lat() : (p.geometry?.location?.lat ?? 0),
         lng: typeof p.location?.lng === 'function' ? p.location.lng() : (p.geometry?.location?.lng ?? 0),
@@ -90,6 +98,11 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
 
   // GPS detectie → reverse geocode via Geocoding API
   const detectLocation = () => {
+    if (!navigator.geolocation) {
+      addToast("Geolocatie wordt niet ondersteund door je browser.", "error");
+      return;
+    }
+
     setIsDetecting(true);
     navigator.geolocation.getCurrentPosition(async ({ coords }) => {
       const { latitude: lat, longitude: lng } = coords;
@@ -98,14 +111,30 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
         const res = await fetch(url);
         const data = await res.json();
         const r = data.results?.[0];
-        if (!r) { setIsDetecting(false); return; }
+        if (data.status === 'REQUEST_DENIED') {
+          throw new Error(`Google Maps API Request Denied: ${data.error_message || 'Check if Geocoding API is enabled and API Key is valid.'}`);
+        }
+        if (!r) { 
+          setIsDetecting(false); 
+          addToast("Kon stad niet bepalen op basis van GPS coördinaten. Controleer je Google Cloud console instellingen.", "error");
+          return; 
+        }
 
         const getC = (type: string) => r.address_components?.find((c: any) => c.types.includes(type));
+        
+        // Robust city detection
+        const cityName = 
+          getC('locality')?.long_name || 
+          getC('administrative_area_level_2')?.long_name || 
+          getC('administrative_area_level_1')?.long_name || '';
+
+        const name = cityName || r.formatted_address?.split(',')?.[0] || 'Selected Location';
+
         onChange({
           placeId: r.place_id,
-          name: getC('locality')?.long_name || r.formatted_address.split(',')[0],
-          address: r.formatted_address,
-          city: getC('locality')?.long_name || '',
+          name: name,
+          address: r.formatted_address || '',
+          city: cityName,
           country: getC('country')?.long_name || '',
           countryCode: getC('country')?.short_name || '',
           lat,
@@ -114,10 +143,15 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
         });
       } catch (error) {
         console.error("Geocoding failed:", error);
+        addToast("Geocoding mislukt. Probeer handmatig te zoeken.", "error");
       } finally {
         setIsDetecting(false);
       }
-    }, () => setIsDetecting(false));
+    }, (error) => {
+      console.error("Geolocation error:", error);
+      setIsDetecting(false);
+      addToast(`GPS Fout: ${error.message}. Controleer je browser-instellingen.`, "error");
+    }, { timeout: 10000 });
   };
 
   return (
@@ -136,6 +170,7 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
         ) : (
           <gmpx-place-picker
             ref={pickerRef}
+            api-key={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
             placeholder={placeholder}
             {...(pickerType ? { type: pickerType } : {})}
             {...(countryRestrict ? { 'country-codes': countryRestrict } : {})}

@@ -144,6 +144,9 @@ interface NomadStore {
   // Past Places
   addPastPlace: (place: PlaceResult, year: number) => Promise<void>;
   removePastPlace: (pastPlaceId: string) => Promise<void>;
+  exploreHubQuery: string;
+  setExploreHubQuery: (query: string) => void;
+  exploreCity: (cityName: string) => void;
 
   // Deals
   addDeal: (deal: Omit<Deal, 'id' | 'createdAt' | 'impressions' | 'clicks' | 'reportToken'>) => Promise<void>;
@@ -483,6 +486,11 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   setCollabMode: (mode) => set({ collabMode: mode }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+  exploreHubQuery: '',
+  setExploreHubQuery: (query: string) => set({ exploreHubQuery: query }),
+  exploreCity: (cityName: string) => {
+    set({ activeTab: 'explore', exploreHubQuery: cityName });
+  },
 
   saveVibeCheck: async (metrics) => {
     const user = get().currentUser;
