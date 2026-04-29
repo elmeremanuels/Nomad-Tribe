@@ -112,9 +112,9 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 space-y-8 max-w-7xl mx-auto pb-32">
+    <div className="min-h-screen bg-slate-50/50 space-y-4 max-w-7xl mx-auto pb-32">
       {/* Header Hub */}
-      <header className="px-4 py-8 md:p-8 bg-white border-b border-slate-100 shadow-sm sticky top-0 z-40 backdrop-blur-md bg-white/90">
+      <header className="px-4 py-4 md:p-6 bg-white border-b border-slate-100 shadow-sm sticky top-0 z-40 backdrop-blur-md bg-white/90">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
             <button 
@@ -206,13 +206,13 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
         )}
       </header>
 
-      <main className="px-4 max-w-7xl mx-auto space-y-8">
+      <main className="px-4 max-w-7xl mx-auto space-y-6">
         {activeTab === 'home' ? (
           <div className="space-y-12 py-8">
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <CategoryTile 
                   title="Following"
-                  description="Your personalized feed of topics and tags"
+                  description="Your personalized feed"
                   icon={<Users className="w-6 h-6" />}
                   color="#6366f1"
                   onClick={() => setActiveTab('following')}
@@ -325,33 +325,33 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
 const CategoryTile = ({ title, description, icon, color, isLocked, onClick }: any) => (
   <button 
     onClick={onClick}
-    className="group relative flex flex-col items-start p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left overflow-hidden h-full"
+    className="group relative flex flex-col items-start p-4 bg-white border border-slate-100 rounded-[1.5rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left overflow-hidden h-full"
   >
     <div 
-      className="absolute top-0 right-0 w-24 h-24 -mr-6 -mt-6 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity rotate-12"
+      className="absolute top-0 right-0 w-16 h-16 -mr-4 -mt-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity rotate-12"
       style={{ color }}
     >
       {icon}
     </div>
     
     <div 
-      className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 shadow-lg transition-transform group-hover:scale-110"
+      className="w-10 h-10 rounded-xl flex items-center justify-center mb-3 shadow-lg transition-transform group-hover:scale-110"
       style={{ backgroundColor: `${color}15`, color }}
     >
       {icon}
     </div>
 
-    <div className="space-y-1">
-      <h3 className="text-base font-black text-secondary flex items-center gap-2">
+    <div className="space-y-0.5">
+      <h3 className="text-sm font-black text-secondary flex items-center gap-2">
         {title}
         {isLocked && <span className="text-xs">🔒</span>}
       </h3>
-      <p className="text-xs font-medium text-slate-400 leading-tight line-clamp-3">
+      <p className="text-[10px] font-medium text-slate-400 leading-tight line-clamp-2">
         {description}
       </p>
     </div>
 
-    <div className="mt-auto pt-4 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 translate-x-[-10px] group-hover:translate-x-0 transition-all">
+    <div className="mt-auto pt-3 flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 translate-x-[-10px] group-hover:translate-x-0 transition-all">
       Enter Board <span>→</span>
     </div>
   </button>

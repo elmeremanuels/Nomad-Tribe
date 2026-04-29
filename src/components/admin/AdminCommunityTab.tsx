@@ -3,10 +3,10 @@ import { useNomadStore } from '../../store';
 import { Plus, MessageSquare, Trash2, Edit2, Shield, Lock, Eye, EyeOff, CheckCircle2, MoreVertical, Search, Filter, Hammer, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { format, parseISO } from 'date-fns';
-import { getTopicIcon } from '../../lib/topicIcons';
+import { getTopicIcon, ALL_ICONS } from '../../lib/topicIcons';
 
 export default function AdminCommunityTab() {
-  const { topics, threads, hashtags, createTopic, updateTopic, deleteTopic, moderateThread, moderateUser, deleteHashtag, seedTopics } = useNomadStore();
+  const { topics, threads, hashtags, createTopic, updateTopic, deleteTopic, moderateThread, deleteThread, moderateUser, deleteHashtag, seedTopics } = useNomadStore();
   const [isAddTopicOpen, setIsAddTopicOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [topicForm, setTopicForm] = useState({ id: '', name: '', description: '', icon: 'Hand', isLocked: false, isActive: true, type: 'discussion', color: '#006d77' });
@@ -148,36 +148,53 @@ export default function AdminCommunityTab() {
         </div>
       </section>
 
-      {/* Flagged Threads */}
+      {/* Space Management */}
       <section className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-black text-secondary tracking-tight">Active Threads</h2>
-          <p className="text-sm text-slate-500 font-medium">Monitor and moderate global conversations</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-black text-secondary tracking-tight">Space Management</h2>
+            <p className="text-sm text-slate-500 font-medium">Moderate or permanently remove community spaces</p>
+          </div>
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
+            {threads.length} Total Spaces
+          </div>
         </div>
-
-        <div className="overflow-hidden border border-slate-100 rounded-3xl">
-          <table className="w-full text-left border-collapse bg-white">
-            <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-               <tr>
-                  <th className="px-6 py-4">Thread</th>
-                  <th className="px-6 py-4">Author</th>
-                  <th className="px-6 py-4">Activity</th>
+        <div className="bg-white border border-slate-100 rounded-[2rem] overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 font-black text-[10px] uppercase tracking-widest text-slate-400">
+                  <th className="px-6 py-4">Space Info</th>
+                  <th className="px-6 py-4">Board</th>
+                  <th className="px-6 py-4">Stats</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4 text-right">Actions</th>
-               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-               {threads.map(thread => (
-                 <tr key={thread.id} className="group hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-5">
-                       <div>
-                          <p className="text-sm font-black text-secondary leading-tight">{thread.title}</p>
-                          <p className="text-[10px] text-slate-400 font-medium mt-1">Topic: {topics.find(t => t.id === thread.topicId)?.name}</p>
-                       </div>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {threads.map(thread => (
+                  <tr key={thread.id} className="group hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl w-10 h-10 flex items-center justify-center bg-slate-50 rounded-xl">{thread.emoji || '💬'}</span>
+                        <div>
+                          <p className="text-sm font-bold text-secondary line-clamp-1">{thread.title}</p>
+                          <p className="text-[10px] font-medium text-slate-400">by {thread.authorName || thread.authorFamilyName}</p>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-6 py-5 text-sm font-bold text-slate-600">{thread.authorFamilyName}</td>
-                    <td className="px-6 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{format(parseISO(thread.lastActivityAt), 'MMM d, HH:mm')}</td>
-                    <td className="px-6 py-5">
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-1 bg-slate-100 rounded-md text-[10px] font-black text-slate-500 uppercase tracking-tighter">
+                        {thread.topicId}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex gap-3 text-[10px] font-bold text-slate-400">
+                        <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {thread.viewCount}</span>
+                        <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" /> {thread.replyCount}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
                        <span className={cn(
                          "px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest",
                          thread.status === 'active' ? "bg-green-100 text-green-600" :
@@ -186,32 +203,40 @@ export default function AdminCommunityTab() {
                           {thread.status}
                        </span>
                     </td>
-                    <td className="px-6 py-5 text-right">
-                       <div className="flex justify-end gap-2">
-                          <button 
-                            onClick={() => moderateThread(thread.id, thread.status === 'locked' ? 'restore' : 'lock')}
-                            className="p-2 text-slate-300 hover:text-amber-500 transition-colors" 
-                            title={thread.status === 'locked' ? "Unlock" : "Lock"}
-                          >
-                             {thread.status === 'locked' ? <CheckCircle2 className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                          </button>
-                          <button 
-                             onClick={() => moderateThread(thread.id, thread.status === 'removed' ? 'restore' : 'remove')}
-                             className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                             title="Remove"
-                          >
-                             <Trash2 className="w-4 h-4" />
-                          </button>
-                       </div>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => moderateThread(thread.id, thread.status === 'locked' ? 'restore' : 'lock')}
+                          className={cn(
+                            "p-2 rounded-xl transition-all", 
+                            thread.status === 'locked' ? "text-amber-500 bg-amber-50" : "text-slate-300 hover:text-amber-500 hover:bg-amber-50"
+                          )}
+                          title={thread.status === 'locked' ? "Unlock Space" : "Lock Space"}
+                        >
+                          <Lock className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if (confirm("Permanently delete this space? This cannot be undone.")) {
+                              deleteThread(thread.id);
+                            }
+                          }}
+                          className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                          title="Delete Permanently"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
-                 </tr>
-               ))}
-            </tbody>
-          </table>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
-      {/* Add Topic Modal */}
+      {/* Topics Modal */}
       {isAddTopicOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-secondary/80 backdrop-blur-md">
            <div className="w-full max-w-lg bg-white rounded-[2.5rem] p-8 shadow-2xl space-y-6">
@@ -235,7 +260,6 @@ export default function AdminCommunityTab() {
                           className="w-full aspect-square bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-primary hover:bg-white transition-all shadow-sm"
                         >
                           {(() => {
-                             const { ALL_ICONS } = require('../../lib/topicIcons');
                              const Icon = (ALL_ICONS as any)[topicForm.icon] || ALL_ICONS.MessageSquare;
                              return <Icon className="w-8 h-8" />;
                           })()}
@@ -243,8 +267,7 @@ export default function AdminCommunityTab() {
 
                         {isIconPickerOpen && (
                           <div className="absolute top-full left-0 mt-2 p-4 bg-white border border-slate-100 rounded-3xl shadow-2xl z-50 grid grid-cols-4 gap-2 w-[240px]">
-                            {Object.keys(require('../../lib/topicIcons').ALL_ICONS).map(iconName => {
-                              const { ALL_ICONS } = require('../../lib/topicIcons');
+                            {Object.keys(ALL_ICONS).map(iconName => {
                               const Icon = (ALL_ICONS as any)[iconName];
                               return (
                                 <button 

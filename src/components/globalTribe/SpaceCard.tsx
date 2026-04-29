@@ -29,7 +29,7 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
     <div 
       onClick={onClick}
       className={cn(
-        "p-6 border border-slate-100 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all cursor-pointer group flex gap-6 relative overflow-hidden",
+        "p-4 border border-slate-100 rounded-[1.5rem] shadow-sm hover:shadow-xl transition-all cursor-pointer group flex gap-4 relative overflow-hidden",
         "bg-white"
       )}
       style={{ 
@@ -79,9 +79,9 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
       </div>
 
       <div className="flex-1 min-w-0 z-10">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-2xl mr-1">{thread.emoji || '💬'}</span>
-          <h3 className="text-lg font-black text-secondary group-hover:text-primary transition-colors truncate">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-xl mr-1">{thread.emoji || '💬'}</span>
+          <h3 className="text-base font-black text-secondary group-hover:text-primary transition-colors truncate">
             {thread.title}
           </h3>
         </div>

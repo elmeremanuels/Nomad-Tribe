@@ -172,6 +172,7 @@ interface NomadStore {
   updateTopic: (topicId: string, updates: any) => Promise<void>;
   deleteTopic: (topicId: string) => Promise<void>;
   moderateThread: (threadId: string, action: 'lock' | 'hide' | 'remove' | 'restore') => Promise<void>;
+  deleteThread: (threadId: string) => Promise<void>;
   deleteHashtag: (tag: string) => Promise<void>;
   seedTopics: () => Promise<void>;
   toggleWelcome: (threadId: string) => Promise<void>;
@@ -529,7 +530,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         // Topics: load all
         unsubscribes.push(onSnapshot(
           query(collection(db, 'topics'), orderBy('order')),
-          (snap) => set({ topics: snap.docs.map(d => d.data()) })
+          (snap) => set({ topics: snap.docs.map(d => ({ ...d.data(), id: d.id })) })
         ));
 
         // Threads: load only active threads from last 90 days for performance
@@ -563,7 +564,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
         unsubscribes.push(onSnapshot(
           query(collection(db, 'hashtags'), orderBy('spaceCount', 'desc'), limit(50)),
-          (snap) => set({ hashtags: snap.docs.map(d => d.data()) })
+          (snap) => set({ hashtags: snap.docs.map(d => ({ ...d.data(), id: d.id })) })
         ));
 
         // Connections: Use array-contains for participantIds
@@ -2402,6 +2403,15 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       get().addToast(`Thread ${action}ed.`, "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `threads/${threadId}`);
+    }
+  },
+
+  deleteThread: async (threadId) => {
+    try {
+      await deleteDoc(doc(db, 'threads', threadId));
+      get().addToast(`Space removed permanently`, 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `threads/${threadId}`);
     }
   },
 
