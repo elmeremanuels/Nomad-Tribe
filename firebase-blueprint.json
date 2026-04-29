@@ -175,6 +175,53 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "title", "isRead", "createdAt"]
+    },
+    "Topic": {
+      "title": "Topic",
+      "description": "Admin-curated discussion channel.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
+        "isLocked": { "type": "boolean" },
+        "threadCount": { "type": "number" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "order"]
+    },
+    "Thread": {
+      "title": "Thread",
+      "description": "Community discussion thread.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "topicId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "region": { "type": "string" },
+        "status": { "type": "string" },
+        "replyCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "topicId", "authorId", "title", "status"]
+    },
+    "ThreadReply": {
+      "title": "Thread Reply",
+      "description": "Reply to a discussion thread.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "threadId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "body": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "threadId", "authorId", "body"]
     }
   },
   "firestore": {
@@ -221,6 +268,26 @@
     "notifications/{notificationId}": {
       "schema": "AppNotification",
       "description": "User notifications."
+    },
+    "topics/{topicId}": {
+      "schema": "Topic",
+      "description": "Curated community topics."
+    },
+    "threads/{threadId}": {
+      "schema": "Thread",
+      "description": "Community threads."
+    },
+    "threadReplies/{replyId}": {
+      "schema": "ThreadReply",
+      "description": "Replies to community threads."
+    },
+    "topicFollows/{id}": {
+      "schema": "object",
+      "description": "Topic follow relationships."
+    },
+    "threadFollows/{id}": {
+      "schema": "object",
+      "description": "Thread follow relationships."
     }
   }
 }

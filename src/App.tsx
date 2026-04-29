@@ -394,10 +394,14 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
 
 import AdminSeedTab from './components/admin/AdminSeedTab';
 import AdminDealsTab from './components/admin/AdminDealsTab';
+import AdminCommunityTab from './components/admin/AdminCommunityTab';
+
+import { GlobalTribeView } from './components/globalTribe/GlobalTribeView';
+import { TribeRulesGate } from './components/globalTribe/TribeRulesGate';
 
 const AdminDashboard = () => {
   const { appSettings, updateAppSettings, profiles, deleteUser, updateUserRole, marketItems, removeMarketItem, spots, removeSpot, reports, moderateReport, moderateUser } = useNomadStore() as any;
-  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'content' | 'reports' | 'deals' | 'seed'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'content' | 'reports' | 'deals' | 'community' | 'seed'>('settings');
 
   const getReportSummary = (report: Report) => {
     if (report.targetType === 'User') {
@@ -452,6 +456,7 @@ const AdminDashboard = () => {
           { id: 'settings', label: 'App Settings', icon: Hammer },
           { id: 'users', label: 'User Management', icon: Users },
           { id: 'content', label: 'Content Control', icon: ShoppingBag },
+          { id: 'community', label: 'Community Board', icon: MessageSquare },
           { id: 'deals', label: 'Deals & Ads', icon: Tag },
           { id: 'reports', label: 'Safety Reports', icon: ShieldCheck },
           { id: 'seed', label: 'Seed Database', icon: Database }
@@ -811,6 +816,11 @@ const AdminDashboard = () => {
                 )}
               </div>
             )}
+
+            {activeTab === 'community' && (
+              <AdminCommunityTab />
+            )}
+
             {activeTab === 'seed' && <AdminSeedTab />}
           </motion.div>
         </AnimatePresence>
@@ -7250,7 +7260,7 @@ export default function App() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'tribe' | 'connect' | 'tribe-nearby' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin'>('tribe');
+  const [activeTab, setActiveTab] = useState<'tribe' | 'connect' | 'tribe-nearby' | 'community' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin'>('tribe');
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
@@ -7393,8 +7403,9 @@ export default function App() {
     
     // Only superadmins should trigger initial data seeding/syncing
     if (currentUser?.role === 'SuperAdmin') {
-      const { seedInitialData } = useNomadStore.getState() as any;
+      const { seedInitialData, seedTopics } = useNomadStore.getState() as any;
       seedInitialData?.();
+      seedTopics?.();
     }
   }, [currentUser?.role]);
 
@@ -7453,12 +7464,16 @@ export default function App() {
     if (provider === 'apple') authProvider = appleProvider;
 
     try {
+      console.log(`[Login] Starting ${provider} login...`);
       const result = await signInWithPopup(auth, authProvider);
+      
       if (result.user) {
+        console.log(`[Login] Success: detected user ${result.user.uid} (${result.user.email})`);
         addToast(`Welkom terug, ${result.user.displayName}!`, "success");
         // No reload needed, store state clears automatically
         setIsLoggingIn(false);
       } else {
+        console.warn("[Login] Resolved without user object.");
         setIsLoggingIn(false);
       }
     } catch (error: any) {
@@ -7731,6 +7746,11 @@ export default function App() {
           setIsAddItemOpen={setIsAddItemOpen}
         />
       );
+      case 'community': return (
+        <TribeRulesGate>
+          <GlobalTribeView onReport={(id, type) => setReportingTarget({ id, type })} />
+        </TribeRulesGate>
+      );
       case 'admin': return <AdminDashboard />;
       default: return (
         <TribeView 
@@ -7888,6 +7908,7 @@ export default function App() {
 
         <nav className="flex-1 space-y-2">
           <SidebarLink active={activeTab === 'tribe'} onClick={() => setActiveTab('tribe')} icon={<MapIcon />} label="Local Tribe" />
+          <SidebarLink active={activeTab === 'community'} onClick={() => setActiveTab('community')} icon={<UsersIcon />} label="Global Tribe" />
           <SidebarLink active={activeTab === 'explore'} onClick={() => setActiveTab('explore')} icon={<Globe />} label="Explore" />
           <SidebarLink active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={
             <div className="relative">
@@ -7972,6 +7993,7 @@ export default function App() {
       )}>
         <div className="flex items-center justify-around h-20 px-2 pb-6">
           <NavButton active={activeTab === 'tribe'} onClick={() => setActiveTab('tribe')} icon={<MapIcon className="w-6 h-6" />} label="Local Tribe" dark={collabMode} />
+          <NavButton active={activeTab === 'community'} onClick={() => setActiveTab('community')} icon={<UsersIcon className="w-6 h-6" />} label="Global" dark={collabMode} />
           <NavButton active={activeTab === 'explore'} onClick={() => setActiveTab('explore')} icon={<Globe className="w-6 h-6" />} label="Explore" dark={collabMode} />
 
           {/* Center FAB */}

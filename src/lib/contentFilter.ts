@@ -32,3 +32,31 @@ export function cleanContent(text: string): string {
     return text;
   }
 }
+
+// ── CRITICAL TERMS ──
+// These trigger immediate admin escalation, NOT just blocking.
+// Used for safety-critical issues that need human review within 2 hours.
+
+const CRITICAL_TERMS = [
+  // Self-harm indicators
+  'suicide', 'kill myself', 'end my life', 'kms',
+  // Child safety
+  'child abuse', 'csam', 'minor sexual',
+  // Imminent harm
+  'going to kill', 'going to hurt',
+  // Add more in coordination with safety review
+];
+
+export function containsCriticalContent(text: string): {
+  isCritical: boolean;
+  matchedTerm?: string;
+} {
+  if (!text) return { isCritical: false };
+  const lower = text.toLowerCase();
+  for (const term of CRITICAL_TERMS) {
+    if (lower.includes(term)) {
+      return { isCritical: true, matchedTerm: term };
+    }
+  }
+  return { isCritical: false };
+}

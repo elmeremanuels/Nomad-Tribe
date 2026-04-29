@@ -163,6 +163,10 @@ export interface FamilyProfile {
   photoUrl?: string;
   currentLocation?: PlaceResult & { updatedAt: string };
   hasCompletedOnboarding?: boolean; // Added
+  hasAcceptedTribeRules?: boolean;
+  tribeRulesAcceptedAt?: string;
+  mutedUntil?: string; // ISO date — user cannot post until this passes
+  muteReason?: string;
   role: 'User' | 'UserPlus' | 'SuperAdmin' | 'Advertiser';
   collabCard?: CollabCard;
   openToCollabs: boolean;
@@ -187,7 +191,7 @@ export interface Report {
   id: string;
   reporterId: string;
   targetId: string;
-  targetType: 'User' | 'Message' | 'Spot' | 'MarketItem' | 'CollabAsk';
+  targetType: 'User' | 'Message' | 'Spot' | 'MarketItem' | 'CollabAsk' | 'Thread' | 'ThreadReply';
   category: 'Harassment' | 'Spam' | 'IllegalContent' | 'FakeProfile' | 'DangerousLocation';
   description?: string;
   status: 'Pending' | 'Reviewed' | 'Resolved' | 'Dismissed';
@@ -433,7 +437,7 @@ export interface AppNotification {
   userId: string;
   title: string;
   message: string;
-  type: 'VibeCheck' | 'General' | 'ConnectionRequest';
+  type: 'VibeCheck' | 'General' | 'ConnectionRequest' | 'ThreadReply' | 'ThreadFollow' | 'HashtagFollow';
   data?: any;
   isRead: boolean;
   scheduledFor: string;
@@ -565,6 +569,132 @@ export interface Advertiser {
   isActive: boolean;
   createdAt: string;
   createdBy: string;            // Super Admin uid die het account aanmaakte
+}
+
+// ── TOPICS (admin-curated channels) ────────────────────
+
+export type TopicId =
+  | 'introductions'
+  | 'worldschooling'
+  | 'business-tax-money'
+  | 'visas-residency'
+  | 'health-insurance-safety'
+  | 'travel-logistics-gear'
+  | 'lifestyle-mental-health';
+
+export type TopicType = 'discussion' | 'social';
+
+export interface Topic {
+  id: TopicId;
+  name: string;              // "Worldschooling"
+  description: string;       // 1 sentence guide
+  icon: string;              // lucide-react icon name, e.g. 'GraduationCap'
+  color: string;             // HEX color
+  type: TopicType;
+  isLocked: boolean;         // If true: only verificationLevel >= 2 can post
+  isActive: boolean;
+  threadCount: number;       // Denormalized counter
+  createdBy: string;         // Super Admin uid
+  createdAt: string;
+  order: number;             // Display order in UI
+}
+
+// ── THREADS (user-created discussions inside a topic) ──
+
+export type ThreadRegion =
+  | 'Global'
+  | 'Asia'
+  | 'Europe'
+  | 'Americas'
+  | 'Africa'
+  | 'Oceania';
+
+export type ThreadStatus = 'active' | 'locked' | 'hidden' | 'removed';
+
+export interface Thread {
+  id: string;
+  topicId: TopicId;
+
+  // Author
+  authorId: string;
+  authorFamilyName: string;   // Denormalized
+  authorPhotoUrl?: string;    // Denormalized
+
+  // Content
+  title: string;              // Max 120 chars
+  body: string;               // Max 2000 chars, plain text only (no markdown for MVP)
+  region: ThreadRegion;
+  emoji: string;              // Author-chosen emoji shown on the Space card (e.g. '🌏', '🛂', '💸')
+  hashtags: string[];         // Lowercase, no '#' prefix, max 3 per space (e.g. 'singlemom', 'balidigitalnomad')
+  welcomes?: string[];        // userIds who have welcomed the author (for social topics)
+
+  // Vibe metrics (denormalized for fast display)
+  activeUserCount: number;    // Unique repliers in last 7 days
+  countryCount: number;       // Unique countries of repliers in last 7 days
+
+  // Engagement (uses existing vote() action)
+  votes: { up: string[]; down: string[] };
+  replyCount: number;         // Denormalized
+  viewCount: number;
+  followers: string[];        // userIds following this thread
+
+  // Moderation
+  status: ThreadStatus;
+  reportCount: number;
+  isFlaggedCritical: boolean; // Triggered by critical-term filter
+  helpfulReplyId?: string;    // Reply marked as "Helpful" by OP
+
+  // Meta
+  createdAt: string;
+  updatedAt: string;
+  lastActivityAt: string;     // Updated on new reply — used for sorting
+}
+
+// ── REPLIES (one level deep, no nested) ────────────────
+
+export interface ThreadReply {
+  id: string;
+  threadId: string;
+  authorId: string;
+  authorFamilyName: string;
+  authorPhotoUrl?: string;
+  body: string;               // Max 1000 chars
+  votes: { up: string[]; down: string[] };
+  status: ThreadStatus;
+  reportCount: number;
+  isHelpful: boolean;         // Marked helpful by OP
+  createdAt: string;
+}
+
+// ── FOLLOWS (lightweight join collections) ─────────────
+
+export interface TopicFollow {
+  id: string;                 // `${userId}_${topicId}`
+  userId: string;
+  topicId: TopicId;
+  followedAt: string;
+}
+
+export interface ThreadFollow {
+  id: string;                 // `${userId}_${threadId}`
+  userId: string;
+  threadId: string;
+  followedAt: string;
+}
+
+export interface Hashtag {
+  id: string;                 // The lowercase tag itself, e.g. 'singlemom'
+  spaceCount: number;         // Total spaces using this tag
+  weeklyCount: number;        // Spaces created/updated with this tag in last 7 days
+  lastUsedAt: string;
+  createdAt: string;
+}
+
+export interface HashtagFollow {
+  id: string;                 // `${userId}_${hashtag}`
+  userId: string;
+  hashtag: string;
+  followedAt: string;
 }
 
 // Replaced by Conversation and Message above

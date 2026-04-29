@@ -8,7 +8,13 @@ service cloud.firestore {
 
     // 1. Primitive Helpers
     function isSignedIn() { return request.auth != null; }
-    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function isVerified() { 
+      return isSignedIn() && (
+        request.auth.token.email_verified == true || 
+        request.auth.token.firebase.sign_in_provider == 'google.com' ||
+        request.auth.token.firebase.sign_in_provider == 'apple.com'
+      ); 
+    }
     function isSuper() {
       return isSignedIn() && request.auth.token.email.lower() == 'e.emanuels@gmail.com';
     }
@@ -211,6 +217,81 @@ service cloud.firestore {
       allow read: if isVerified() && (resource.data.blockerId == request.auth.uid || isSuper()); 
       allow create: if isVerified() && incoming().blockerId == request.auth.uid;
       allow update, delete: if isVerified() && (resource.data.blockerId == request.auth.uid || isSuper()); 
+    }
+
+    // ── COMMUNITY (GLOBAL TRIBE) ──
+
+    // TOPICS
+    match /topics/{topicId} {
+      allow read: if isSignedIn();
+      allow write: if isSuper();
+    }
+
+    // THREADS
+    match /threads/{threadId} {
+      // Read: any signed-in user, except hidden/removed (unless author or super)
+      allow read: if isSignedIn() &&
+        (resource.data.status in ['active', 'locked']
+         || resource.data.authorId == request.auth.uid
+         || isSuper());
+
+      // Create: signed-in, agreed to rules (check in store, enforce author match here)
+      allow create: if isSignedIn() &&
+        request.resource.data.authorId == request.auth.uid &&
+        request.resource.data.status == 'active' &&
+        request.resource.data.reportCount == 0;
+
+      // Update: author can edit own (within 15min), super can do anything
+      allow update: if isSuper()
+        || (resource.data.authorId == request.auth.uid
+            && request.resource.data.authorId == resource.data.authorId
+            && request.time < resource.data.createdAt + duration.value(15, 'm'));
+
+      // Vote / follow / report / viewCount / vibe metrics / welcomes updates allowed for any signed-in
+      allow update: if isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['votes', 'followers', 'reportCount', 'viewCount', 'lastActivityAt', 'replyCount', 'activeUserCount', 'countryCount', 'welcomes']);
+
+      allow delete: if isSuper() || resource.data.authorId == request.auth.uid;
+    }
+
+    // REPLIES
+    match /threadReplies/{replyId} {
+      allow read: if isSignedIn() &&
+        (resource.data.status in ['active', 'locked'] || isSuper());
+      allow create: if isSignedIn() &&
+        request.resource.data.authorId == request.auth.uid;
+      allow update: if isSuper()
+        || (resource.data.authorId == request.auth.uid
+            && request.time < resource.data.createdAt + duration.value(15, 'm'))
+        || request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['votes', 'reportCount', 'isHelpful']);
+      allow delete: if isSuper() || resource.data.authorId == request.auth.uid;
+    }
+
+    // FOLLOWS
+    match /topicFollows/{id} {
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() &&
+        (request.resource.data.userId == request.auth.uid || resource.data.userId == request.auth.uid);
+    }
+
+    match /threadFollows/{id} {
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() &&
+        (request.resource.data.userId == request.auth.uid || resource.data.userId == request.auth.uid);
+    }
+
+    match /hashtagFollows/{id} {
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() &&
+        (request.resource.data.userId == request.auth.uid || resource.data.userId == request.auth.uid);
+    }
+
+    // HASHTAGS
+    match /hashtags/{tag} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
     }
 
     // TEST COLLECTION (Connectivity Check)

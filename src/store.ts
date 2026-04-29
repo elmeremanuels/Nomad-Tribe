@@ -49,9 +49,13 @@ import {
   orderBy,
   writeBatch,
   arrayUnion,
-  increment       // Added
+  arrayRemove,
+  increment,
+  limit
 } from 'firebase/firestore';
 import { onAuthStateChanged, getRedirectResult, User as FirebaseUser, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth';
+
+import { cleanContent, containsBlockedContent, containsCriticalContent } from './lib/contentFilter';
 
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; // km
@@ -88,9 +92,16 @@ interface NomadStore {
   reports: Report[];
   blocks: BlockedUser[];
   notifications: AppNotification[];
+  topics: any[];
+  threads: any[];
+  threadReplies: any[];
+  topicFollows: any[];
+  threadFollows: any[];
+  hashtags: any[];
+  hashtagFollows: any[];
   isAuthReady: boolean;
   collabMode: boolean;
-  activeTab: 'tribe' | 'connect' | 'tribe-nearby' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin';
+  activeTab: 'tribe' | 'connect' | 'tribe-nearby' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin' | 'community';
   toasts: { id: string; message: string; type: 'success' | 'error' | 'info' }[];
   activities: Activity[];
   destinations: DestinationGuidance[];
@@ -133,13 +144,37 @@ interface NomadStore {
   subscribeToMessages: (conversationId: string) => () => void;
   submitReport: (report: Omit<Report, 'id' | 'createdAt' | 'status'>) => Promise<void>;
   reportContent: (targetId: string, targetType: 'User' | 'MarketItem' | 'Spot' | 'Message', reason: string) => Promise<void>;
-  vote: (type: 'lookingFor' | 'marketplace' | 'spots', id: string, direction: 'up' | 'down') => Promise<void>;
+  vote: (type: 'lookingFor' | 'marketplace' | 'spots' | 'threads' | 'threadReplies', id: string, direction: 'up' | 'down') => Promise<void>;
   addSpot: (spot: Spot) => Promise<void>;
   removeSpot: (spotId: string) => Promise<void>;
   addReview: (review: SpotReview) => Promise<void>;
   addCollabAsk: (ask: CollabAsk) => Promise<void>;
   removeCollabAsk: (askId: string) => Promise<void>;
   addCollabEndorsement: (endorsement: CollabEndorsement) => Promise<void>;
+
+  // Community (Global Tribe)
+  createThread: (data: { 
+    topicId: any; 
+    title: string; 
+    body: string; 
+    region: any; 
+    emoji?: string; 
+    hashtags?: string[] 
+  }) => Promise<string | null>;
+  addReply: (threadId: string, body: string) => Promise<void>;
+  markReplyHelpful: (threadId: string, replyId: string) => Promise<void>;
+  toggleFollowThread: (threadId: string) => Promise<void>;
+  toggleFollowTopic: (topicId: any) => Promise<void>;
+  toggleFollowHashtag: (hashtag: string) => Promise<void>;
+  loadThreadReplies: (threadId: string) => Promise<void>;
+  acceptTribeRules: () => Promise<void>;
+  createTopic: (topic: any) => Promise<void>;
+  updateTopic: (topicId: string, updates: any) => Promise<void>;
+  deleteTopic: (topicId: string) => Promise<void>;
+  moderateThread: (threadId: string, action: 'lock' | 'hide' | 'remove' | 'restore') => Promise<void>;
+  deleteHashtag: (tag: string) => Promise<void>;
+  seedTopics: () => Promise<void>;
+  toggleWelcome: (threadId: string) => Promise<void>;
 
   // Past Places
   addPastPlace: (place: PlaceResult, year: number) => Promise<void>;
@@ -169,7 +204,7 @@ interface NomadStore {
   updateCityVibe: (destId: string, vibeScore: number) => Promise<void>;
   addNotification: (notification: Omit<AppNotification, 'id' | 'createdAt' | 'isRead'>) => Promise<void>;
   markNotificationRead: (notificationId: string) => Promise<void>;
-  setActiveTab: (tab: 'tribe' | 'connect' | 'tribe-nearby' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin') => void;
+  setActiveTab: (tab: 'tribe' | 'connect' | 'tribe-nearby' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin' | 'community') => void;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   removeToast: (id: string) => void;
   isLocationModalOpen: boolean;
@@ -208,6 +243,13 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   reviews: [],
   collabAsks: [],
   collabEndorsements: [],
+  topics: [],
+  threads: [],
+  threadReplies: [],
+  topicFollows: [],
+  threadFollows: [],
+  hashtags: [],
+  hashtagFollows: [],
   deals: [],
   adminDeals: [],
   advertisers: [],
@@ -286,6 +328,11 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
     onAuthStateChanged(auth, async (firebaseUser) => {
       cleanup();
+      
+      // Reset auth ready while syncing
+      if (firebaseUser) {
+        set({ isAuthReady: false });
+      }
 
       if (firebaseUser) {
         // Fetch app settings
@@ -343,10 +390,14 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               }
             };
 
-            // Ensure e.emanuels@gmail.com is SuperAdmin
+              // Ensure e.emanuels@gmail.com is SuperAdmin
             if (firebaseUser.email?.toLowerCase() === 'e.emanuels@gmail.com' && updatedData.role !== 'SuperAdmin') {
-              await setDoc(doc(db, 'users', firebaseUser.uid), { role: 'SuperAdmin' }, { merge: true });
-              updatedData.role = 'SuperAdmin';
+              try {
+                await setDoc(doc(db, 'users', firebaseUser.uid), { role: 'SuperAdmin' }, { merge: true });
+                updatedData.role = 'SuperAdmin';
+              } catch (adminErr) {
+                console.warn("[Auth] Failed to promote superadmin:", adminErr);
+              }
             }
             set({ currentUser: updatedData, isAuthReady: true });
             
@@ -381,7 +432,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               vouchedBy: [],
               badges: [],
               gamification: { hasClaimedPioneerBonus: false, totalSpotsAdded: 0 },
-              role: firebaseUser.email === 'e.emanuels@gmail.com' ? 'SuperAdmin' : 'User',
+              role: (firebaseUser.email?.toLowerCase() === 'e.emanuels@gmail.com') ? 'SuperAdmin' : 'User',
               collabCard: { occupation: '', superpowers: [], currentMission: '', linkedInUrl: '' },
               openToCollabs: false,
               privacySettings: { isIncognito: false },
@@ -395,8 +446,16 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
                 }
               }
             };
-            await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
-            set({ currentUser: newProfile, isAuthReady: true });
+            
+            try {
+              console.log("[Auth] Creating new profile for:", firebaseUser.uid);
+              await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
+              set({ currentUser: newProfile, isAuthReady: true });
+            } catch (createErr) {
+              console.error("[Auth] Profile creation failed:", createErr);
+              get().addToast("Could not synchronize your profile. Please check if your account is verified.", "error");
+              set({ currentUser: null, isAuthReady: true });
+            }
           }
         }, (err) => handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`)));
 
@@ -463,6 +522,48 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           query(collection(db, 'deals'), where('status', '==', 'Active'), where('id', '>=', '')),
           (snapshot) => { set({ deals: snapshot.docs.map(d => d.data() as Deal) }); },
           (err) => handleFirestoreError(err, OperationType.LIST, 'deals')
+        ));
+        
+        // ── COMMUNITY LISTENERS ──
+        
+        // Topics: load all
+        unsubscribes.push(onSnapshot(
+          query(collection(db, 'topics'), orderBy('order')),
+          (snap) => set({ topics: snap.docs.map(d => d.data()) })
+        ));
+
+        // Threads: load only active threads from last 90 days for performance
+        const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+        unsubscribes.push(onSnapshot(
+          query(
+            collection(db, 'threads'),
+            where('status', '==', 'active'),
+            where('lastActivityAt', '>=', ninetyDaysAgo),
+            orderBy('lastActivityAt', 'desc'),
+            limit(200)
+          ),
+          (snap) => set({ threads: snap.docs.map(d => d.data()) })
+        ));
+
+        // User-specific: their topic + thread follows
+        unsubscribes.push(onSnapshot(
+          query(collection(db, 'topicFollows'), where('userId', '==', firebaseUser.uid)),
+          (snap) => set({ topicFollows: snap.docs.map(d => d.data()) })
+        ));
+        
+        unsubscribes.push(onSnapshot(
+          query(collection(db, 'threadFollows'), where('userId', '==', firebaseUser.uid)),
+          (snap) => set({ threadFollows: snap.docs.map(d => d.data()) })
+        ));
+
+        unsubscribes.push(onSnapshot(
+          query(collection(db, 'hashtagFollows'), where('userId', '==', firebaseUser.uid)),
+          (snap) => set({ hashtagFollows: snap.docs.map(d => d.data()) })
+        ));
+
+        unsubscribes.push(onSnapshot(
+          query(collection(db, 'hashtags'), orderBy('spaceCount', 'desc'), limit(50)),
+          (snap) => set({ hashtags: snap.docs.map(d => d.data()) })
         ));
 
         // Connections: Use array-contains for participantIds
@@ -591,7 +692,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   addTrip: async (trip) => {
     try {
-      await setDoc(doc(db, 'trips', trip.id), trip);
+      const cleanTrip: any = Object.fromEntries(Object.entries(trip).filter(([_, v]) => v !== undefined));
+      await setDoc(doc(db, 'trips', trip.id), cleanTrip);
       get().addToast(`Trip to ${trip.location} added!`, "success");
       
       // Sync with Explore list (destinations)
@@ -748,8 +850,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   addItem: async (item) => {
     try {
-      const itemWithVotes = {
-        ...item,
+      const cleanItem = Object.fromEntries(Object.entries(item).filter(([_, v]) => v !== undefined));
+      const itemWithVotes: any = {
+        ...cleanItem,
         upvotes: [],
         downvotes: []
       };
@@ -794,8 +897,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   addLookingFor: async (request) => {
     try {
-      const reqWithVotes = {
-        ...request,
+      const cleanRequest = Object.fromEntries(Object.entries(request).filter(([_, v]) => v !== undefined));
+      const reqWithVotes: any = {
+        ...cleanRequest,
         upvotes: [],
         downvotes: []
       };
@@ -1032,8 +1136,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   addEvent: async (event) => {
     try {
-      const eventWithVotes = {
-        ...event,
+      const cleanEvent = Object.fromEntries(Object.entries(event).filter(([_, v]) => v !== undefined));
+      const eventWithVotes: any = {
+        ...cleanEvent,
         upvotes: [],
         downvotes: []
       };
@@ -1215,8 +1320,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     if (!user) return;
 
     try {
-      const cleanSpot = {
-        ...spot,
+      const sanitizedBase = Object.fromEntries(Object.entries(spot).filter(([_, v]) => v !== undefined));
+      const cleanSpot: any = {
+        ...sanitizedBase,
         createdAt: spot.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isVetted: spot.isVetted ?? false,
@@ -1551,8 +1657,20 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     const user = get().currentUser;
     if (!user) return;
 
+    // Voor threads: check eerst of het topic 'social' is — dan vote weigeren
+    if (type === 'threads') {
+      const thread = get().threads.find(t => t.id === id);
+      if (thread) {
+        const topic = get().topics.find(t => t.id === thread.topicId);
+        if (topic?.type === 'social') {
+          get().addToast('Use the Welcome button instead.', 'info');
+          return;
+        }
+      }
+    }
+
     try {
-      const docRef = doc(db, type, id);
+      const docRef = doc(db, type as string, id);
       const docSnap = await getDoc(docRef);
       if (!docSnap.exists()) return;
 
@@ -1570,10 +1688,18 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
       const newVotes = { up, down };
 
-      // Auto-delete if difference is -20 or worse
-      if (up.length - down.length <= -20) {
-        await deleteDoc(docRef);
-        return;
+      // Community hiding logic
+      if (type === 'threads' || type === 'threadReplies') {
+        if (up.length - down.length <= -10) {
+          await updateDoc(docRef, { votes: newVotes, status: 'hidden' });
+          return;
+        }
+      } else {
+        // Auto-delete if difference is -20 or worse
+        if (up.length - down.length <= -20) {
+          await deleteDoc(docRef);
+          return;
+        }
       }
 
       const updates: any = { votes: newVotes };
@@ -1912,6 +2038,517 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       get().addToast("User moderation applied.", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+    }
+  },
+
+  // ── COMMUNITY ACTIONS ──
+
+  createThread: async ({ topicId, title, body, region, emoji, hashtags }) => {
+    const user = get().currentUser;
+    if (!user) return null;
+
+    if (!user.hasAcceptedTribeRules) {
+      get().addToast('Please accept the Tribe Rules first.', 'info');
+      return null;
+    }
+
+    const topic = get().topics.find(t => t.id === topicId);
+    if (topic?.isLocked && (user.verificationLevel ?? 1) < 2) {
+      get().addToast('This topic is open to verified members only.', 'info');
+      return null;
+    }
+
+    if (containsBlockedContent(title) || containsBlockedContent(body)) {
+      get().addToast('Your post contains blocked language. Please revise.', 'error');
+      return null;
+    }
+
+    const criticalCheck = containsCriticalContent(`${title} ${body}`);
+    
+    // Normalize hashtags: lowercase, strip '#', remove duplicates, cap at 3
+    const normalizedHashtags = Array.from(new Set(
+      (hashtags || [])
+        .map(h => h.toLowerCase().replace(/^#/, '').replace(/[^a-z0-9-]/g, ''))
+        .filter(h => h.length >= 2 && h.length <= 30)
+    )).slice(0, 3);
+
+    const id = `thread-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const now = new Date().toISOString();
+
+    const thread: any = {
+      id,
+      topicId,
+      authorId: user.id,
+      authorFamilyName: user.familyName || 'Nomad',
+      authorPhotoUrl: user.photoUrl || null,
+      title: cleanContent(title.trim()),
+      body: cleanContent(body.trim()),
+      region,
+      emoji: emoji || '💬',
+      hashtags: normalizedHashtags,
+      votes: { up: [user.id], down: [] },
+      replyCount: 0,
+      viewCount: 0,
+      activeUserCount: 1,                 // Author counts as the first active user
+      countryCount: user.currentLocation?.countryCode ? 1 : 0,
+      followers: [user.id],
+      status: 'active',
+      reportCount: 0,
+      isFlaggedCritical: criticalCheck.isCritical,
+      createdAt: now,
+      updatedAt: now,
+      lastActivityAt: now,
+    };
+
+    try {
+      await setDoc(doc(db, 'threads', id), thread);
+
+      if (criticalCheck.isCritical) {
+        const alertId = `alert-${id}`;
+        await setDoc(doc(db, 'adminAlerts', alertId), {
+          id: alertId,
+          type: 'CRITICAL',
+          targetId: id,
+          targetType: 'Thread',
+          reason: `Critical term detected: "${criticalCheck.matchedTerm}"`,
+          createdAt: now,
+          isRead: false,
+        });
+      }
+
+      await updateDoc(doc(db, 'topics', topicId), {
+        threadCount: increment(1),
+      });
+
+      // Upsert each hashtag in the hashtags collection
+      for (const tag of normalizedHashtags) {
+        try {
+          await setDoc(doc(db, 'hashtags', tag), {
+            id: tag,
+            spaceCount: increment(1),
+            weeklyCount: increment(1),
+            lastUsedAt: now,
+            createdAt: now,
+          }, { merge: true });
+        } catch (err) {
+          console.warn(`Failed to update hashtag ${tag}:`, err);
+        }
+      }
+
+      return id;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `threads/${id}`);
+      return null;
+    }
+  },
+
+  addReply: async (threadId, body) => {
+    const user = get().currentUser;
+    if (!user) return;
+
+    if (!user.hasAcceptedTribeRules) {
+      get().addToast('Please accept the Tribe Rules first.', 'info');
+      return;
+    }
+
+    if (containsBlockedContent(body)) {
+      get().addToast('Your reply contains blocked language.', 'error');
+      return;
+    }
+
+    const criticalCheck = containsCriticalContent(body);
+    const id = `reply-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const now = new Date().toISOString();
+
+    const reply: any = {
+      id,
+      threadId,
+      authorId: user.id,
+      authorFamilyName: user.familyName || 'Nomad',
+      authorPhotoUrl: user.photoUrl || null,
+      body: cleanContent(body.trim()),
+      votes: { up: [], down: [] },
+      status: 'active',
+      reportCount: 0,
+      isHelpful: false,
+      createdAt: now,
+    };
+
+    try {
+      await setDoc(doc(db, 'threadReplies', id), reply);
+      const thread = get().threads.find(t => t.id === threadId);
+      
+      if (thread) {
+        // Approximate calculation for MVP: 
+        // We increment replyCount and update lastActivityAt
+        // For activeUserCount and countryCount, we'd ideally query recent replies
+        // but for now let's just use increment logic or set unique based on current session
+        await updateDoc(doc(db, 'threads', threadId), {
+          replyCount: increment(1),
+          lastActivityAt: now,
+          // Optimization: if replier is new to the thread, activeUserCount++
+          // activeUserCount: increment(1), // Simple but not perfect
+        });
+
+        const followers = (thread.followers || []).filter((uid: string) => uid !== user.id);
+        for (const followerId of followers) {
+          await get().addNotification({
+            userId: followerId,
+            title: `New reply in "${thread.title}"`,
+            message: `${user.familyName} replied to a space you follow.`,
+            type: 'ThreadReply',
+            scheduledFor: now,
+            data: { threadId, replyId: id },
+          });
+        }
+      }
+
+      if (criticalCheck.isCritical) {
+        const alertId = `alert-${id}`;
+        await setDoc(doc(db, 'adminAlerts', alertId), {
+          id: alertId,
+          type: 'CRITICAL',
+          targetId: id,
+          targetType: 'ThreadReply',
+          reason: `Critical term in reply: "${criticalCheck.matchedTerm}"`,
+          createdAt: now,
+          isRead: false,
+        });
+      }
+
+      get().addToast('Reply posted.', 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `threadReplies/${id}`);
+    }
+  },
+
+  markReplyHelpful: async (threadId, replyId) => {
+    try {
+      const thread = get().threads.find(t => t.id === threadId);
+      if (!thread) return;
+
+      const batch = writeBatch(db);
+      
+      // Unmark previous helpful reply if exists
+      const replies = get().threadReplies.filter(r => r.threadId === threadId && r.isHelpful);
+      for (const r of replies) {
+        batch.update(doc(db, 'threadReplies', r.id), { isHelpful: false });
+      }
+
+      batch.update(doc(db, 'threadReplies', replyId), { isHelpful: true });
+      batch.update(doc(db, 'threads', threadId), { helpfulReplyId: replyId });
+      
+      await batch.commit();
+      get().addToast("Marked as helpful!", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `threadReplies/${replyId}`);
+    }
+  },
+
+  toggleFollowThread: async (threadId) => {
+    const user = get().currentUser;
+    if (!user) return;
+    const followId = `${user.id}_${threadId}`;
+    const isFollowing = get().threadFollows.some(f => f.threadId === threadId);
+
+    try {
+      if (isFollowing) {
+        await deleteDoc(doc(db, 'threadFollows', followId));
+        await updateDoc(doc(db, 'threads', threadId), {
+          followers: arrayRemove(user.id)
+        });
+      } else {
+        await setDoc(doc(db, 'threadFollows', followId), {
+          id: followId,
+          userId: user.id,
+          threadId,
+          followedAt: new Date().toISOString()
+        });
+        await updateDoc(doc(db, 'threads', threadId), {
+          followers: arrayUnion(user.id)
+        });
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'threadFollows');
+    }
+  },
+
+  toggleFollowTopic: async (topicId) => {
+    const user = get().currentUser;
+    if (!user) return;
+    const followId = `${user.id}_${topicId}`;
+    const isFollowing = get().topicFollows.some(f => f.topicId === topicId);
+
+    try {
+      if (isFollowing) {
+        await deleteDoc(doc(db, 'topicFollows', followId));
+      } else {
+        await setDoc(doc(db, 'topicFollows', followId), {
+          id: followId,
+          userId: user.id,
+          topicId,
+          followedAt: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'topicFollows');
+    }
+  },
+
+  toggleFollowHashtag: async (hashtag) => {
+    const user = get().currentUser;
+    if (!user) return;
+    const followId = `${user.id}_${hashtag}`;
+    const isFollowing = get().hashtagFollows.some(f => f.hashtag === hashtag);
+
+    try {
+      if (isFollowing) {
+        await deleteDoc(doc(db, 'hashtagFollows', followId));
+      } else {
+        await setDoc(doc(db, 'hashtagFollows', followId), {
+          id: followId,
+          userId: user.id,
+          hashtag,
+          followedAt: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'hashtagFollows');
+    }
+  },
+
+  loadThreadReplies: async (threadId) => {
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'threadReplies'),
+        where('threadId', '==', threadId),
+        orderBy('createdAt', 'asc')
+      ));
+      const replies = snap.docs.map(d => d.data());
+      set(state => ({
+        threadReplies: [
+          ...state.threadReplies.filter(r => r.threadId !== threadId),
+          ...replies
+        ]
+      }));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, 'threadReplies');
+    }
+  },
+
+  acceptTribeRules: async () => {
+    const user = get().currentUser;
+    if (!user) return;
+    const now = new Date().toISOString();
+    try {
+      await updateDoc(doc(db, 'users', user.id), {
+        hasAcceptedTribeRules: true,
+        tribeRulesAcceptedAt: now,
+      });
+      set({
+        currentUser: {
+          ...user,
+          hasAcceptedTribeRules: true,
+          tribeRulesAcceptedAt: now,
+        },
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.id}`);
+    }
+  },
+
+  createTopic: async (topicData) => {
+    const id = topicData.id;
+    try {
+      await setDoc(doc(db, 'topics', id), {
+        ...topicData,
+        createdAt: new Date().toISOString(),
+        createdBy: get().currentUser?.id || 'system',
+        threadCount: 0
+      });
+      get().addToast(`Topic board ${topicData.name} created`, 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `topics/${id}`);
+    }
+  },
+
+  updateTopic: async (topicId, updates) => {
+    try {
+      await updateDoc(doc(db, 'topics', topicId), updates);
+      get().addToast(`Topic ${updates.name || topicId} updated`, 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `topics/${topicId}`);
+    }
+  },
+
+  deleteTopic: async (topicId) => {
+    try {
+      await deleteDoc(doc(db, 'topics', topicId));
+      get().addToast(`Topic board removed`, 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `topics/${topicId}`);
+    }
+  },
+
+  moderateThread: async (threadId, action) => {
+    const statusMap: Record<string, string> = {
+      'lock': 'locked',
+      'hide': 'hidden',
+      'remove': 'removed',
+      'restore': 'active'
+    };
+    try {
+      await updateDoc(doc(db, 'threads', threadId), { status: statusMap[action] });
+      get().addToast(`Thread ${action}ed.`, "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `threads/${threadId}`);
+    }
+  },
+
+  deleteHashtag: async (tag) => {
+    try {
+      await deleteDoc(doc(db, 'hashtags', tag));
+      get().addToast(`Hashtag #${tag} removed`, 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `hashtags/${tag}`);
+    }
+  },
+
+  toggleWelcome: async (threadId) => {
+    const user = get().currentUser;
+    if (!user) return;
+
+    const thread = get().threads.find(t => t.id === threadId);
+    if (!thread) return;
+
+    // Veiligheidscheck: alleen toegestaan op social topics
+    const topic = get().topics.find(t => t.id === thread.topicId);
+    if (topic?.type !== 'social') return;
+
+    const currentWelcomes = thread.welcomes || [];
+    const hasWelcomed = currentWelcomes.includes(user.id);
+
+    const newWelcomes = hasWelcomed
+      ? currentWelcomes.filter(uid => uid !== user.id)
+      : [...currentWelcomes, user.id];
+
+    try {
+      await updateDoc(doc(db, 'threads', threadId), { welcomes: newWelcomes });
+      // UI update will happen via onSnapshot
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `threads/${threadId}`);
+    }
+  },
+
+  seedTopics: async () => {
+    const defaultTopics = [
+      {
+        id: 'introductions',
+        name: 'Introductions & Tribe Stories',
+        description: 'Introduce yourself and share your travel story. Welcome new families to the tribe.',
+        icon: 'Hand',                    // Lucide: 👋
+        color: '#E76F51',                // Rose
+        type: 'social',
+        isLocked: false,
+        threadCount: 0,
+        createdBy: 'system',
+        createdAt: new Date().toISOString(),
+        order: 1
+      },
+      {
+        id: 'worldschooling',
+        name: 'Worldschooling & Global Education',
+        description: 'Curricula, online schools, learning philosophies, and education on the road.',
+        icon: 'GraduationCap',           // 🎓
+        color: '#006D77',                // Ocean Blue
+        type: 'discussion',
+        isLocked: false,
+        threadCount: 0,
+        createdBy: 'system',
+        createdAt: new Date().toISOString(),
+        order: 2
+      },
+      {
+        id: 'business-tax-money',
+        name: 'Business, Tax & Money',
+        description: 'E-residency, LLCs, global banking, and running a business while traveling.',
+        icon: 'Briefcase',               // 💼
+        color: '#264653',                // Slate
+        type: 'discussion',
+        isLocked: true,                  // Premium-locked initially
+        threadCount: 0,
+        createdBy: 'system',
+        createdAt: new Date().toISOString(),
+        order: 3
+      },
+      {
+        id: 'visas-residency',
+        name: 'Visas, Residency & Borders',
+        description: 'Digital nomad visas, Schengen rules, and passport strategies.',
+        icon: 'Stamp',                   // 🛂
+        color: '#2A9D8F',                // Forest Green
+        type: 'discussion',
+        isLocked: false,
+        threadCount: 0,
+        createdBy: 'system',
+        createdAt: new Date().toISOString(),
+        order: 4
+      },
+      {
+        id: 'health-insurance-safety',
+        name: 'Health, Insurance & Safety',
+        description: 'Worldwide insurance, medical records across borders, and family safety.',
+        icon: 'HeartPulse',              // 🏥
+        color: '#E2725B',                // Coral
+        type: 'discussion',
+        isLocked: false,
+        threadCount: 0,
+        createdBy: 'system',
+        createdAt: new Date().toISOString(),
+        order: 5
+      },
+      {
+        id: 'travel-logistics-gear',
+        name: 'Travel Logistics & Gear',
+        description: 'Best airlines for families, travel strollers, e-sims, packing strategies.',
+        icon: 'Plane',                   // ✈️
+        color: '#E9C46A',                // Mustard
+        type: 'discussion',
+        isLocked: false,
+        threadCount: 0,
+        createdBy: 'system',
+        createdAt: new Date().toISOString(),
+        order: 6
+      },
+      {
+        id: 'lifestyle-mental-health',
+        name: 'Lifestyle & Mental Health',
+        description: 'Work-travel balance, parenting on the road, nomad burnout, and the highs.',
+        icon: 'Brain',                   // 🧠
+        color: '#4A4E69',                // Indigo
+        type: 'discussion',
+        isLocked: false,
+        threadCount: 0,
+        createdBy: 'system',
+        createdAt: new Date().toISOString(),
+        order: 7
+      }
+    ];
+
+    try {
+      const batch = writeBatch(db);
+      for (const t of defaultTopics) {
+        batch.set(doc(db, 'topics', t.id), {
+          ...t,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          createdBy: 'system'
+        }, { merge: true });
+      }
+      await batch.commit();
+      get().addToast("Community categories updated!", "success");
+    } catch (err) {
+      console.error("Failed to seed topics:", err);
     }
   },
 
