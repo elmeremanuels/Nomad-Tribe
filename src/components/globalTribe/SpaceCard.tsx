@@ -1,19 +1,21 @@
 import React from 'react';
 import { useNomadStore } from '../../store';
-import { ArrowBigUp, ArrowBigDown, MessageSquare, Globe, Bell, MoreVertical, Eye, MapPin, Heart } from 'lucide-react';
+import { ArrowBigUp, ArrowBigDown, MessageSquare, Globe, Bell, Eye, MapPin, Heart } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '../../lib/utils';
 import { Thread, Topic } from '../../types';
+import { Avatar } from '../Avatar';
+import { CardActionsMenu } from '../CardActionsMenu';
 
 interface SpaceCardProps {
   thread: Thread;
   topic?: Topic;
   onClick: () => void;
-  onReport?: (id: string, type: 'Thread' | 'ThreadReply' | 'User') => void;
+  onReport?: (id: string, type: 'Thread' | 'ThreadReply' | 'User' | 'LookingFor' | 'Event' | 'Spot' | 'MarketItem' | 'CollabAsk') => void;
 }
 
 export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, onReport }) => {
-  const { currentUser, vote, threadFollows, toggleFollowThread, toggleFollowHashtag, toggleWelcome } = useNomadStore();
+  const { currentUser, vote, threadFollows, toggleFollowThread, toggleFollowHashtag, toggleWelcome, deleteThread } = useNomadStore();
   
   const getVoteScore = (votes: { up: string[], down: string[] }) => (votes?.up?.length || 0) - (votes?.down?.length || 0);
   const isUpvoted = thread.votes?.up?.includes(currentUser?.id || '');
@@ -24,6 +26,8 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
   const hasWelcomed = thread.welcomes?.includes(currentUser?.id || '');
 
   const accentColor = topic?.color || '#006d77';
+
+  const isOwn = currentUser?.id === thread.authorId;
 
   return (
     <div 
@@ -38,6 +42,14 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
         backgroundColor: `${accentColor}10` 
       }}
     >
+      <div className="absolute top-4 right-4 z-20">
+        <CardActionsMenu
+          isOwn={isOwn}
+          onReport={() => onReport?.(thread.id, 'Thread')}
+          onDelete={() => deleteThread(thread.id)}
+        />
+      </div>
+
       {/* Interactive area (Left side) */}
       <div className="flex flex-col items-center gap-1 min-w-[44px] z-10">
         {isSocial ? (
@@ -105,7 +117,7 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
         )}
 
         <div className="flex items-center gap-2 mb-4">
-          <img src={thread.authorPhotoUrl || '/avatar-placeholder.png'} className="w-5 h-5 rounded-md object-cover" alt="" />
+          <Avatar src={thread.authorPhotoUrl} name={thread.authorFamilyName} size="xs" />
           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{thread.authorFamilyName}</span>
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
             • {topic?.name} • {thread.region}
@@ -152,28 +164,6 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
              >
                {isFollowing ? 'Following' : 'Follow'}
              </button>
-             <div className="relative group/report">
-                <button
-                  onClick={(e) => { e.stopPropagation(); }}
-                  className="p-1.5 text-slate-300 hover:text-slate-500"
-                >
-                  <MoreVertical className="w-4 h-4" />
-                </button>
-                <div className="absolute right-0 bottom-full mb-2 w-40 bg-white rounded-xl shadow-xl border border-slate-100 py-1 opacity-0 group-hover/report:opacity-100 pointer-events-none group-hover/report:pointer-events-auto transition-all z-[100]">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onReport?.(thread.id, 'Thread'); }}
-                    className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
-                  >
-                    Report Space
-                  </button>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onReport?.(thread.authorId, 'User'); }}
-                    className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
-                  >
-                    Report Author
-                  </button>
-                </div>
-             </div>
           </div>
         </div>
       </div>

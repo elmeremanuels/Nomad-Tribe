@@ -1633,6 +1633,11 @@ const DealCard = ({ deal }: { deal: Deal }) => {
   );
 };
 
+import { Avatar } from './components/Avatar';
+import { CardActionsMenu } from './components/CardActionsMenu';
+import { CategoryTile } from './components/CategoryTile';
+import { TribeBrowserOverlay } from './components/TribeBrowserOverlay';
+
 const TribeView = ({ 
   onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall, 
   setIsAddPastPlaceOpen, setActiveTab, onSetLocation, onAddTrip, onEditTrip,
@@ -1663,7 +1668,7 @@ const TribeView = ({
     requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, 
     collabAsks, addCollabAsk, removeCollabAsk, blocks, saveVibeCheck, spots, events, 
     addEvent, removeEvent, tribeRadius, setTribeRadius, deals,
-    pastPlaces, realTimeLocation, removePastPlace, removeTrip
+    pastPlaces, realTimeLocation, removePastPlace, removeTrip, addToast
   } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [isCollabAskOpen, setIsCollabAskOpen] = useState(false);
@@ -1684,6 +1689,8 @@ const TribeView = ({
   const [isAllSpotsOpen, setIsAllSpotsOpen] = useState(false);
   const [isActionDropdownOpen, setIsActionDropdownOpen] = useState(false);
   const [isSpotDropdownOpen, setIsSpotDropdownOpen] = useState(false);
+  const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
+  const [isEventCalendarView, setIsEventCalendarView] = useState(false);
 
   const [exploreLocation, setExploreLocation] = useState<PlaceResult | null>(null);
   const [isTeleportOpen, setIsTeleportOpen] = useState(false);
@@ -2006,45 +2013,38 @@ const TribeView = ({
   };
 
   const matches = useMemo(() => {
-    if (!currentUser) return [];
-    const userTrips = trips.filter(t => t.familyId === currentUser.id);
-    const otherTrips = trips.filter(t => t.familyId !== currentUser.id);
-    
-    const results = [];
-    for (const uTrip of userTrips) {
-      for (const oTrip of otherTrips) {
-        const otherProfile = filteredProfiles.find(p => p.id === oTrip.familyId);
-        if (otherProfile) {
-          // Collab Mode Filter
-          if (collabMode && !otherProfile.openToCollabs) continue;
+    return connections
+      .filter(c => c.status === 'accepted')
+      .map(c => {
+        const otherId = c.participantIds.find(id => id !== currentUser?.id);
+        const family = profiles.find(p => p.id === otherId);
+        return {
+          id: c.id,
+          family,
+          score: 100 // Professional match default
+        };
+      })
+      .filter(m => m.family) as { id: string; family: FamilyProfile; score: number }[];
+  }, [connections, profiles, currentUser]);
 
-          const match = calculateMatchScore(currentUser, uTrip, otherProfile, oTrip, collabMode);
-          if (match.score > 0) {
-            results.push({
-              id: `${uTrip.id}-${oTrip.id}`,
-              family: otherProfile,
-              trip: oTrip,
-              score: match.score,
-              reasons: match.reasons
-            });
-          }
-        }
-      }
-    }
-    return results.sort((a, b) => b.score - a.score);
-  }, [currentUser, trips, filteredProfiles, collabMode]);
+  const categories = [
+    { id: 'spots', label: 'Local Spots', count: filteredSpots.length, icon: MapPin, color: '#00b4d8' },
+    { id: 'events', label: 'Events', count: localEvents.length, icon: Calendar, color: '#f77f00' },
+    { id: 'marketplace', label: 'Marketplace', count: localMarketItems.length, icon: ShoppingBag, color: '#006d77' },
+    { id: 'matches', label: 'Matches', count: matches.length, icon: Heart, color: '#e76f51' },
+    { id: 'deals', label: 'Tribe Deals', count: filteredDeals.length, icon: Tag, color: '#8338ec' },
+  ];
 
   return (
     <div className={cn(
-      "p-4 md:p-8 space-y-12 max-w-5xl mx-auto pb-32 md:pb-12 transition-colors duration-500 min-h-full",
+      "p-4 md:p-8 space-y-12 max-w-7xl mx-auto pb-32 md:pb-12 transition-colors duration-500 min-h-full",
       collabMode ? "bg-[#006d77] text-white" : "text-slate-900"
     )}>
       {isCollabGated ? (
         <CollabOpportunitySummary 
           onUpgrade={onPaywall} 
           stats={{
-            proFamilies: profiles.filter(p => (p.openToCollabs || p.collabCard?.occupation)).length,
-            collabAsks: collabAsks.length || 8
+            proFamilies: profiles.filter(p => (p.openToCollabs || p.collabCard?.occupation)).length
           }} 
         />
       ) : (
@@ -2122,27 +2122,29 @@ const TribeView = ({
             "p-6 rounded-[2.5rem] border flex flex-wrap items-center justify-between gap-6 transition-colors",
             collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 card-shadow"
           )}>
-            <div className="flex items-center gap-4">
-              <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center",
-                collabMode ? "bg-white/10" : "bg-primary/10 text-primary")}>
-                <Calendar className="w-6 h-6" />
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-4">
+                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center",
+                  collabMode ? "bg-white/10" : "bg-primary/10 text-primary")}>
+                  <Calendar className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className={cn("text-[10px] font-black uppercase tracking-widest",
+                    collabMode ? "text-white/40" : "text-slate-400")}>Today</p>
+                  <p className="text-sm font-bold">{format(new Date(), 'EEE, MMM d')}</p>
+                </div>
               </div>
-              <div>
-                <p className={cn("text-[10px] font-black uppercase tracking-widest",
-                  collabMode ? "text-white/40" : "text-slate-400")}>Today</p>
-                <p className="text-sm font-bold">{format(new Date(), 'EEE, MMM d')}</p>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-4">
-              <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center",
-                collabMode ? "bg-white/10" : "bg-amber-100 text-amber-600")}>
-                <ShieldAlert className="w-6 h-6" />
-              </div>
-              <div>
-                <p className={cn("text-[10px] font-black uppercase tracking-widest",
-                  collabMode ? "text-white/40" : "text-slate-400")}>Emergency</p>
-                <p className="text-sm font-bold text-red-500">{currentMetrics.emergency}</p>
+              <div className="flex items-center gap-4">
+                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center",
+                  collabMode ? "bg-white/10" : "bg-amber-100 text-amber-600")}>
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className={cn("text-[10px] font-black uppercase tracking-widest",
+                    collabMode ? "text-white/40" : "text-slate-400")}>Emergency</p>
+                  <p className="text-sm font-bold text-red-500">{currentMetrics.emergency}</p>
+                </div>
               </div>
             </div>
 
@@ -2165,956 +2167,361 @@ const TribeView = ({
             </div>
           </section>
 
-
-          {/* Integrated Map & Local Action Selection */}
-          <section className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-              {/* Map (2/3) */}
-              <div className="lg:col-span-2 min-h-[500px] w-full">
-                <MapView 
-                  center={{ lat: activeNode.lat, lng: activeNode.lng }} 
-                  spots={filteredSpots}
-                  marketItems={localMarketItems}
-                  events={localEvents}
-                  requests={localRequests}
-                  userPhotoUrl={currentUser?.photoUrl}
-                  radiusKm={tribeRadius}
-                  onSelectFamily={(family) => {
-                    onSelectFamily(family);
-                  }}
-                />
-              </div>
-
-              {/* Next Up (1/3) */}
-              <div className="flex flex-col">
-                <div className={cn(
-                  "p-8 rounded-[3rem] border flex flex-col flex-1 min-h-0",
-                  collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
-                )}>
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-black text-xs uppercase tracking-widest opacity-40">Next Up</h3>
-                    
-                    {/* Action Dropdown */}
-                    <div className="relative">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setIsActionDropdownOpen(!isActionDropdownOpen); }}
-                        className={cn(
-                          "w-8 h-8 rounded-xl flex items-center justify-center transition-all",
-                          collabMode ? "bg-white/10 hover:bg-white/20" : "bg-primary/10 text-primary hover:bg-primary/20",
-                          isActionDropdownOpen && "rotate-45"
-                        )}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                      
-                      {isActionDropdownOpen && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setIsActionDropdownOpen(false)} />
-                          <div className={cn(
-                            "absolute right-0 mt-3 w-52 rounded-2xl shadow-2xl border p-2 z-50 animate-in fade-in slide-in-from-top-2",
-                            collabMode ? "bg-[#0b5351] border-white/10" : "bg-white border-slate-100"
-                          )}>
-                             {activeNode.type !== 'past' && (
-                               <>
-                                 <button onClick={() => { setIsLookingForOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors">Post Request</button>
-                                 <button onClick={() => { setIsAddEventOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors">Post Event</button>
-                                 <button onClick={() => { setIsAddItemOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors">Sell / Swap Gear</button>
-                               </>
-                             )}
-                             <button onClick={() => { setIsRecommendSpotOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-[#00b4d8] transition-colors">Recommend Spot</button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar pr-1">
-                    {nextUpItems.slice(0, 4).map(item => (
-                      <div key={item.id} className={cn(
-                        "p-4 rounded-2xl border transition-all", 
-                        collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"
-                      )}>
-                        <div className="flex justify-between items-center mb-1">
-                          <p className={cn("text-[8px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-accent")}>
-                            {(item as any).type}
-                          </p>
-                          <p className="text-[9px] font-bold opacity-30">
-                            {format(item.dateObj, 'MMM d')}
-                          </p>
-                        </div>
-                        <p className="text-xs font-black truncate">{item.title}</p>
-                      </div>
-                    ))}
-                    {nextUpItems.length === 0 && (
-                      <div className="flex flex-col items-center justify-center h-full opacity-20 text-center">
-                        <Calendar className="w-8 h-8 mb-2" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">Nothing planned</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <button 
-                    onClick={() => setIsCalendarOpen(true)}
-                    className="mt-6 w-full py-4 rounded-2xl border-2 border-dashed border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:border-primary hover:text-primary transition-colors"
-                  >
-                    View All
-                  </button>
-                </div>
-              </div>
+          {/* Neighborhood Pulse - Tier 1 */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+            {/* Central Map */}
+            <div className="lg:col-span-2 min-h-[500px] w-full rounded-[3rem] overflow-hidden border border-slate-100 shadow-xl">
+              <MapView 
+                center={{ lat: activeNode.lat, lng: activeNode.lng }} 
+                spots={filteredSpots}
+                marketItems={localMarketItems}
+                events={localEvents}
+                requests={localRequests}
+                userPhotoUrl={currentUser?.photoUrl}
+                radiusKm={tribeRadius}
+                onSelectFamily={onSelectFamily}
+              />
             </div>
-          </section>
 
-          {/* Profiles Section */}
-          <section className="space-y-6">
-            {/* Header with embedded stats + radius control */}
+            {/* Live Requests & Post Logic */}
             <div className={cn(
-              "p-6 rounded-[2.5rem] border space-y-5",
-              collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
+              "p-8 rounded-[3rem] border flex flex-col min-h-0",
+              collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 card-shadow"
             )}>
-              <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex items-center justify-between mb-8">
                 <div>
-                  <h2 className={cn("text-[10px] font-black uppercase tracking-[0.2em] mb-1",
-                    collabMode ? "text-white/40" : "text-slate-400")}>
-                    {activeNode.type === 'current' ? 'Nearby Families' :
-                     activeNode.type === 'past' ? 'Families currently here' :
-                     `Families currently in ${activeNode.label}`}
-                  </h2>
-                  <div className="flex items-baseline gap-2">
-                    <span className={cn("text-3xl font-black", collabMode ? "text-white" : "text-secondary")}>
-                      {filteredProfiles.length}
-                    </span>
-                    <span className={cn("text-sm font-bold", collabMode ? "text-white/60" : "text-slate-500")}>
-                      {filteredProfiles.length === 1 ? 'family' : 'families'} within {tribeRadius}km
-                    </span>
-                  </div>
+                  <h3 className="font-black text-xs uppercase tracking-widest opacity-40">Live Feed</h3>
+                  <p className="text-xl font-black tracking-tight mt-1">Next Up</p>
                 </div>
-
-                {/* Radius slider — compact pill style */}
-                <div className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-2xl",
-                  collabMode ? "bg-white/10" : "bg-slate-50"
-                )}>
-                  <div className="flex flex-col">
-                    <p className={cn("text-[8px] font-black uppercase tracking-widest leading-none",
-                      collabMode ? "text-white/40" : "text-slate-400")}>
-                      Radius
-                    </p>
-                    <div className="flex items-center gap-3 mt-1.5">
-                      <input
-                        type="range"
-                        min="1"
-                        max="100"
-                        value={tribeRadius}
-                        onChange={(e) => setTribeRadius(parseInt(e.target.value))}
-                        className="w-32 accent-primary cursor-pointer"
-                      />
-                      <span className={cn("text-xs font-black tabular-nums w-12 text-right",
-                        collabMode ? "text-white" : "text-primary")}>
-                        {tribeRadius}km
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Family cards horizontal scroll */}
-              <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2 -mx-2 px-2 snap-x">
-                {filteredProfiles.length > 0 ? (
-                  filteredProfiles.map((family) => {
-                    const conn = getConnection(family.id);
-                    return (
-                      <motion.div
-                        key={family.id}
-                        className="snap-start"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                      >
-                        <FamilyCard
-                          family={family}
-                          connectionStatus={conn?.status}
-                          onConnect={() => requestConnection(family.id)}
-                          onMessage={() => onSayHello(family)}
-                          onSelect={() => onSelectFamily(family)}
-                        />
-                      </motion.div>
-                    );
-                  })
-                ) : (
-                  <div className={cn(
-                    "w-full py-10 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center px-6",
-                    collabMode ? "border-white/10" : "border-slate-200"
-                  )}>
-                    <Users className="w-8 h-8 text-slate-300 mb-3" />
-                    <p className="font-bold text-slate-400 text-sm">No families within {tribeRadius}km yet.</p>
-                    <p className="text-[10px] text-slate-300 mt-1 uppercase tracking-widest font-black">
-                      Try increasing the radius
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* Also Coming To Section (Future Only) */}
-          {activeNode.type === 'future' && comingTogether.length > 0 && (
-            <motion.section 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-8"
-            >
-              <div className="flex items-center justify-between px-4">
-                <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
-                  Also coming to {activeNode.label}
-                </h2>
-              </div>
-              <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 -mx-4 px-4 snap-x">
-                {comingTogether.map((family) => (
-                  <motion.div 
-                    key={family.id} 
-                    className="snap-start"
+                
+                <div className="relative">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setIsActionDropdownOpen(!isActionDropdownOpen); }}
+                    className={cn(
+                      "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg active:scale-90",
+                      collabMode ? "bg-white text-secondary" : "bg-primary text-white shadow-primary/20",
+                      isActionDropdownOpen && "rotate-45"
+                    )}
                   >
-                    <FamilyCard 
-                      family={family} 
-                      connectionStatus={getConnection(family.id)?.status}
-                      onConnect={() => requestConnection(family.id)}
-                      onMessage={() => onSayHello(family)}
-                      onSelect={() => onSelectFamily(family)}
-                      specialBadge="🎯 Matching Dates"
-                    />
+                    <Plus className="w-6 h-6" />
+                  </button>
+                  
+                  {isActionDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsActionDropdownOpen(false)} />
+                      <div className={cn(
+                        "absolute right-0 mt-3 w-64 rounded-3xl shadow-2xl border p-2 z-50 animate-in fade-in slide-in-from-top-4",
+                        collabMode ? "bg-[#0b5351] border-white/10" : "bg-white border-slate-100"
+                      )}>
+                         {activeNode.type !== 'past' && (
+                           <>
+                             <button onClick={() => { setIsLookingForOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left p-4 hover:bg-slate-50 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-3">
+                               <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center"><MessageSquare className="w-4 h-4" /></div>
+                               Post Request
+                             </button>
+                             <button onClick={() => { setIsAddEventOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left p-4 hover:bg-slate-50 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-3">
+                               <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center"><Calendar className="w-4 h-4" /></div>
+                               Post Event
+                             </button>
+                             <button onClick={() => { setIsAddItemOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left p-4 hover:bg-slate-50 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-3">
+                               <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center"><ShoppingBag className="w-4 h-4" /></div>
+                               Market Item
+                             </button>
+                           </>
+                         )}
+                         <button onClick={() => { setIsRecommendSpotOpen(true); setIsActionDropdownOpen(false); }} className="w-full text-left p-4 hover:bg-slate-50 rounded-2xl text-[10px] font-black uppercase tracking-widest text-[#00b4d8] transition-colors flex items-center gap-3">
+                           <div className="w-8 h-8 rounded-xl bg-cyan-100 text-cyan-600 flex items-center justify-center"><MapPin className="w-4 h-4" /></div>
+                           Recommend Spot
+                         </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar pr-1">
+                {nextUpItems.slice(0, 5).map(item => (
+                  <motion.div 
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    key={item.id} 
+                    className={cn(
+                      "p-5 rounded-[2rem] border transition-all hover:scale-[1.02] cursor-pointer", 
+                      collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"
+                    )}
+                  >
+                    <div className="flex justify-between items-center mb-2">
+                      <p className={cn("text-[9px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-primary")}>
+                        {(item as any).type}
+                      </p>
+                      <p className="text-[10px] font-bold opacity-30">
+                        {format(item.dateObj, 'MMM d, HH:mm')}
+                      </p>
+                    </div>
+                    <p className="text-sm font-black line-clamp-2 leading-snug">{item.title}</p>
                   </motion.div>
                 ))}
-              </div>
-            </motion.section>
-          )}
-
-          {/* Places You May Like Section - Full Width */}
-          <section className="space-y-8">
-            <div className="flex items-center justify-between px-4">
-              <div className="flex items-center gap-3">
-                 <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-emerald-50 text-emerald-500")}>
-                    <Star className={cn("w-5 h-5", collabMode ? "fill-white text-white" : "fill-emerald-500")} />
-                 </div>
-                 <div>
-                    <h2 className={cn("text-2xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Places You May Like</h2>
-                    <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Selected curated spots for your tribe</p>
-                 </div>
-              </div>
-              
-              <div className="relative">
-                <button 
-                  onClick={() => setIsSpotDropdownOpen(!isSpotDropdownOpen)}
-                  className={cn(
-                    "px-6 py-3 border rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center gap-2",
-                    collabMode ? "bg-white/10 border-white/10 text-white" : "bg-white border-slate-100 text-slate-600"
-                  )}
-                >
-                  + Add Spot
-                  <ChevronDown className={cn("w-3 h-3 transition-transform", isSpotDropdownOpen && "rotate-180")} />
-                </button>
-
-                {isSpotDropdownOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setIsSpotDropdownOpen(false)} />
-                    <div className={cn(
-                      "absolute right-0 mt-3 w-56 rounded-2xl shadow-2xl border p-2 z-50 animate-in fade-in slide-in-from-top-2",
-                      collabMode ? "bg-[#0b5351] border-white/10" : "bg-white border-slate-100"
-                    )}>
-                       {['Playground', 'Restaurant', 'Cafe', 'Activity', 'Education', 'Health'].map(cat => (
-                         <button 
-                          key={cat}
-                          onClick={() => { setIsRecommendSpotOpen(true); setIsSpotDropdownOpen(false); }}
-                          className="w-full text-left p-4 hover:bg-slate-50 rounded-xl transition-colors group flex items-center gap-3"
-                         >
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Add {cat}</span>
-                         </button>
-                       ))}
-                    </div>
-                  </>
+                {nextUpItems.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-48 opacity-20 text-center">
+                    <Calendar className="w-12 h-12 mb-3" />
+                    <p className="text-xs font-black uppercase tracking-widest">Nothing planned</p>
+                  </div>
                 )}
               </div>
-            </div>
 
-            <div className="relative">
-              {filteredSpots.length === 0 && filteredDeals.length === 0 ? (
-                <div className="rounded-[2.5rem] border-2 border-dashed border-slate-200 p-12 text-center space-y-3 mx-4">
-                  <div className="flex justify-center gap-3">
-                    <MapPin className="w-8 h-8 text-slate-300" />
-                    <Tag className="w-8 h-8 text-slate-300" />
-                  </div>
-                  <p className="text-sm font-bold text-slate-400">
-                    Nothing curated for {activeNode.label} yet
-                  </p>
-                  <p className="text-[10px] text-slate-300 uppercase tracking-widest font-black">
-                    Add a spot to start the local tribe library
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8 px-4 scroll-smooth">
-                    {filteredSpots.length === 0 ? (
-                      <div className={cn("w-full py-12 text-center rounded-[3rem] border-2 border-dashed", collabMode ? "border-white/10" : "border-slate-100")}>
-                        <MapIcon className="w-10 h-10 mx-auto mb-4 opacity-20" />
-                        <p className="text-sm font-bold opacity-30">No spots found in this area yet.</p>
-                      </div>
-                    ) : (
-                      filteredSpots.map(spot => (
-                        <SpotCard 
-                          key={spot.id} 
-                          spot={spot} 
-                          collabMode={collabMode}
-                          currentUserId={currentUser?.id}
-                          onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
-                          className="w-72"
-                        />
-                      ))
-                    )}
-                  </div>
-                  
-                  <div className="flex justify-center -mt-4">
-                    <button 
-                      onClick={() => setIsAllSpotsOpen(true)}
-                      className={cn(
-                        "px-8 py-4 rounded-[2rem] text-xs font-black uppercase tracking-widest shadow-xl transition-all flex items-center gap-2 active:scale-95",
-                        collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white shadow-secondary/20"
-                      )}
-                    >
-                      <MapIcon className="w-4 h-4" />
-                      All spots around me
-                    </button>
-                  </div>
-                </>
-              )}
+              <button 
+                onClick={() => setActiveOverlay('events')}
+                className="mt-6 w-full py-5 rounded-[2rem] border-2 border-dashed border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:border-primary hover:text-primary transition-colors active:scale-95"
+              >
+                Explore Full Schedule
+              </button>
             </div>
           </section>
 
-          {/* Tribe Deals & Partnerships */}
-          {(filteredSpots.length > 0 || filteredDeals.length > 0) && (
-            <section className="space-y-6 pt-12">
-              <div className="flex items-center justify-between px-4">
-                <div className="flex items-center gap-3">
-                   <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", collabMode ? "bg-white/10" : "bg-accent/10 text-accent")}>
-                      <Tag className="w-5 h-5" />
-                   </div>
-                   <div>
-                      <h2 className={cn("text-2xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Tribe Deals & Partnerships</h2>
-                      <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Exclusive perks for Nomad Tribes members</p>
-                   </div>
-                </div>
-                <button className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/60" : "text-accent")}>View all deals →</button>
-              </div>
-              
-              <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8 px-4">
-                {filteredDeals.length === 0 ? (
-                   <div className={cn("w-full py-12 text-center rounded-[3rem] border-2 border-dashed", collabMode ? "border-white/10" : "border-slate-100")}>
-                     <Tag className="w-10 h-10 mx-auto mb-4 opacity-20" />
-                     <p className="text-sm font-bold opacity-30">No deals in this location yet.</p>
-                   </div>
-                ) : (
-                  filteredDeals.map(deal => (
-                    <div key={deal.id} className={cn("flex-shrink-0 w-80 rounded-[2.5rem] overflow-hidden border group", collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 shadow-sm shadow-slate-200/50")}>
-                      <div className="h-44 relative bg-slate-100 overflow-hidden">
-                         <img src={deal.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" />
-                         <div className="absolute top-4 left-4 px-3 py-1 bg-accent text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg">
-                            {deal.discountLabel}
-                         </div>
-                      </div>
-                      <div className="p-6">
-                         <h4 className="font-black text-lg">{deal.name}</h4>
-                         <p className="text-[11px] opacity-60 line-clamp-2 mt-2">{deal.description}</p>
-                         <div className="flex items-center justify-between mt-6">
-                            <p className="text-[10px] font-black opacity-30 uppercase tracking-widest">{deal.advertiserName}</p>
-                            <button className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105", collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white")}>Redeem</button>
-                         </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Collab Asks (Only in Collab Mode) */}
-          {collabMode && (
-            <section className="space-y-6">
-              <div className="flex justify-between items-center px-4">
-                <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white/40">Local Collab Corner</h2>
-                <button 
-                  onClick={() => setIsCollabAskOpen(true)}
-                  className="bg-amber-400 text-[#264653] px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
-                >
-                  <Plus className="w-3 h-3" /> Post Ask
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4">
-                 {collabAsks
-                   .filter(a => a.userId !== currentUser?.id && (a.locationSlug === activeNode.label || (a.lat && a.lng && calculateDistance(activeNode.lat, activeNode.lng, a.lat, a.lng) <= tribeRadius)))
-                   .slice(0, 3)
-                   .map(ask => {
-                     const family = profiles.find(p => p.id === ask.userId);
-                     if (!family) return null;
-                     return (
-                       <div key={ask.id} className="bg-white/5 border border-white/10 p-5 rounded-3xl hover:bg-white/10 transition-all">
-                          <div className="flex items-center gap-3 mb-3">
-                            <img src={family.photoUrl || null} className="w-8 h-8 rounded-lg object-cover" alt="" />
-                            <p className="text-xs font-bold">{ask.skillNeeded}</p>
-                          </div>
-                          <p className="text-xs text-white/60 italic line-clamp-2 mb-4">"{ask.description}"</p>
-                          <button 
-                            onClick={() => onSayHello(family, `Hi ${family.familyName}, I saw your ask for ${ask.skillNeeded}!`)}
-                            className="w-full py-2 bg-white text-[#006d77] rounded-xl text-[10px] font-black uppercase tracking-widest"
-                          >
-                            Respond
-                          </button>
-                       </div>
-                     );
-                   })}
-                 {collabAsks.filter(a => a.userId !== currentUser?.id && (a.locationSlug === activeNode.label || (a.lat && a.lng && calculateDistance(activeNode.lat, activeNode.lng, a.lat, a.lng) <= tribeRadius))).length === 0 && (
-                   <div className="col-span-full py-8 text-center bg-white/5 rounded-[2rem] border border-dashed border-white/10">
-                     <p className="text-xs text-white/40 font-medium tracking-tight">Be the first to post a collab ask in {activeNode.label}!</p>
-                   </div>
-                 )}
-              </div>
-            </section>
-          )}
-
-          {/* New Requests Section (Pending) */}
-          {(() => {
-            const pendingConnections = connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending');
-            const filteredLocalRequests = localRequests.filter(r => r.userId !== currentUser?.id);
-            
-            if (pendingConnections.length === 0 && filteredLocalRequests.length === 0) return null;
-
-            return (
-              <section className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-accent rounded-xl flex items-center justify-center text-white">
-                    <Bell className="w-4 h-4" />
-                  </div>
-                  <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
-                    Neighborhood Social Feed
-                  </h2>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* ... (existing pending connections & requests mapping) ... */}
-                    {pendingConnections.map(conn => {
-                      const requester = profiles.find(p => p.id === conn.requesterId);
-                      if (!requester) return null;
-                      return (
-                        <div key={conn.id} className={cn("p-4 rounded-[2rem] border flex items-center justify-between gap-4 transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
-                          <div className="flex items-center gap-3">
-                            <img src={requester.photoUrl || null} className="w-10 h-10 rounded-full object-cover" alt="" />
-                            <p className="text-sm font-bold">{requester.familyName} <span className="block text-[9px] opacity-40 uppercase">New Connection Request</span></p>
-                          </div>
-                          <button onClick={() => acceptConnection(conn.id)} className="bg-primary text-white p-2 rounded-xl text-[10px] font-black uppercase">Accept</button>
-                        </div>
-                      );
-                    })}
-                    {filteredLocalRequests.map(req => (
-                      <div key={req.id} className={cn("p-4 rounded-[2rem] border flex items-center justify-between gap-4 transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <div className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center flex-shrink-0 text-[10px] font-black">{req.familyName[0]}</div>
-                          <div className="overflow-hidden">
-                            <p className="text-[10px] font-black uppercase text-accent leading-none mb-1">{req.category}</p>
-                            <p className="text-xs font-bold truncate">{req.title}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                           <VoteControls post={req} collection="lookingFor" dark={collabMode} />
-                           {getConnection(req.userId)?.status === 'accepted' ? (
-                             <button onClick={() => {
-                               const seller = profiles.find(p => p.id === req.userId);
-                               if (seller) onSayHello(seller, `Hi ${seller.familyName}, regarding your request: ${req.title}`);
-                             }} className="bg-secondary text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase">Chat</button>
-                           ) : (
-                             <button onClick={() => {
-                               const seller = profiles.find(p => p.id === req.userId);
-                               if (seller) onSelectFamily(seller);
-                             }} className="bg-primary text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase">View</button>
-                           )}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </section>
-            );
-          })()}
-
-          {/* Matches & Overlaps */}
-          <section className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Nearby Matches & Overlaps</h2>
-              <div className="flex items-center gap-2">
-                <Search className="w-4 h-4 opacity-40" />
-                <input 
-                  type="text" 
-                  placeholder="Filter by interest..."
-                  className={cn("bg-transparent border-none text-xs font-medium focus:ring-0 w-32", collabMode ? "placeholder:text-white/20" : "placeholder:text-slate-300")}
-                  value={tribeSearchQuery}
-                  onChange={(e) => setTribeSearchQuery(e.target.value)}
+          {/* Category Dashboard - Tier 2 */}
+          <section className="space-y-8">
+            <div className="flex items-center justify-between px-4">
+              <h2 className={cn("text-[10px] font-black uppercase tracking-[0.2em] opacity-40", collabMode ? "text-white" : "text-secondary")}>
+                Explore your Hub
+              </h2>
+              <div className={cn(
+                "flex items-center gap-3 px-4 py-2 rounded-2xl",
+                collabMode ? "bg-white/10" : "bg-slate-100"
+              )}>
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40">Radius</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="100"
+                  value={tribeRadius}
+                  onChange={(e) => setTribeRadius(parseInt(e.target.value))}
+                  className="w-24 accent-primary"
                 />
+                <span className="text-[10px] font-black tabular-nums">{tribeRadius}km</span>
               </div>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               {/* Use the filtered matches based on activeLocation and search query */}
-               {matches.filter(m => {
-                 const nearby = filteredProfiles.some(p => p.id === m.family.id);
-                 if (tribeSearchQuery) {
-                   const q = tribeSearchQuery.toLowerCase();
-                   return (nearby || m.score > 70) && m.family.familyName.toLowerCase().includes(q);
-                 }
-                 return nearby || m.score > 80;
-               }).slice(0, 4).map(match => (
-                 <motion.div 
-                   key={match.id}
-                   whileHover={{ y: -4 }}
-                   className={cn(
-                     "rounded-[2.5rem] p-6 border transition-all flex flex-col justify-between h-[240px]",
-                     collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
-                   )}
-                 >
-                   <div>
-                     <div className="flex justify-between items-start mb-4">
-                       <div className="flex gap-4">
-                         <img 
-                           src={anonymizePhoto(match.family.photoUrl, isCollabGated)} 
-                           className="w-14 h-14 rounded-2xl object-cover" 
-                           alt="" 
-                         />
-                         <div>
-                           <h3 className="font-bold text-lg">{anonymize(match.family.familyName, isCollabGated)}</h3>
-                           <p className="text-xs opacity-60">{match.family.nativeLanguage} Family</p>
-                         </div>
-                       </div>
-                       <div className="bg-primary/20 text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase">
-                         {match.score}% Match
-                       </div>
-                     </div>
-                     <div className="flex flex-wrap gap-2">
-                        {match.family.kids.map(k => <span key={k.id} className="text-[10px] font-bold opacity-40">{k.age}y {k.gender}</span>)}
-                     </div>
-                   </div>
-                   <div className="flex justify-end pt-4 border-t border-white/5">
-                      <button 
-                        onClick={() => onSelectFamily(match.family)}
-                        className={cn("px-6 py-2 rounded-xl text-xs font-bold", collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white")}
-                      >
-                        Connect
-                      </button>
-                   </div>
-                 </motion.div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+               {categories.map(cat => (
+                 <CategoryTile 
+                   key={cat.id}
+                   {...cat}
+                   collabMode={collabMode}
+                   onClick={() => setActiveOverlay(cat.id)}
+                 />
                ))}
             </div>
           </section>
 
-          {/* Local Pop-up Events Section */}
-          {localEvents.length > 0 && (
-            <section className="space-y-6">
-              <div className="flex justify-between items-center">
-                 <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>Local Pop-up Events</h2>
-              </div>
-              <div className="flex gap-6 overflow-x-auto pb-4 no-scrollbar">
-                {localEvents.map(event => (
-                  <motion.div 
-                    key={event.id}
-                    whileHover={{ y: -4 }}
-                    className={cn("flex-shrink-0 w-80 rounded-[2.5rem] p-6 border transition-all flex flex-col justify-between", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}
+          {/* Tribe Overlays */}
+          <TribeBrowserOverlay 
+            isOpen={activeOverlay === 'spots'} 
+            onClose={() => setActiveOverlay(null)}
+            category="Spots"
+            title="Local Spots & Secrets"
+            icon={<MapPin className="w-5 h-5" />}
+            onAdd={() => setIsRecommendSpotOpen(true)}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredSpots.map(spot => (
+                <SpotCard 
+                  key={spot.id} 
+                  spot={spot} 
+                  collabMode={collabMode}
+                  currentUserId={currentUser?.id}
+                  onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
+                  onReport={(id) => setReportingTarget({ id, type: 'Spot' })}
+                  onDelete={(id) => {
+                    if (window.confirm("Are you sure you want to remove this spot?")) {
+                      useNomadStore.getState().removeSpot(id);
+                      addToast("Spot removed", "success");
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          </TribeBrowserOverlay>
+
+          <TribeBrowserOverlay 
+            isOpen={activeOverlay === 'events'} 
+            onClose={() => setActiveOverlay(null)}
+            category="Events"
+            title="Pop-up Events"
+            icon={<Calendar className="w-5 h-5" />}
+            onAdd={() => setIsAddEventOpen(true)}
+            showToggle
+            isCalendarView={isEventCalendarView}
+            onToggleView={setIsEventCalendarView}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {localEvents.map(event => (
+                <div key={event.id} className={cn(
+                  "p-8 rounded-[2.5rem] border flex flex-col justify-between h-full group relative",
+                  collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
+                )}>
+                  <div className="absolute top-6 right-6 z-10">
+                    <CardActionsMenu 
+                      isOwn={currentUser?.id === event.organizerId}
+                      onReport={() => setReportingTarget({ id: event.id, type: 'Event' })}
+                      onDelete={() => {
+                        if (window.confirm("Are you sure you want to delete this event?")) {
+                          useNomadStore.getState().removeEvent(event.id);
+                          addToast("Event deleted", "success");
+                        }
+                      }}
+                      dark={collabMode}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-start mb-6">
+                      <span className="px-3 py-1 bg-primary/10 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest">{event.category}</span>
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
+                        <Users className="w-3.5 h-3.5" />
+                        {event.participants.length}/{event.maxParticipants}
+                      </div>
+                    </div>
+                    <h3 className="text-xl font-black mb-3">{event.title}</h3>
+                    <p className="text-sm text-slate-500 italic mb-6 line-clamp-3">"{event.description}"</p>
+                    <div className="pt-6 border-t border-slate-100 space-y-3">
+                       <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          <Calendar className="w-4 h-4" />
+                          {event.date} • {event.time}
+                       </div>
+                       <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          <MapPin className="w-4 h-4" />
+                          {event.place?.name || event.location}
+                       </div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if (currentUser) {
+                        useNomadStore.getState().rsvpForEvent(event.id, currentUser.id);
+                      }
+                    }}
+                    className={cn(
+                      "mt-8 py-4 w-full rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95",
+                      currentUser && event.participants.includes(currentUser.id) ? "bg-slate-100 text-slate-400" : "bg-primary text-white shadow-lg shadow-primary/20"
+                    )}
                   >
-                    <div>
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="bg-accent/10 text-accent px-3 py-1 rounded-full text-[10px] font-black uppercase">{event.category}</div>
-                        <div className="flex items-center gap-1 text-[10px] font-black text-slate-400"><Users className="w-3 h-3" /> {event.participants.length}/{event.maxParticipants}</div>
-                      </div>
-                      <h3 className="font-bold text-lg mb-2">{event.title}</h3>
-                      <p className="text-xs opacity-60 line-clamp-2 italic mb-4">"{event.description}"</p>
-                      <div className="flex items-center gap-3 text-[10px] font-bold opacity-40">
-                        <Calendar className="w-3 h-3" /> {event.date} • {event.time}
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center mt-6">
-                      <VoteControls post={event} collection="events" dark={collabMode} />
-                      <button 
-                        onClick={() => {
-                          if (currentUser) {
-                            useNomadStore.getState().rsvpForEvent(event.id, currentUser.id);
-                            const isRsvp = event.participants.includes(currentUser.id);
-                            useNomadStore.getState().addToast(isRsvp ? "RSVP cancelled" : "RSVP confirmed!", "success");
-                          }
-                        }}
-                        className={cn("flex-1 ml-4 py-3 rounded-2xl font-black text-[10px] uppercase transition-all", 
-                          currentUser && event.participants.includes(currentUser.id) ? "bg-slate-200 text-slate-600" : "bg-accent text-white"
-                        )}
-                      >
-                        {currentUser && event.participants.includes(currentUser.id) ? 'RSVPed ✓' : 'RSVP'}
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Local Marketplace Section */}
-          {localMarketItems.length > 0 && (
-            <section className="space-y-6">
-              <div className="flex justify-between items-center">
-                 <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>{collabMode ? 'Local Professional Services' : 'Local Gear Exchange'}</h2>
-              </div>
-              <div className="flex gap-6 overflow-x-auto pb-4 no-scrollbar">
-                {localMarketItems.map(item => (
-                  <div key={item.id} className={cn("flex-shrink-0 w-64 rounded-[2.5rem] overflow-hidden border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
-                    <div className="h-36 relative">
-                       <img src={item.imageUrl || null} className="w-full h-full object-cover" alt="" />
-                       <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-xl font-black text-[10px] uppercase text-secondary">€{item.price}</div>
-                    </div>
-                    <div className="p-5 space-y-3">
-                       <h3 className="font-bold text-sm truncate">{item.title}</h3>
-                       <p className="text-[10px] opacity-60 line-clamp-2 italic">"{item.description}"</p>
-                       <div className="flex items-center gap-2 mt-2">
-                         <VoteControls post={item} collection="marketplace" dark={collabMode} />
-                         <button 
-                           onClick={() => {
-                             const seller = profiles.find(p => p.id === item.sellerId);
-                             if (seller) onSayHello(seller, `Hi ${seller.familyName}, I'm interested in your item: ${item.title}`);
-                           }}
-                           className={cn("flex-1 py-3 rounded-xl text-[9px] font-black uppercase", collabMode ? "bg-white text-[#006d77]" : "bg-secondary text-white")}
-                         >
-                           Contact Seller
-                         </button>
-                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Calendar Overlay */}
-          {isCalendarOpen && (
-            <div className="fixed inset-0 z-[100] flex items-end justify-center">
-               <div className="absolute inset-0 bg-secondary/80 backdrop-blur-md" onClick={() => setIsCalendarOpen(false)} />
-               <div className={cn(
-                 "relative w-full max-w-4xl max-h-[90vh] rounded-t-[4rem] shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-500",
-                 collabMode ? "bg-[#0b5351] text-white" : "bg-white"
-               )}>
-                  <div className="p-8 border-b border-white/10 flex items-center justify-between">
-                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-[1.5rem] bg-primary/10 text-primary flex items-center justify-center">
-                           <Calendar className="w-6 h-6" />
-                        </div>
-                        <div>
-                           <h2 className="text-2xl font-black tracking-tight">Tribe Activities</h2>
-                           <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Schedule of events, requests and items</p>
-                        </div>
-                     </div>
-                     <button onClick={() => setIsCalendarOpen(false)} className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-white/40 hover:bg-white/20 transition-all">
-                        <X className="w-6 h-6" />
-                     </button>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-12 space-y-12 no-scrollbar">
-                     {['Upcoming', 'Next Week'].map(section => (
-                       <div key={section} className="space-y-6">
-                          <h3 className="text-xs font-black uppercase tracking-[0.2em] opacity-30">{section}</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                             {nextUpItems.map(item => (
-                               <div key={`${section}-${item.id}`} className={cn(
-                                 "group p-8 rounded-[3rem] border transition-all cursor-pointer",
-                                 collabMode ? "bg-white/5 border-white/10 hover:bg-white/10" : "bg-slate-50 border-slate-100"
-                               )}>
-                                  <div className="flex items-center justify-between mb-4">
-                                     <span className={cn(
-                                        "text-[9px] font-black uppercase px-3 py-1 rounded-xl",
-                                        (item as any).type === 'event' ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"
-                                      )}>
-                                        {(item as any).type}
-                                      </span>
-                                      <span className="text-[10px] font-black uppercase tracking-widest opacity-30">{format(item.dateObj, 'EEEE, MMM d')}</span>
-                                  </div>
-                                  <h4 className="text-lg font-black group-hover:text-primary transition-colors">{item.title}</h4>
-                                  <p className="text-xs opacity-60 mt-2 line-clamp-2">{item.description}</p>
-                                  <div className="mt-8 flex items-center justify-between border-t border-white/5 pt-6">
-                                     <div className="flex -space-x-2">
-                                        {[1, 2, 3].map(i => (
-                                          <div key={i} className="w-8 h-8 rounded-full border-2 border-white overflow-hidden bg-slate-100">
-                                             <img src={`https://i.pravatar.cc/100?img=${i + 10}`} alt="" />
-                                          </div>
-                                        ))}
-                                     </div>
-                                     <button className="text-[10px] font-black uppercase tracking-widest text-primary px-4 py-2 rounded-xl bg-primary/5 hover:bg-primary/20 transition-all">Details</button>
-                                  </div>
-                               </div>
-                             ))}
-                          </div>
-                       </div>
-                     ))}
-                  </div>
-               </div>
+                    {currentUser && event.participants.includes(currentUser.id) ? 'Joined ✓' : 'Join Event'}
+                  </button>
+                </div>
+              ))}
             </div>
-          )}
+          </TribeBrowserOverlay>
 
-          {/* All Spots Overlay */}
-          {isAllSpotsOpen && (
-            <div className="fixed inset-0 z-[100] flex items-end justify-center">
-               <div className="absolute inset-0 bg-secondary/80 backdrop-blur-sm" onClick={() => setIsAllSpotsOpen(false)} />
-               <div className={cn(
-                 "relative w-full max-w-4xl max-h-[90vh] rounded-t-[4rem] shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-500",
-                 collabMode ? "bg-[#0b5351] text-white" : "bg-white"
-               )}>
-                  <div className="p-8 border-b border-white/10 flex items-center justify-between">
-                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-[1.5rem] bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                           <MapIcon className="w-6 h-6" />
-                        </div>
-                        <div>
-                           <h2 className="text-2xl font-black tracking-tight">Spots Nearby</h2>
-                           <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Community curated places for your tribe</p>
-                        </div>
-                     </div>
-                     <button onClick={() => setIsAllSpotsOpen(false)} className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-white/40 hover:bg-white/20 transition-all">
-                        <X className="w-6 h-6" />
-                     </button>
+          <TribeBrowserOverlay 
+            isOpen={activeOverlay === 'marketplace'} 
+            onClose={() => setActiveOverlay(null)}
+            category="Marketplace"
+            title="Local Gear & Services"
+            icon={<ShoppingBag className="w-5 h-5" />}
+            onAdd={() => setIsAddItemOpen(true)}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {localMarketItems.map(item => (
+                <div key={item.id} className={cn(
+                  "rounded-[2.5rem] overflow-hidden border flex flex-col group relative",
+                  collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
+                )}>
+                  <div className="absolute top-4 right-4 z-10">
+                    <CardActionsMenu 
+                      isOwn={currentUser?.id === item.sellerId}
+                      onReport={() => setReportingTarget({ id: item.id, type: 'MarketItem' })}
+                      onDelete={() => {
+                        if (window.confirm("Are you sure you want to remove this item?")) {
+                          useNomadStore.getState().removeMarketItem(item.id);
+                          addToast("Item removed", "success");
+                        }
+                      }}
+                      dark={true}
+                    />
                   </div>
-
-                  <div className="p-8 border-b border-white/5 flex items-center gap-3 overflow-x-auto no-scrollbar">
-                     {['All', 'Playgrounds', 'Restaurants', 'Education', 'Medical', 'Workspace'].map(cat => (
-                        <button key={cat} className={cn("px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all", cat === 'All' ? (collabMode ? "bg-white text-secondary" : "bg-emerald-500 text-white") : "hover:opacity-60")}>
-                           {cat}
-                        </button>
-                     ))}
+                  <div className="h-48 relative overflow-hidden bg-slate-100">
+                    {item.imageUrl && <img src={item.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" referrerPolicy="no-referrer" />}
+                    <div className="absolute top-4 left-4 bg-white shadow-lg px-4 py-2 rounded-2xl">
+                      <span className="text-sm font-black text-secondary">€{item.price}</span>
+                    </div>
                   </div>
-
-                  <div className="flex-1 overflow-y-auto p-8 no-scrollbar">
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {filteredSpots.map(spot => (
-                          <SpotCard 
-                            key={spot.id} 
-                            spot={spot} 
-                            collabMode={collabMode}
-                            currentUserId={currentUser?.id}
-                            onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
-                            className="w-full"
-                          />
-                        ))}
-                     </div>
+                  <div className="p-6 flex flex-col flex-1">
+                    <div className="flex justify-between items-start mb-2">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-primary">{item.category}</span>
+                       <span className="px-2 py-0.5 bg-slate-100 rounded-lg text-[9px] font-black uppercase text-slate-400">{item.mode}</span>
+                    </div>
+                    <h4 className="font-bold text-secondary mb-3">{item.title}</h4>
+                    <p className="text-[11px] text-slate-500 line-clamp-2 italic mb-6">"{item.description}"</p>
+                    <button 
+                      onClick={() => {
+                        const seller = profiles.find(p => p.id === item.sellerId);
+                        if (seller) onSayHello(seller, `Hi ${seller.familyName}, I'm interested in your marketplace item: ${item.title}`);
+                      }}
+                      className="mt-auto py-3 w-full bg-secondary text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-secondary/20"
+                    >
+                      Contact Seller
+                    </button>
                   </div>
-               </div>
+                </div>
+              ))}
             </div>
-          )}
+          </TribeBrowserOverlay>
+
+          <TribeBrowserOverlay 
+            isOpen={activeOverlay === 'matches'} 
+            onClose={() => setActiveOverlay(null)}
+            category="Matches"
+            title="Professional Matches"
+            icon={<Heart className="w-5 h-5" />}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {matches.map(match => (
+                <FamilyCard 
+                  key={match.id}
+                  family={match.family}
+                  connectionStatus={getConnection(match.family.id)?.status}
+                  onConnect={() => requestConnection(match.family.id)}
+                  onMessage={() => onSayHello(match.family)}
+                  onSelect={() => onSelectFamily(match.family)}
+                  specialBadge={`${match.score}% Match`}
+                />
+              ))}
+            </div>
+          </TribeBrowserOverlay>
+
+          <TribeBrowserOverlay 
+            isOpen={activeOverlay === 'deals'} 
+            onClose={() => setActiveOverlay(null)}
+            category="Deals"
+            title="Local Perks & Deals"
+            icon={<Tag className="w-5 h-5" />}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredDeals.map(deal => (
+                <div key={deal.id} className={cn(
+                  "rounded-[2.5rem] overflow-hidden border group",
+                  collabMode ? "bg-white/5 border-white/10 text-white" : "bg-white border-slate-100 card-shadow"
+                )}>
+                  <div className="h-44 relative overflow-hidden">
+                    <img src={deal.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" referrerPolicy="no-referrer" />
+                    <div className="absolute top-4 left-4 px-4 py-2 bg-accent text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl">
+                      {deal.discountLabel}
+                    </div>
+                  </div>
+                  <div className="p-8">
+                    <h4 className="text-xl font-black mb-3">{deal.name}</h4>
+                    <p className="text-sm text-slate-500 line-clamp-2 mb-6 italic">"{deal.description}"</p>
+                    <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{deal.advertiserName}</p>
+                      <button className="px-6 py-3 bg-secondary text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-secondary/10">Redeem Perk</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </TribeBrowserOverlay>
         </>
       )}
-
-      <Modal isOpen={isLocalFeedOpen} onClose={() => setIsLocalFeedOpen(false)} title="Neighborhood Activities & Gear" fullScreen dark={collabMode}>
-        <div className="max-w-6xl mx-auto space-y-12">
-          {/* Header & Filter */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div>
-              <p className={cn("text-sm font-bold opacity-60", collabMode ? "text-white" : "text-secondary")}>Discover what's happening in</p>
-              <h2 className="text-4xl font-black italic">{activeNode.label}</h2>
-            </div>
-            <div className="flex items-center gap-4 w-full md:w-auto">
-              <Search className="w-5 h-5 opacity-40" />
-              <input 
-                type="text" 
-                placeholder="Search interests, items, or events..."
-                className={cn(
-                  "flex-1 md:w-80 p-4 rounded-2xl border-2 transition-all outline-none font-bold",
-                  collabMode ? "bg-white/5 border-white/10 text-white focus:border-white/30" : "bg-slate-50 border-slate-100 focus:border-primary/20"
-                )}
-                value={tribeSearchQuery}
-                onChange={(e) => setTribeSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
-            {/* Deals & Vetted Spots Column */}
-            <div className="space-y-8">
-              <div className="space-y-6">
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-primary" />
-                    <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Vetted Spots</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Search className="w-3.5 h-3.5 opacity-40" />
-                    <input 
-                      type="text"
-                      placeholder="Search spots..."
-                      value={spotSearchQuery}
-                      onChange={(e) => setSpotSearchQuery(e.target.value)}
-                      className="bg-transparent border-none text-[10px] font-bold focus:ring-0 p-0 w-24 placeholder:opacity-30"
-                    />
-                  </div>
-                </div>
-
-                {/* Spot Filter Pills */}
-                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                  {['All', 'Cafe', 'Playground', 'Workspace', 'Restaurant'].map(cat => (
-                    <button
-                      key={cat}
-                      onClick={() => setSpotCategoryFilter(cat)}
-                      className={cn(
-                        "px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all flex-shrink-0",
-                        spotCategoryFilter === cat 
-                          ? "bg-primary text-white" 
-                          : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                      )}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="space-y-4">
-                  {searchedSpots.length === 0 && (
-                    <div className="py-8 text-center bg-slate-50/50 rounded-3xl border border-dashed border-slate-200">
-                      <p className="text-[10px] font-bold text-slate-400">No spots found matching your search.</p>
-                      <button 
-                        onClick={() => { setSpotSearchQuery(''); setSpotCategoryFilter('All'); }}
-                        className="text-[9px] font-black text-primary uppercase mt-2"
-                      >
-                        Clear Filters
-                      </button>
-                    </div>
-                  )}
-                  {searchedSpots.slice(0, 8).map(spot => (
-                    <SpotCard 
-                      key={spot.id} 
-                      spot={spot} 
-                      collabMode={collabMode}
-                      currentUserId={currentUser?.id}
-                      onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Zap className="w-5 h-5 text-accent" />
-                  <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Local Deals</h3>
-                </div>
-                <div className="space-y-4">
-                  {filteredDeals.length === 0 && <p className="text-xs opacity-40 italic">No active deals nearby.</p>}
-                  {filteredDeals.slice(0, 5).map(deal => (
-                    <div key={deal.id} className={cn("p-4 rounded-2xl border transition-all border-accent/20 bg-accent/5", collabMode ? "text-accent-foreground" : "text-accent")}>
-                       <p className="text-[10px] font-black uppercase mb-1">{deal.discountLabel}</p>
-                       <p className="text-xs font-bold truncate">{deal.name}</p>
-                       <p className="text-[9px] opacity-60 line-clamp-1">{deal.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Events Column */}
-            <div className="space-y-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Calendar className="w-5 h-5 text-accent" />
-                <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Nearby Events</h3>
-              </div>
-              <div className="space-y-4">
-                {localEvents.filter(e => tribeSearchQuery ? e.title.toLowerCase().includes(tribeSearchQuery.toLowerCase()) || e.description?.toLowerCase().includes(tribeSearchQuery.toLowerCase()) : true).map(event => (
-                  <div key={event.id} className={cn("p-6 rounded-[2.5rem] border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
-                    <div className="flex justify-between mb-4">
-                      <span className="px-3 py-1 bg-accent/10 text-accent rounded-full text-[10px] font-black uppercase">{event.category}</span>
-                      <span className="text-[10px] font-bold opacity-40">{event.participants.length}/{event.maxParticipants}</span>
-                    </div>
-                    <h4 className="font-bold text-lg mb-2">{event.title}</h4>
-                    <p className="text-xs opacity-60 mb-4 italic line-clamp-2">"{event.description}"</p>
-                    <div className="flex items-center gap-2">
-                      <VoteControls post={event} collection="events" dark={collabMode} />
-                      <button 
-                        onClick={() => {
-                          if (currentUser) {
-                            useNomadStore.getState().rsvpForEvent(event.id, currentUser.id);
-                          }
-                        }}
-                        className={cn("flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all", 
-                          currentUser && event.participants.includes(currentUser.id) ? "bg-slate-100 text-slate-500" : "bg-accent text-white"
-                        )}
-                      >
-                        {currentUser && event.participants.includes(currentUser.id) ? 'Joined ✓' : 'RSVP Now'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Requests Column */}
-            <div className="space-y-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Plus className="w-5 h-5 text-primary" />
-                <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Requests</h3>
-              </div>
-              <div className="space-y-4">
-                {localRequests.filter(r => tribeSearchQuery ? r.title.toLowerCase().includes(tribeSearchQuery.toLowerCase()) || r.description.toLowerCase().includes(tribeSearchQuery.toLowerCase()) : true).map(req => {
-                  const requester = profiles.find(p => p.id === req.userId);
-                  return (
-                    <div key={req.id} className={cn("p-6 rounded-[2.5rem] border transition-all", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
-                      <div className="flex items-center gap-3 mb-4">
-                         <img src={requester?.photoUrl || null} className="w-8 h-8 rounded-full object-cover" alt="" />
-                         <span className="text-[10px] font-bold opacity-60">{requester?.familyName} Family</span>
-                         <span className="ml-auto px-2 py-1 bg-primary/10 text-primary rounded-lg text-[9px] font-black uppercase">{req.category}</span>
-                      </div>
-                      <h4 className="font-bold mb-2">{req.title}</h4>
-                      <p className="text-xs opacity-60 mb-4 line-clamp-3">"{req.description}"</p>
-                      <div className="flex items-center gap-2">
-                        <VoteControls post={req} collection="lookingFor" dark={collabMode} />
-                        <button 
-                          onClick={() => {
-                            if (requester) onSayHello(requester, `Hi! I saw your request for "${req.title}" and would love to help.`);
-                          }}
-                          className="flex-1 py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase"
-                        >
-                          Message
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Gear/Market Column */}
-            <div className="space-y-6">
-              <div className="flex items-center gap-2 mb-4">
-                <ShoppingBag className="w-5 h-5 text-secondary" />
-                <h3 className="font-black uppercase text-xs tracking-widest opacity-60">Gear Swap & Sell</h3>
-              </div>
-              <div className="space-y-4">
-                {localMarketItems.filter(item => tribeSearchQuery ? item.title.toLowerCase().includes(tribeSearchQuery.toLowerCase()) || item.description?.toLowerCase().includes(tribeSearchQuery.toLowerCase()) : true).map(item => (
-                  <div key={item.id} className={cn("rounded-[2.5rem] border transition-all overflow-hidden", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
-                    <div className="h-40 relative">
-                      <img src={item.imageUrl || null} className="w-full h-full object-cover" alt="" />
-                      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-[10px] font-black uppercase text-secondary">€{item.price}</div>
-                    </div>
-                    <div className="p-6">
-                      <h4 className="font-bold mb-1 truncate">{item.title}</h4>
-                      <p className="text-[10px] opacity-40 mb-4 uppercase font-bold">{item.category}</p>
-                      <div className="flex items-center gap-2">
-                        <VoteControls post={item} collection="marketplace" dark={collabMode} />
-                        <button 
-                          onClick={() => {
-                            const seller = profiles.find(p => p.id === item.sellerId);
-                            if (seller) onSayHello(seller, `Hi! I'm interested in your ${item.title} listed on the marketplace.`);
-                          }}
-                          className="flex-1 py-3 bg-secondary text-white rounded-xl text-[10px] font-black uppercase"
-                        >
-                          Contact
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </Modal>
-
+      
       {/* Reusable Modals */}
       <Modal isOpen={isMyPostsOpen} onClose={() => setIsMyPostsOpen(false)} title="My Posts" dark={collabMode} fullScreen>
         <div className="max-w-4xl mx-auto space-y-12 pb-20">
@@ -3573,7 +2980,7 @@ const TribeView = ({
   );
 };
 
-const CollabOpportunitySummary = ({ onUpgrade, stats }: { onUpgrade: () => void, stats: { proFamilies: number, collabAsks: number } }) => {
+const CollabOpportunitySummary = ({ onUpgrade, stats }: { onUpgrade: () => void, stats: { proFamilies: number } }) => {
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-white space-y-8">
       <div className="relative">
@@ -3592,14 +2999,10 @@ const CollabOpportunitySummary = ({ onUpgrade, stats }: { onUpgrade: () => void,
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
-        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-1">
+      <div className="flex gap-4 w-full max-w-sm justify-center">
+        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-1 w-full">
           <p className="text-2xl font-black text-secondary">{stats.proFamilies}</p>
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nomad Pros</p>
-        </div>
-        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-1">
-          <p className="text-2xl font-black text-secondary">{stats.collabAsks}</p>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Asks</p>
         </div>
       </div>
 
@@ -5122,35 +4525,35 @@ const NotificationCenter = ({ isOpen, onClose, onOpenConnect, onOpenVibeCheck }:
 
 const VibeCheckModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: () => void, onSave: (metrics: Record<string, number>) => void }) => {
   const [metrics, setMetrics] = useState({ 
-    kindvriendelijkheid: 5, 
-    veiligheid: 5, 
-    voorzieningen: 5, 
+    kidFriendliness: 5, 
+    safety: 5, 
+    amenities: 5, 
     community: 5, 
-    betaalbaarheid: 5, 
+    affordability: 5, 
     internet: 5, 
-    gezondheidszorg: 5 
+    healthcare: 5 
   });
 
   const labels: Record<string, string> = {
-    kindvriendelijkheid: 'Kindvriendelijkheid',
-    veiligheid: 'Veiligheid',
-    voorzieningen: 'Voorzieningen',
+    kidFriendliness: 'Kid-friendliness',
+    safety: 'Safety',
+    amenities: 'Amenities',
     community: 'Community',
-    betaalbaarheid: 'Betaalbaarheid',
+    affordability: 'Affordability',
     internet: 'Internet (MBPS)',
-    gezondheidszorg: 'Gezondheidszorg'
+    healthcare: 'Healthcare'
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Vibe Check! 🌍">
       <div className="space-y-8 pb-4">
-        <p className="text-sm text-slate-500 font-medium">Hoe is de ervaring voor families in deze stad? Jouw feedback helpt de Tribe groeien!</p>
+        <p className="text-sm text-slate-500 font-medium">How is the experience for families in this city? Your feedback helps the Tribe grow!</p>
         
         <div className="space-y-6">
           {Object.entries(metrics).map(([key, val]) => (
             <div key={key} className="space-y-3">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-black uppercase tracking-widest text-secondary">{labels[key]}</label>
+                <label className="text-xs font-black uppercase tracking-widest text-secondary">{labels[key] || key}</label>
                 <span className="text-sm font-black text-primary bg-primary/5 px-2 py-0.5 rounded-lg">{val}{key === 'internet' ? ' Mbps' : '/10'}</span>
               </div>
               <input 
@@ -5158,7 +4561,7 @@ const VibeCheckModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose:
                 min="1" 
                 max="10" 
                 value={val} 
-                onChange={(e) => setMetrics(prev => ({ ...prev, [key]: parseInt(e.target.value) }))}
+                onChange={(e) => onSave({ ...metrics, [key]: parseInt(e.target.value) })}
                 className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-primary"
               />
             </div>
@@ -5166,13 +4569,10 @@ const VibeCheckModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose:
         </div>
 
         <button 
-          onClick={() => {
-            onSave(metrics);
-            onClose();
-          }}
+          onClick={onClose}
           className="w-full py-4 bg-primary text-white rounded-3xl font-black text-sm shadow-xl shadow-primary/20 active:scale-95 transition-all"
         >
-          Opslaan & Tribe Delen
+          Finish Vibe Check
         </button>
       </div>
     </Modal>

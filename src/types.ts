@@ -191,7 +191,7 @@ export interface Report {
   id: string;
   reporterId: string;
   targetId: string;
-  targetType: 'User' | 'Message' | 'Spot' | 'MarketItem' | 'CollabAsk' | 'Thread' | 'ThreadReply';
+  targetType: 'User' | 'Message' | 'Spot' | 'MarketItem' | 'CollabAsk' | 'Thread' | 'ThreadReply' | 'LookingFor' | 'Event';
   category: 'Harassment' | 'Spam' | 'IllegalContent' | 'FakeProfile' | 'DangerousLocation';
   description?: string;
   status: 'Pending' | 'Reviewed' | 'Resolved' | 'Dismissed';

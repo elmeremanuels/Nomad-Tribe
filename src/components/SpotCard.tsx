@@ -2,12 +2,15 @@ import React from 'react';
 import { ThumbsUp, ThumbsDown, ShieldCheck, Star, MapPin } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Spot } from '../types';
+import { CardActionsMenu } from './CardActionsMenu';
 
 interface SpotCardProps {
   spot: Spot;
   collabMode?: boolean;
   currentUserId?: string;
   onVote: (direction: 'up' | 'down') => void;
+  onDelete?: (id: string) => void;
+  onReport?: (id: string, type: 'Spot') => void;
   onClick?: () => void;
   className?: string;
 }
@@ -17,9 +20,12 @@ export const SpotCard: React.FC<SpotCardProps> = ({
   collabMode = false,
   currentUserId,
   onVote,
+  onDelete,
+  onReport,
   onClick,
   className
 }) => {
+  const isOwn = currentUserId === spot.recommendedBy;
   const upvotes = spot.votes?.up || [];
   const downvotes = spot.votes?.down || [];
   const netScore = upvotes.length - downvotes.length;
@@ -46,6 +52,14 @@ export const SpotCard: React.FC<SpotCardProps> = ({
     >
       {/* Image */}
       <div className="h-44 relative overflow-hidden bg-slate-100">
+        <div className="absolute top-3 right-3 z-20 flex gap-2">
+          <CardActionsMenu 
+            isOwn={isOwn}
+            onReport={() => onReport?.(spot.id, 'Spot')}
+            onDelete={() => onDelete?.(spot.id)}
+            dark={false}
+          />
+        </div>
         {spot.imageUrl ? (
           <>
             <img

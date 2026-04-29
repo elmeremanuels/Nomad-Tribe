@@ -1356,6 +1356,10 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
       const spotsInCity = get().spots.filter(s => {
         if (!s.place || !cleanSpot.place) return false;
+        // Defensive check for lat/lng existence on both spots
+        if (s.place.lat === undefined || s.place.lng === undefined || 
+            cleanSpot.place.lat === undefined || cleanSpot.place.lng === undefined) return false;
+            
         return calculateDistance(s.place.lat, s.place.lng, cleanSpot.place.lat, cleanSpot.place.lng) < 20;
       });
 

@@ -89,7 +89,7 @@ service cloud.firestore {
     // COLLAB ASKS
     match /collabAsks/{askId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn() && resource.data.id != null;
+      allow list: if isSignedIn();
       allow create: if isVerified() && isValidId(askId) && isValidCollabAsk(incoming());
       allow update: if isVerified() && (existing().userId == request.auth.uid || isAdmin()) && isValidCollabAsk(incoming());
       allow delete: if isVerified() && (existing().userId == request.auth.uid || isAdmin());
@@ -98,7 +98,7 @@ service cloud.firestore {
     // COLLAB ENDORSEMENTS
     match /collabEndorsements/{endorsementId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn() && resource.data.id != null;
+      allow list: if isSignedIn();
       allow create: if isVerified() && isValidId(endorsementId) && isValidCollabEndorsement(incoming());
       allow delete: if isVerified() && (existing().authorId == request.auth.uid || isAdmin());
     }

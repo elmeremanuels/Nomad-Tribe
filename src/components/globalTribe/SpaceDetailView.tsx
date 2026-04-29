@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNomadStore } from '../../store';
-import { ArrowLeft, MessageSquare, Globe, Eye, Bell, BellOff, ArrowBigUp, ArrowBigDown, CheckCircle2, ThumbsUp, MoreVertical, MessageCircle, X, Shield, Users } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Globe, Eye, Bell, BellOff, ArrowBigUp, ArrowBigDown, CheckCircle2, ThumbsUp, MessageCircle, X, Users } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '../../lib/utils';
 import { Thread, Topic } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { Avatar } from '../Avatar';
+import { CardActionsMenu } from '../CardActionsMenu';
 
 interface SpaceDetailViewProps {
   threadId: string;
   onBack: () => void;
-  onReport?: (id: string, type: 'Thread' | 'ThreadReply' | 'User') => void;
+  onReport?: (id: string, type: 'Thread' | 'ThreadReply' | 'User' | 'LookingFor' | 'Event' | 'Spot' | 'MarketItem' | 'CollabAsk') => void;
 }
 
 export const SpaceDetailView: React.FC<SpaceDetailViewProps> = ({ threadId, onBack, onReport }) => {
@@ -22,7 +24,9 @@ export const SpaceDetailView: React.FC<SpaceDetailViewProps> = ({ threadId, onBa
     addReply, 
     vote, 
     toggleFollowThread, 
-    threadFollows 
+    threadFollows,
+    deleteThread,
+    deleteReply
   } = useNomadStore();
 
   const [replyText, setReplyText] = useState('');
@@ -104,25 +108,11 @@ export const SpaceDetailView: React.FC<SpaceDetailViewProps> = ({ threadId, onBa
             {isFollowing ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
           </button>
           
-          <div className="relative group/report">
-            <button className="p-2 bg-white text-slate-300 border border-slate-100 rounded-xl hover:text-red-500 hover:border-red-100 transition-all">
-              <MoreVertical className="w-5 h-5" />
-            </button>
-            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 opacity-0 group-hover/report:opacity-100 pointer-events-none group-hover/report:pointer-events-auto transition-all z-50">
-               <button 
-                onClick={() => onReport?.(thread.id, 'Thread')}
-                className="w-full text-left px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 flex items-center gap-2"
-               >
-                 <Shield className="w-4 h-4 text-red-500" /> Report Space
-               </button>
-               <button 
-                onClick={() => onReport?.(thread.authorId, 'User')}
-                className="w-full text-left px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 flex items-center gap-2"
-               >
-                 <Users className="w-4 h-4 text-slate-400" /> Report Author
-               </button>
-            </div>
-          </div>
+          <CardActionsMenu
+            isOwn={currentUser?.id === thread.authorId}
+            onReport={() => onReport?.(thread.id, 'Thread')}
+            onDelete={() => { deleteThread(thread.id); onBack(); }}
+          />
         </div>
       </div>
 
@@ -141,7 +131,7 @@ export const SpaceDetailView: React.FC<SpaceDetailViewProps> = ({ threadId, onBa
         </h1>
 
         <div className="flex items-center gap-3 mb-8">
-          <img src={thread.authorPhotoUrl || '/avatar-placeholder.png'} className="w-10 h-10 rounded-xl object-cover shadow-sm" alt="" />
+          <Avatar src={thread.authorPhotoUrl} name={thread.authorFamilyName} size="md" />
           <div>
             <p className="text-xs font-black text-secondary uppercase tracking-widest">{thread.authorFamilyName}</p>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -226,7 +216,7 @@ export const SpaceDetailView: React.FC<SpaceDetailViewProps> = ({ threadId, onBa
              >
                <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-3">
-                     <img src={reply.authorPhotoUrl || '/avatar-placeholder.png'} className="w-8 h-8 rounded-xl object-cover shadow-sm" alt="" />
+                     <Avatar src={reply.authorPhotoUrl} name={reply.authorFamilyName} size="sm" />
                      <div>
                         <p className="text-[10px] font-black text-secondary uppercase tracking-widest">{reply.authorFamilyName}</p>
                         <p className="text-[10px] font-bold text-slate-400">{format(parseISO(reply.createdAt), 'MMM d, HH:mm')}</p>
@@ -260,26 +250,11 @@ export const SpaceDetailView: React.FC<SpaceDetailViewProps> = ({ threadId, onBa
                        Mark as Helpful
                     </button>
                   )}
-                  
-                  <div className="relative group/repopt">
-                    <button className="p-1.5 text-slate-300 hover:text-slate-400">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                    <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-xl border border-slate-100 py-1 opacity-0 group-hover/repopt:opacity-100 pointer-events-none group-hover/repopt:pointer-events-auto transition-all z-10">
-                      <button 
-                        onClick={() => onReport?.(reply.id, 'ThreadReply')}
-                        className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
-                      >
-                        Report Reply
-                      </button>
-                      <button 
-                        onClick={() => onReport?.(reply.authorId, 'User')}
-                        className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
-                      >
-                        Report User
-                      </button>
-                    </div>
-                  </div>
+                  <CardActionsMenu
+                    isOwn={currentUser?.id === reply.authorId}
+                    onReport={() => onReport?.(reply.id, 'ThreadReply')}
+                    onDelete={() => deleteReply(reply.id)}
+                  />
                </div>
             </motion.div>
           ))}
