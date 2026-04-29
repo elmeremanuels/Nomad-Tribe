@@ -11,6 +11,7 @@ export default function AdminCommunityTab() {
   const [isEditing, setIsEditing] = useState(false);
   const [topicForm, setTopicForm] = useState({ id: '', name: '', description: '', icon: 'Hand', isLocked: false, isActive: true, type: 'discussion', color: '#006d77' });
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState<{ type: 'topic' | 'thread' | 'hashtag', id: string } | null>(null);
 
   const handleOpenEdit = (topic: any) => {
     setTopicForm(topic);
@@ -34,9 +35,8 @@ export default function AdminCommunityTab() {
   };
 
   const handleDeleteTopic = async (id: string) => {
-    if (confirm("Are you sure? This will remove the board logic (threads will remain but be uncategorized).")) {
-      await deleteTopic(id);
-    }
+    await deleteTopic(id);
+    setConfirmingDelete(null);
   };
 
   return (
@@ -95,12 +95,21 @@ export default function AdminCommunityTab() {
                      >
                         <Edit2 className="w-4 h-4" />
                      </button>
-                     <button 
-                       onClick={(e) => { e.stopPropagation(); handleDeleteTopic(topic.id); }}
-                       className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                     >
-                        <Trash2 className="w-4 h-4" />
-                     </button>
+                     {confirmingDelete?.type === 'topic' && confirmingDelete.id === topic.id ? (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteTopic(topic.id); }}
+                          className="px-3 py-1 bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-all"
+                        >
+                           Deleten
+                        </button>
+                     ) : (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setConfirmingDelete({ type: 'topic', id: topic.id }); }}
+                          className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                        >
+                           <Trash2 className="w-4 h-4" />
+                        </button>
+                     )}
                   </div>
                </div>
             </div>
@@ -133,16 +142,24 @@ export default function AdminCommunityTab() {
                 <span className="text-xs font-black text-secondary">#{tag.id}</span>
                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{tag.spaceCount} spaces</p>
               </div>
-              <button 
-                onClick={() => {
-                  if (confirm(`Are you sure you want to delete #${tag.id}?`)) {
+              {confirmingDelete?.type === 'hashtag' && confirmingDelete.id === tag.id ? (
+                <button 
+                  onClick={() => {
                     deleteHashtag(tag.id);
-                  }
-                }}
-                className="p-1.5 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+                    setConfirmingDelete(null);
+                  }}
+                  className="px-2 py-1 bg-red-500 text-white rounded-lg text-[8px] font-black uppercase tracking-widest"
+                >
+                  Confirm
+                </button>
+              ) : (
+                <button 
+                  onClick={() => setConfirmingDelete({ type: 'hashtag', id: tag.id })}
+                  className="p-1.5 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -215,17 +232,25 @@ export default function AdminCommunityTab() {
                         >
                           <Lock className="w-4 h-4" />
                         </button>
-                        <button 
-                          onClick={() => {
-                            if (confirm("Permanently delete this space? This cannot be undone.")) {
+                        {confirmingDelete?.type === 'thread' && confirmingDelete.id === thread.id ? (
+                          <button 
+                            onClick={() => {
                               deleteThread(thread.id);
-                            }
-                          }}
-                          className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                          title="Delete Permanently"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                              setConfirmingDelete(null);
+                            }}
+                            className="px-3 py-1 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest"
+                          >
+                            Delete
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => setConfirmingDelete({ type: 'thread', id: thread.id })}
+                            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                            title="Delete Permanently"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

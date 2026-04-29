@@ -488,7 +488,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           set({ blocks: snapshot.docs.map(d => d.data() as BlockedUser) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'blocks')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'destinations'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'destinations'), (snapshot) => {
           set({ destinations: snapshot.docs.map(d => d.data() as DestinationGuidance) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'destinations')));
 
@@ -500,50 +500,50 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           set({ pastPlaces: snapshot.docs.map(d => d.data() as PastPlace) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'pastPlaces')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'trips'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'trips'), (snapshot) => {
           set({ trips: snapshot.docs.map(d => d.data() as Trip) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'trips')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'cities'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'cities'), (snapshot) => {
           set({ cities: snapshot.docs.map(d => d.data() as CityProfile) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'cities')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'cityEvents'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'cityEvents'), (snapshot) => {
           set({ cityEvents: snapshot.docs.map(d => d.data() as CityEvent) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'cityEvents')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'events'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'events'), (snapshot) => {
           set({ events: snapshot.docs.map(d => d.data() as PopUpEvent) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'events')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'marketplace'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'marketplace'), (snapshot) => {
           set({ marketItems: snapshot.docs.map(d => d.data() as MarketItem) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'marketplace')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'lookingFor'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'lookingFor'), (snapshot) => {
           set({ lookingFor: snapshot.docs.map(d => d.data() as LookingForRequest) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'lookingFor')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'users'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'users'), (snapshot) => {
           const allProfiles = snapshot.docs.map(d => d.data() as FamilyProfile);
           console.log(`[Admin] Loaded ${allProfiles.length} user profiles`);
           set({ profiles: allProfiles });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'users')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'spots'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'spots'), (snapshot) => {
           set({ spots: snapshot.docs.map(d => d.data() as Spot) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'spots')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'collabAsks'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'collabAsks'), (snapshot) => {
           set({ collabAsks: snapshot.docs.map(d => d.data() as CollabAsk) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabAsks')));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'collabEndorsements'), where('id', '>=', '')), (snapshot) => {
+        unsubscribes.push(onSnapshot(collection(db, 'collabEndorsements'), (snapshot) => {
           set({ collabEndorsements: snapshot.docs.map(d => d.data() as CollabEndorsement) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabEndorsements')));
 
         unsubscribes.push(onSnapshot(
-          query(collection(db, 'deals'), where('status', '==', 'Active'), where('id', '>=', '')),
+          query(collection(db, 'deals'), where('status', '==', 'Active')),
           (snapshot) => { set({ deals: snapshot.docs.map(d => d.data() as Deal) }); },
           (err) => handleFirestoreError(err, OperationType.LIST, 'deals')
         ));
@@ -868,6 +868,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         downvotes: []
       };
       await setDoc(doc(db, 'marketplace', item.id), itemWithVotes);
+      get().addToast("Item posted successfully!", "success");
       
       // Add activity
       const newActivity: Activity = {
@@ -915,6 +916,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         downvotes: []
       };
       await setDoc(doc(db, 'lookingFor', request.id), reqWithVotes);
+      get().addToast("Request posted successfully!", "success");
       
       // Add activity
       const newActivity: Activity = {
@@ -1067,6 +1069,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   removeLookingFor: async (requestId) => {
     try {
       await deleteDoc(doc(db, 'lookingFor', requestId));
+      get().addToast("Request removed.", "info");
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `lookingFor/${requestId}`);
     }
@@ -1104,6 +1107,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   removeEvent: async (eventId) => {
     try {
       await deleteDoc(doc(db, 'events', eventId));
+      get().addToast("Event cancelled and removed.", "info");
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `events/${eventId}`);
     }
@@ -1154,6 +1158,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         downvotes: []
       };
       await setDoc(doc(db, 'events', event.id), eventWithVotes);
+      get().addToast("Event organized successfully!", "success");
       
       const newActivity: Activity = {
         id: `a-${Date.now()}`,
@@ -1355,6 +1360,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       });
 
       await setDoc(doc(db, 'spots', cleanSpot.id), cleanSpot);
+      get().addToast("Spot recommended successfully!", "success");
       
       const newTotalSpots = (user.gamification?.totalSpotsAdded || 0) + 1;
       const updates: any = {
