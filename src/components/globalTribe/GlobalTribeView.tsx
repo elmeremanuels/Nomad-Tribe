@@ -112,7 +112,7 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 space-y-4 max-w-7xl mx-auto pb-32">
+    <div className="min-h-screen bg-slate-50/50 space-y-4 max-w-7xl mx-auto pb-24">
       {/* Header Hub */}
       <header className="px-4 py-4 md:p-6 bg-white border-b border-slate-100 shadow-sm sticky top-0 z-40 backdrop-blur-md bg-white/90">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 max-w-7xl mx-auto">
@@ -142,7 +142,7 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
                   className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all"
                 />
              </div>
-             {activeTab !== 'home' && (
+             {activeTab !== 'home' && activeTab !== 'following' && activeTab !== 'all' && (
                 <button 
                   onClick={() => setIsNewSpaceModalOpen(true)}
                   className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:-translate-y-0.5 transition-all"
@@ -176,6 +176,7 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
                 onClick={() => setActiveTab(topic.id)}
                 label={topic.id === 'introductions' ? '👋 Intros' : topic.name} 
                 topicId={topic.id}
+                topicIcon={topic.icon}
                 isLocked={topic.isLocked}
               />
             ))}
@@ -208,7 +209,7 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
 
       <main className="px-4 max-w-7xl mx-auto space-y-6">
         {activeTab === 'home' ? (
-          <div className="space-y-12 py-8">
+          <div className="space-y-6 py-4">
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <CategoryTile 
                   title="Following"
@@ -225,7 +226,7 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
                   onClick={() => setActiveTab('all')}
                 />
                 {topics.map((topic: any) => {
-                  const Icon = getTopicIcon(topic.id);
+                  const Icon = getTopicIcon(topic.icon || topic.id);
                   return (
                     <CategoryTile 
                       key={topic.id}
@@ -357,8 +358,8 @@ const CategoryTile = ({ title, description, icon, color, isLocked, onClick }: an
   </button>
 );
 
-const TabButton = ({ active, onClick, label, topicId, icon, isLocked }: any) => {
-  const Icon = icon || (topicId ? getTopicIcon(topicId) : null);
+const TabButton = ({ active, onClick, label, topicId, icon, isLocked, topicIcon }: any) => {
+  const Icon = icon || (topicIcon ? getTopicIcon(topicIcon) : (topicId ? getTopicIcon(topicId) : null));
   
   return (
     <button

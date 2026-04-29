@@ -73,7 +73,7 @@ export default function AdminCommunityTab() {
                     style={{ backgroundColor: `${topic.color || '#006d77'}15`, borderColor: `${topic.color || '#006d77'}30`, color: topic.color || '#006d77' }}
                   >
                      {(() => {
-                       const Icon = getTopicIcon(topic.id);
+                       const Icon = getTopicIcon(topic.icon || topic.id);
                        return <Icon className="w-6 h-6" />;
                      })()}
                   </div>
@@ -245,8 +245,8 @@ export default function AdminCommunityTab() {
                     <h2 className="text-2xl font-black text-secondary">{isEditing ? 'Edit Topic' : 'New Topic Board'}</h2>
                     <p className="text-sm text-slate-500 font-medium">Configure category settings and appearance.</p>
                   </div>
-                  <button onClick={() => { setIsAddTopicOpen(false); setIsEditing(false); }} className="text-slate-400 hover:text-secondary">
-                    <Trash2 className="w-5 h-5" />
+                  <button onClick={() => { setIsAddTopicOpen(false); setIsEditing(false); }} className="text-slate-400 hover:text-secondary p-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
                   </button>
                </div>
 

@@ -36,9 +36,15 @@ service cloud.firestore {
 
     function isValidNotification(data) {
       return data.keys().hasAll(['id', 'userId', 'title', 'message', 'type', 'isRead', 'createdAt']) &&
-             data.userId == request.auth.uid &&
              data.title is string && data.title.size() <= 200 &&
-             data.message is string && data.message.size() <= 1000;
+             data.message is string && data.message.size() <= 1000 &&
+             (
+               data.userId == request.auth.uid ||
+               (data.type == 'ConnectionRequest' && 
+                data.data != null && 
+                data.data.requesterId == request.auth.uid) ||
+               isAdmin()
+             );
     }
 
     function isValidCollabAsk(data) {
@@ -73,11 +79,11 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (isSuper() || resource.data.userId == request.auth.uid);
-      allow create: if isVerified() && (isValidNotification(incoming()) || isAdmin());
-      allow update: if isVerified() && (resource.data.userId == request.auth.uid || isAdmin()) && (
+      allow create: if isSignedIn() && (isValidNotification(incoming()) || isAdmin());
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()) && (
         incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
       );
-      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // COLLAB ASKS
@@ -154,9 +160,9 @@ service cloud.firestore {
     // CONNECTIONS
     match /connections/{connectionId} {
       allow get, list: if isSignedIn() && request.auth.uid in resource.data.participantIds;
-      allow create: if isVerified() && request.auth.uid in incoming().participantIds;
-      allow update: if isVerified() && request.auth.uid in existing().participantIds;
-      allow delete: if isVerified() && request.auth.uid in existing().participantIds;
+      allow create: if isSignedIn() && request.auth.uid in incoming().participantIds;
+      allow update: if isSignedIn() && request.auth.uid in existing().participantIds;
+      allow delete: if isSignedIn() && request.auth.uid in existing().participantIds;
     }
 
     // MESSAGES (Top-level in code)
@@ -224,16 +230,16 @@ service cloud.firestore {
     // TOPICS
     match /topics/{topicId} {
       allow read: if isSignedIn();
-      allow write: if isSuper();
+      allow write: if isAdmin();
     }
 
     // THREADS
     match /threads/{threadId} {
-      // Read: any signed-in user, except hidden/removed (unless author or super)
+      // Read: any signed-in user, except hidden/removed (unless author or admin)
       allow read: if isSignedIn() &&
         (resource.data.status in ['active', 'locked']
          || resource.data.authorId == request.auth.uid
-         || isSuper());
+         || isAdmin());
 
       // Create: signed-in, agreed to rules (check in store, enforce author match here)
       allow create: if isSignedIn() &&
@@ -241,8 +247,8 @@ service cloud.firestore {
         request.resource.data.status == 'active' &&
         request.resource.data.reportCount == 0;
 
-      // Update: author can edit own (within 15min), super can do anything
-      allow update: if isSuper()
+      // Update: author can edit own (within 15min), admin can do anything
+      allow update: if isAdmin()
         || (resource.data.authorId == request.auth.uid
             && request.resource.data.authorId == resource.data.authorId
             && request.time < resource.data.createdAt + duration.value(15, 'm'));
@@ -252,21 +258,21 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['votes', 'followers', 'reportCount', 'viewCount', 'lastActivityAt', 'replyCount', 'activeUserCount', 'countryCount', 'welcomes']);
 
-      allow delete: if isSuper() || resource.data.authorId == request.auth.uid;
+      allow delete: if isAdmin() || resource.data.authorId == request.auth.uid;
     }
 
     // REPLIES
     match /threadReplies/{replyId} {
       allow read: if isSignedIn() &&
-        (resource.data.status in ['active', 'locked'] || isSuper());
+        (resource.data.status in ['active', 'locked'] || isAdmin());
       allow create: if isSignedIn() &&
         request.resource.data.authorId == request.auth.uid;
-      allow update: if isSuper()
+      allow update: if isAdmin()
         || (resource.data.authorId == request.auth.uid
             && request.time < resource.data.createdAt + duration.value(15, 'm'))
         || request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['votes', 'reportCount', 'isHelpful']);
-      allow delete: if isSuper() || resource.data.authorId == request.auth.uid;
+      allow delete: if isAdmin() || resource.data.authorId == request.auth.uid;
     }
 
     // FOLLOWS

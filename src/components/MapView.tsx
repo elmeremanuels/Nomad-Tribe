@@ -7,7 +7,6 @@ import { FamilyProfile, Spot, MarketItem, PopUpEvent, LookingForRequest } from '
 interface MapViewProps {
   center: { lat: number; lng: number };
   zoom?: number;
-  profiles?: FamilyProfile[];
   spots?: Spot[];
   marketItems?: MarketItem[];
   events?: PopUpEvent[]
@@ -83,9 +82,8 @@ const SpotMarker: React.FC<{ category: string; isVetted?: boolean }> = ({ catego
 const MapLegend: React.FC = () => (
   <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-md rounded-2xl px-3 py-2 shadow-lg border border-slate-100 flex flex-col gap-1.5 z-10">
     {[
-      { color: 'bg-primary', label: 'You' },
       { color: 'bg-green-400', label: 'Playground' },
-      { color: 'bg-primary/70', label: 'Workspace' },
+      { color: 'bg-primary', label: 'Workspace' },
       { color: 'bg-amber-400', label: 'Event' },
       { color: 'bg-secondary', label: 'Request' },
     ].map(({ color, label }) => (
@@ -100,7 +98,6 @@ const MapLegend: React.FC = () => (
 export const MapView: React.FC<MapViewProps> = ({
   center,
   zoom = 13,
-  profiles = [],
   spots = [],
   marketItems = [],
   events = [],
@@ -114,13 +111,11 @@ export const MapView: React.FC<MapViewProps> = ({
   userPhotoUrl,
 }) => {
   const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
-  const [selectedProfile, setSelectedProfile] = useState<FamilyProfile | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<PopUpEvent | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<LookingForRequest | null>(null);
 
   const closeAll = useCallback(() => {
     setSelectedSpot(null);
-    setSelectedProfile(null);
     setSelectedEvent(null);
     setSelectedRequest(null);
   }, []);
@@ -193,46 +188,6 @@ export const MapView: React.FC<MapViewProps> = ({
             />
           </div>
         </AdvancedMarker>
-
-        {/* FAMILY MARKERS */}
-        {profiles
-          .filter(p => p.currentLocation && hasValidCoords(p.currentLocation.lat, p.currentLocation.lng))
-          .map(profile => (
-            <AdvancedMarker
-              key={profile.id}
-              position={{ lat: profile.currentLocation!.lat, lng: profile.currentLocation!.lng }}
-              title={profile.familyName}
-              onClick={() => { closeAll(); setSelectedProfile(profile); }}
-            >
-              <div className="w-10 h-10 rounded-full border-[3px] border-white shadow-lg overflow-hidden bg-slate-100 hover:scale-110 transition-transform cursor-pointer">
-                <img
-                  src={profile.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.familyName)}&background=E2725B&color=fff&size=40`}
-                  alt={profile.familyName}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            </AdvancedMarker>
-          ))}
-
-        {selectedProfile?.currentLocation && (
-          <InfoWindow
-            position={{ lat: selectedProfile.currentLocation.lat, lng: selectedProfile.currentLocation.lng }}
-            onCloseClick={closeAll}
-          >
-            <div className="p-2 text-center min-w-[120px]">
-              <p className="font-bold text-slate-800 text-sm">{selectedProfile.familyName}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">{selectedProfile.currentLocation.name}</p>
-              {onSelectFamily && (
-                <button
-                  onClick={() => { onSelectFamily(selectedProfile); closeAll(); }}
-                  className="mt-2 text-[10px] font-black text-primary uppercase tracking-wider"
-                >
-                  View Profile →
-                </button>
-              )}
-            </div>
-          </InfoWindow>
-        )}
 
         {/* SPOT MARKERS */}
         {spots

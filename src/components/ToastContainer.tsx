@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNomadStore } from '../store';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { cn } from '../lib/utils';
 

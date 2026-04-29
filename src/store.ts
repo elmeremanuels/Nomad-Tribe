@@ -415,6 +415,29 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               unsubscribes.push(onSnapshot(collection(db, 'advertisers'), (snapshot) => {
                 set({ advertisers: snapshot.docs.map(d => d.data() as Advertiser) });
               }, (err) => handleFirestoreError(err, OperationType.LIST, 'advertisers')));
+
+              // Admin sees ALL threads
+              unsubscribes.push(onSnapshot(
+                query(
+                  collection(db, 'threads'),
+                  orderBy('lastActivityAt', 'desc'),
+                  limit(300)
+                ),
+                (snap) => set({ threads: snap.docs.map(d => ({ ...d.data(), id: d.id })) })
+              ));
+            } else {
+              // Regular users see only ACTIVE threads
+              const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+              unsubscribes.push(onSnapshot(
+                query(
+                  collection(db, 'threads'),
+                  where('status', '==', 'active'),
+                  where('lastActivityAt', '>=', ninetyDaysAgo),
+                  orderBy('lastActivityAt', 'desc'),
+                  limit(200)
+                ),
+                (snap) => set({ threads: snap.docs.map(d => ({ ...d.data(), id: d.id })) })
+              ));
             }
           } else {
             // Create default profile if not exists
@@ -531,19 +554,6 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         unsubscribes.push(onSnapshot(
           query(collection(db, 'topics'), orderBy('order')),
           (snap) => set({ topics: snap.docs.map(d => ({ ...d.data(), id: d.id })) })
-        ));
-
-        // Threads: load only active threads from last 90 days for performance
-        const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-        unsubscribes.push(onSnapshot(
-          query(
-            collection(db, 'threads'),
-            where('status', '==', 'active'),
-            where('lastActivityAt', '>=', ninetyDaysAgo),
-            orderBy('lastActivityAt', 'desc'),
-            limit(200)
-          ),
-          (snap) => set({ threads: snap.docs.map(d => d.data()) })
         ));
 
         // User-specific: their topic + thread follows
@@ -1163,17 +1173,19 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     const user = get().currentUser;
     if (!user) return;
     
-    // Sanitize targetId to prevent invalid characters in document paths
-    // Firestore IDs cannot contain / and shouldn't contain //
-    // If targetId is accidentally a URL or contains special chars, we slugify it
-    const cleanTargetId = targetId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const cleanUserId = user.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (!targetId || targetId === user.id) {
+      get().addToast('Invalid connection request.', 'error');
+      return;
+    }
     
-    const connectionId = `conn-${[cleanUserId, cleanTargetId].sort().join('-')}`;
+    const connectionId = `conn-${[user.id, targetId].sort().join('-')}`;
     
     // Check if connection already exists
     const existing = get().connections.find(c => c.id === connectionId);
-    if (existing && existing.status !== 'none') return;
+    if (existing && existing.status !== 'none') {
+      get().addToast('Request already exists', 'info');
+      return;
+    }
 
     const connection: Connection = {
       id: connectionId,
@@ -1186,14 +1198,16 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
     try {
       await setDoc(doc(db, 'connections', connectionId), connection);
+      get().addToast('Connection request sent!', 'success');
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'connections');
-      return; // stop here if connection fails
+      get().addToast('Failed to send request', 'error');
+      return; 
     }
 
     // Notification separate from connection - failure here shouldn't break the flow
     try {
-      const notifId = `notif-${Date.now()}`;
+      const notifId = `notif-conn-${user.id}-${targetId}-${Date.now()}`;
       await setDoc(doc(db, 'notifications', notifId), {
         id: notifId,
         userId: targetId,
@@ -1207,7 +1221,6 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       });
     } catch (err) {
       console.warn('Notification write failed (non-critical):', err);
-      // Connection is already created - recipient will see it via onSnapshot
     }
   },
 
@@ -1221,10 +1234,11 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       const connData = connDoc.data() as Connection;
 
       await updateDoc(doc(db, 'connections', connectionId), { status: 'accepted' });
+      get().addToast('Connection accepted!', 'success');
       
       // Notify requester that connection was accepted - non-blocking
       try {
-        const notifId = `notif-${Date.now()}`;
+        const notifId = `notif-acc-${user.id}-${connData.requesterId}-${Date.now()}`;
         await setDoc(doc(db, 'notifications', notifId), {
           id: notifId,
           userId: connData.requesterId,
@@ -1336,6 +1350,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       };
 
       const spotsInCity = get().spots.filter(s => {
+        if (!s.place || !cleanSpot.place) return false;
         return calculateDistance(s.place.lat, s.place.lng, cleanSpot.place.lat, cleanSpot.place.lng) < 20;
       });
 

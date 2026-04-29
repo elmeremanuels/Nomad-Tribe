@@ -120,7 +120,15 @@ export const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
     setIsDetecting(true);
     navigator.geolocation.getCurrentPosition(async ({ coords }) => {
       const { latitude: lat, longitude: lng } = coords;
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`;
+      const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+      
+      if (!key) {
+        addToast("Google Maps API Key is missing. Cannot detect location.", "error");
+        setIsDetecting(false);
+        return;
+      }
+
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`;
       try {
         const res = await fetch(url);
         const data = await res.json();

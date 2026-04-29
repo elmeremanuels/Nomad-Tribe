@@ -33,8 +33,13 @@ export const TOPIC_ICONS: Record<string, LucideIcon> = {
   'lifestyle-mental-health': Brain,
 };
 
-export function getTopicIcon(topicId: string): LucideIcon {
-  return TOPIC_ICONS[topicId] || MessageSquare;
+export function getTopicIcon(iconNameOrTopicId: string): LucideIcon {
+  // Try direct icon name match first (from icon selector)
+  if ((ALL_ICONS as any)[iconNameOrTopicId]) {
+    return (ALL_ICONS as any)[iconNameOrTopicId];
+  }
+  // Fallback to topicId mapping
+  return TOPIC_ICONS[iconNameOrTopicId] || MessageSquare;
 }
 
 export const ALL_ICONS = {
