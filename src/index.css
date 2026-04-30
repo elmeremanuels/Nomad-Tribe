@@ -26,6 +26,11 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
 }
 
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
 gmpx-place-picker {
   --gmpx-color-surface: #f8fafc;
   --gmpx-color-on-surface: #0f172a;

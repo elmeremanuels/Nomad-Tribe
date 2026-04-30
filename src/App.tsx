@@ -14,20 +14,39 @@ import { APIProvider } from '@vis.gl/react-google-maps';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import { DateRangePicker } from './components/DateRangePicker';
-import { TimelineStrip } from './components/TimelineStrip';
 import { standardizeInterest } from './lib/interestUtils';
 import { fetchFirstPlacePhoto } from './lib/googlePlaces';
-import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon, Locate, Sparkles, Plane } from 'lucide-react';
+import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon, Locate, Sparkles, Plane, Flame } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'motion/react';
 import { useNomadStore } from './store';
 import { containsBlockedContent, cleanContent } from './lib/contentFilter';
-import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance, Deal, PlaceResult, BlockedUser, hasValidCoords } from './types';
+import { OpportunitiesBoard } from './components/opportunities/OpportunitiesBoard';
+import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance, Deal, PlaceResult, BlockedUser, AppNotification, hasValidCoords } from './types';
 import { format, parseISO } from 'date-fns';
+import { auth, googleProvider, facebookProvider, appleProvider } from './firebase';
+import { signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth';
 import { cn } from './lib/utils';
 import occupations from './data/occupationsSeed.json';
 import skillsSeed from './data/skillsSeed.json';
 
 import { buildTimeline, LocationNode } from './lib/timeline';
+import { getEmergencyContact } from './data/emergencyContacts';
+import { PreviewTile } from './components/PreviewTile';
+import { Avatar } from './components/Avatar';
+import { useCollabAccess } from './hooks/usePremium';
+import { isVisibleInMode } from './lib/contextFilter';
+import { useModeLabels } from './hooks/useModeLabels';
+import { calculateFamilyMatch } from './lib/familyMatching';
+import { calculateCollabMatch } from './lib/collabMatching';
+
+import { CategoryTile } from './components/CategoryTile';
+import { CardActionsMenu } from './components/CardActionsMenu';
+import { TribeBrowserOverlay } from './components/TribeBrowserOverlay';
+import AdminSeedTab from './components/admin/AdminSeedTab';
+import AdminDealsTab from './components/admin/AdminDealsTab';
+import AdminCommunityTab from './components/admin/AdminCommunityTab';
+import { GlobalTribeView } from './components/globalTribe/GlobalTribeView';
+import { TribeRulesGate } from './components/globalTribe/TribeRulesGate';
 
 const isBlocked = (targetId: string, currentUser: FamilyProfile | null, blocks: BlockedUser[]) => {
   if (!currentUser) return false;
@@ -72,12 +91,12 @@ const FamilyCard = ({
         </div>
         <div className="min-w-0">
           <h4 className="font-black text-secondary truncate">{family.familyName}</h4>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{family.nativeLanguage} Family</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{(family.nativeLanguage || 'Unknown')} Family</p>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-1.5 mb-5 h-6 overflow-hidden">
-        {family.kids.map(kid => (
+        {(family.kids || []).map(kid => (
           <span key={kid.id} className="px-2 py-1 bg-slate-50 text-[9px] font-black uppercase text-slate-400 rounded-lg">
             {kid.age} {kid.gender === 'Boy' ? '👦' : kid.gender === 'Girl' ? '👧' : '👶'}
           </span>
@@ -392,13 +411,7 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
   );
 };
 
-import AdminSeedTab from './components/admin/AdminSeedTab';
-import AdminDealsTab from './components/admin/AdminDealsTab';
-import AdminCommunityTab from './components/admin/AdminCommunityTab';
-
-import { GlobalTribeView } from './components/globalTribe/GlobalTribeView';
-import { TribeRulesGate } from './components/globalTribe/TribeRulesGate';
-
+// --- AdminDashboard handles ---
 const AdminDashboard = () => {
   const { appSettings, updateAppSettings, profiles, deleteUser, updateUserRole, marketItems, removeMarketItem, spots, removeSpot, reports, moderateReport, moderateUser } = useNomadStore() as any;
   const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'content' | 'reports' | 'deals' | 'community' | 'seed'>('settings');
@@ -1408,7 +1421,7 @@ const MarketplaceView = ({
           <ImageUpload label="Item Photo" onUpload={(url) => setNewItem(prev => ({...prev, imageUrl: url}))} />
           {newItem.imageUrl && (
             <div className="w-full h-32 rounded-2xl overflow-hidden">
-              <img src={newItem.imageUrl || null} alt="Preview" className="w-full h-full object-cover" />
+              <img src={newItem.imageUrl || undefined} alt="Preview" className="w-full h-full object-cover" />
             </div>
           )}
           <div className="space-y-1">
@@ -1633,16 +1646,12 @@ const DealCard = ({ deal }: { deal: Deal }) => {
   );
 };
 
-import { Avatar } from './components/Avatar';
-import { CardActionsMenu } from './components/CardActionsMenu';
-import { CategoryTile } from './components/CategoryTile';
-import { TribeBrowserOverlay } from './components/TribeBrowserOverlay';
-
 const TribeView = ({ 
   onViewAllMarketplace, onSayHello, onSelectFamily, onPaywall, 
   setIsAddPastPlaceOpen, setActiveTab, onSetLocation, onAddTrip, onEditTrip,
   isLookingForOpen, setIsLookingForOpen, isAddItemOpen, setIsAddItemOpen,
-  isAddEventOpen, setIsAddEventOpen, isRecommendSpotOpen, setIsRecommendSpotOpen
+  isAddEventOpen, setIsAddEventOpen, isRecommendSpotOpen, setIsRecommendSpotOpen,
+  setReportingTarget
 }: { 
   onViewAllMarketplace: () => void, 
   onSayHello: (family: FamilyProfile, message?: string) => void, 
@@ -1660,17 +1669,21 @@ const TribeView = ({
   isAddEventOpen: boolean,
   setIsAddEventOpen: (open: boolean) => void,
   isRecommendSpotOpen: boolean,
-  setIsRecommendSpotOpen: (open: boolean) => void
+  setIsRecommendSpotOpen: (open: boolean) => void,
+  setReportingTarget: (target: { id: string, type: Report['targetType'] } | null) => void
 }) => {
   const { 
-    currentUser, trips, cities: hubCities, profiles, lookingFor, addLookingFor, 
+    currentUser, trips, profiles, lookingFor, addLookingFor, 
     removeLookingFor, marketItems, removeMarketItem, reserveItem, connections, 
     requestConnection, acceptConnection, cancelConnection, collabMode, setCollabMode, 
     collabAsks, addCollabAsk, removeCollabAsk, blocks, saveVibeCheck, spots, events, 
     addEvent, removeEvent, tribeRadius, setTribeRadius, deals,
     pastPlaces, realTimeLocation, removePastPlace, removeTrip, addToast
   } = useNomadStore();
+
+  const labels = useModeLabels();
   const isPremium = currentUser?.isPremium || false;
+
   const [isCollabAskOpen, setIsCollabAskOpen] = useState(false);
   const [isMyPostsOpen, setIsMyPostsOpen] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -1694,6 +1707,7 @@ const TribeView = ({
 
   const [exploreLocation, setExploreLocation] = useState<PlaceResult | null>(null);
   const [isTeleportOpen, setIsTeleportOpen] = useState(false);
+  const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
 
   const { nodes: timeline, currentIndex } = useMemo(() => {
     return buildTimeline(currentUser, pastPlaces, trips, realTimeLocation, exploreLocation);
@@ -1721,11 +1735,34 @@ const TribeView = ({
 
   const activeNode = activeLocation;
 
+  const emergency = useMemo(() => {
+    let code = currentUser?.currentLocation?.countryCode;
+    let name = currentUser?.currentLocation?.country || 'Current Location';
+
+    if (activeLocation.type === 'past' && activeLocation.pastPlace) {
+      code = activeLocation.pastPlace.countryCode;
+      name = activeLocation.pastPlace.country;
+    } else if (activeLocation.type === 'future' && activeLocation.trip) {
+      code = activeLocation.trip.countryCode || activeLocation.trip.place?.countryCode;
+      name = activeLocation.trip.place?.country || 'Planned Destination';
+    } else if (activeLocation.id === 'explore' && exploreLocation) {
+      code = exploreLocation.countryCode;
+      name = exploreLocation.country;
+    }
+
+    return {
+      ...getEmergencyContact(code),
+      country: name
+    };
+  }, [currentUser, activeLocation, exploreLocation]);
+
+  const goLeft = () => setActiveIndex(prev => Math.max(0, (prev === -1 ? currentIndex : prev) - 1));
+  const goRight = () => setActiveIndex(prev => Math.min(timeline.length - 1, (prev === -1 ? currentIndex : prev) + 1));
+  const canGoLeft = (activeIndex === -1 ? currentIndex : activeIndex) > 0;
+  const canGoRight = (activeIndex === -1 ? currentIndex : activeIndex) < timeline.length - 1;
+
   const getConnection = (otherId: string) => {
-    return connections.find(c => 
-      (c.requesterId === currentUser?.id && c.recipientId === otherId) ||
-      (c.requesterId === otherId && c.recipientId === currentUser?.id)
-    );
+    return connections.find(c => c.participantIds.includes(otherId));
   };
 
   const currentMetrics = useMemo(() => {
@@ -1733,7 +1770,7 @@ const TribeView = ({
     return {
       location: node.label,
       weather: node.type === 'current' ? 'Live' : node.type === 'past' ? 'Past' : 'Planned',
-      emergency: '112',
+      emergency: emergency.primary,
       date: node.sublabel || format(new Date(), 'EEEE, MMM do'),
       families: profiles.filter(p => 
         p.currentLocation && hasValidCoords(p.currentLocation.lat, p.currentLocation.lng) &&
@@ -1800,9 +1837,7 @@ const TribeView = ({
 
   const filteredSpots = useMemo(() => {
     return spots.filter(spot => {
-      // Allow vetted spots and monthly deals to show even in collabMode
-      const isSpeciallyFeatured = spot.isVetted || !!spot.monthlyDeal;
-      if (collabMode && !isSpeciallyFeatured && (spot.category !== 'Workspace' && spot.category !== 'Accommodation')) return false;
+      if (!isVisibleInMode(spot.context, collabMode)) return false;
       
       if (spot.place && hasValidCoords(spot.place.lat, spot.place.lng) && hasValidCoords(activeNode.lat, activeNode.lng)) {
         const dist = calculateDistance(activeNode.lat, activeNode.lng, spot.place.lat, spot.place.lng);
@@ -1827,30 +1862,33 @@ const TribeView = ({
 
   const localEvents = useMemo(() => {
     return events.filter(e => {
+       if (!isVisibleInMode(e.context, collabMode)) return false;
        if (e.lat && e.lng && hasValidCoords(activeNode.lat, activeNode.lng)) {
          return calculateDistance(activeNode.lat, activeNode.lng, e.lat, e.lng) <= tribeRadius;
        }
        return e.location === activeNode.label;
     });
-  }, [activeNode, events, tribeRadius]);
+  }, [activeNode, events, tribeRadius, collabMode]);
 
   const localMarketItems = useMemo(() => {
     return marketItems.filter(item => {
+       if (!isVisibleInMode(item.context, collabMode)) return false;
        if (item.lat && item.lng && hasValidCoords(activeNode.lat, activeNode.lng)) {
          return calculateDistance(activeNode.lat, activeNode.lng, item.lat, item.lng) <= tribeRadius;
        }
        return item.location === activeNode.label;
     });
-  }, [activeNode, marketItems, tribeRadius]);
+  }, [activeNode, marketItems, tribeRadius, collabMode]);
 
   const localRequests = useMemo(() => {
     return lookingFor.filter(r => {
+      if (!isVisibleInMode(r.context, collabMode)) return false;
       if (r.lat && r.lng && hasValidCoords(activeNode.lat, activeNode.lng)) {
         return calculateDistance(activeNode.lat, activeNode.lng, r.lat, r.lng) <= tribeRadius;
       }
       return r.location === activeNode.label;
     });
-  }, [activeNode, lookingFor, tribeRadius]);
+  }, [activeNode, lookingFor, tribeRadius, collabMode]);
 
   const nextUpItems = useMemo(() => {
     const items = [
@@ -2012,20 +2050,54 @@ const TribeView = ({
     setNewEvent({ title: '', description: '', date: '', time: '', category: 'Social', imageUrl: '', place: null, maxParticipants: 10 });
   };
 
-  const matches = useMemo(() => {
-    return connections
-      .filter(c => c.status === 'accepted')
-      .map(c => {
-        const otherId = c.participantIds.find(id => id !== currentUser?.id);
-        const family = profiles.find(p => p.id === otherId);
+  const familyMatches = useMemo(() => {
+    if (!currentUser) return [];
+    return profiles
+      .filter(p => p.id !== currentUser.id && !isBlocked(p.id, currentUser, blocks))
+      .map(other => ({
+        family: other,
+        ...calculateFamilyMatch(currentUser, other),
+      }))
+      .filter(m => m.score > 10)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20);
+  }, [currentUser, profiles, blocks]);
+
+  const collabMatches = useMemo(() => {
+    if (!currentUser) return [];
+    const myAsks = collabAsks.filter(a => a.userId === currentUser.id);
+    return profiles
+      .filter(p => p.id !== currentUser.id && !isBlocked(p.id, currentUser, blocks))
+      .map(other => {
+        const otherAsks = collabAsks.filter(a => a.userId === other.id);
         return {
-          id: c.id,
-          family,
-          score: 100 // Professional match default
+          family: other,
+          ...calculateCollabMatch(currentUser, other, myAsks, otherAsks),
         };
       })
-      .filter(m => m.family) as { id: string; family: FamilyProfile; score: number }[];
-  }, [connections, profiles, currentUser]);
+      .filter(m => m.score > 10)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20);
+  }, [currentUser, profiles, collabAsks, blocks]);
+
+  const matches = collabMode ? collabMatches : familyMatches;
+
+  const matchesAndOverlaps = useMemo(() => {
+    const matchedFamilies = matches.map(m => m.family);
+    const overlappingFamilies = comingTogether;
+    
+    const combined = [...matchedFamilies];
+    overlappingFamilies.forEach(of => {
+      if (!combined.find(f => f.id === of.id)) {
+        combined.push(of);
+      }
+    });
+
+    return combined.map(family => ({
+      ...family,
+      matchReason: matchedFamilies.find(f => f.id === family.id) ? 'Professional Match' : 'Travel Overlap'
+    }));
+  }, [matches, comingTogether]);
 
   const categories = [
     { id: 'spots', label: 'Local Spots', count: filteredSpots.length, icon: MapPin, color: '#00b4d8' },
@@ -2111,9 +2183,44 @@ const TribeView = ({
               </p>
             </div>
             
-            <div className="flex flex-col items-center md:items-end gap-2 shrink-0">
-               <TimelineStrip timeline={timeline} activeIndex={activeIndex} setActiveIndex={setActiveIndex} dark={collabMode} />
-               <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-30">Journey Timeline</p>
+            <div className={cn(
+              "flex items-center gap-1.5 p-1.5 rounded-full border transition-all",
+              collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 shadow-sm"
+            )}>
+              <button 
+                onClick={goLeft}
+                disabled={!canGoLeft}
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                  canGoLeft ? (collabMode ? "hover:bg-white/10 text-white" : "hover:bg-slate-50 text-secondary") : "opacity-10 cursor-not-allowed"
+                )}
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              
+              <div className="px-4 py-2 flex flex-col items-center">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-30 leading-none mb-1">Journey Timeline</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-black text-primary tabular-nums">
+                    {(activeIndex === -1 ? currentIndex : activeIndex) + 1}
+                  </span>
+                  <span className="text-[9px] font-bold opacity-20">/</span>
+                  <span className="text-[11px] font-black opacity-40 tabular-nums">
+                    {timeline.length}
+                  </span>
+                </div>
+              </div>
+
+              <button 
+                onClick={goRight}
+                disabled={!canGoRight}
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                  canGoRight ? (collabMode ? "hover:bg-white/10 text-white" : "hover:bg-slate-50 text-secondary") : "opacity-10 cursor-not-allowed"
+                )}
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
             </div>
           </header>
 
@@ -2135,17 +2242,23 @@ const TribeView = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
-                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center",
-                  collabMode ? "bg-white/10" : "bg-amber-100 text-amber-600")}>
+              <button 
+                onClick={() => setIsEmergencyOpen(true)}
+                className="flex items-center gap-4 text-left group"
+              >
+                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-all group-hover:scale-110",
+                  collabMode ? "bg-white/10" : "bg-red-50 text-red-500")}>
                   <ShieldAlert className="w-6 h-6" />
                 </div>
                 <div>
                   <p className={cn("text-[10px] font-black uppercase tracking-widest",
                     collabMode ? "text-white/40" : "text-slate-400")}>Emergency</p>
-                  <p className="text-sm font-bold text-red-500">{currentMetrics.emergency}</p>
+                  <p className="text-sm font-bold text-red-500 flex items-center gap-1.5">
+                    {emergency.primary}
+                    <Info className="w-3 h-3 opacity-40" />
+                  </p>
                 </div>
-              </div>
+              </button>
             </div>
 
             <div className="flex gap-2 ml-auto">
@@ -2278,40 +2391,138 @@ const TribeView = ({
             </div>
           </section>
 
-          {/* Category Dashboard - Tier 2 */}
-          <section className="space-y-8">
-            <div className="flex items-center justify-between px-4">
-              <h2 className={cn("text-[10px] font-black uppercase tracking-[0.2em] opacity-40", collabMode ? "text-white" : "text-secondary")}>
-                Explore your Hub
-              </h2>
-              <div className={cn(
-                "flex items-center gap-3 px-4 py-2 rounded-2xl",
-                collabMode ? "bg-white/10" : "bg-slate-100"
-              )}>
-                <label className="text-[10px] font-black uppercase tracking-widest opacity-40">Radius</label>
-                <input
-                  type="range"
-                  min="1"
-                  max="100"
-                  value={tribeRadius}
-                  onChange={(e) => setTribeRadius(parseInt(e.target.value))}
-                  className="w-24 accent-primary"
-                />
-                <span className="text-[10px] font-black tabular-nums">{tribeRadius}km</span>
-              </div>
-            </div>
+          {/* Category Pulse - Grid 2x2 */}
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* SPOTS */}
+            <PreviewTile
+              icon={MapPin}
+              label={labels.spotsLabel}
+              totalCount={filteredSpots.length}
+              accentColor="bg-blue-100 text-blue-600"
+              items={filteredSpots.slice(0, 4)}
+              onItemClick={() => setActiveOverlay('spots')}
+              onSeeAll={() => setActiveOverlay('spots')}
+              emptyMessage="No spots shared here yet. Be the first!"
+              renderItem={(spot: any) => (
+                <div key={spot.id} className="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors px-1 rounded-lg">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden">
+                    {spot.imageUrl && <img src={spot.imageUrl} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-bold text-secondary truncate">{spot.name || spot.title}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{spot.category}</p>
+                  </div>
+                </div>
+              )}
+            />
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-               {categories.map(cat => (
-                 <CategoryTile 
-                   key={cat.id}
-                   {...cat}
-                   collabMode={collabMode}
-                   onClick={() => setActiveOverlay(cat.id)}
-                 />
-               ))}
-            </div>
+            {/* EVENTS */}
+            <PreviewTile
+              icon={Calendar}
+              label={labels.eventsLabel}
+              totalCount={localEvents.length}
+              accentColor="bg-orange-100 text-orange-600"
+              items={localEvents.slice(0, 4)}
+              onItemClick={() => setActiveOverlay('events')}
+              onSeeAll={() => setActiveOverlay('events')}
+              emptyMessage="No upcoming events found."
+              renderItem={(event: any) => (
+                <div key={event.id} className="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors px-1 rounded-lg">
+                  <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-500 flex items-center justify-center flex-shrink-0 flex-col leading-none">
+                    <span className="text-[10px] font-black">{event.date.split('-')[2]}</span>
+                    <span className="text-[7px] font-black uppercase">{format(parseISO(event.date), 'MMM')}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-bold text-secondary truncate">{event.title}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{event.time} • {event.category}</p>
+                  </div>
+                </div>
+              )}
+            />
+
+            {/* MARKETPLACE */}
+            <PreviewTile
+              icon={ShoppingBag}
+              label={labels.marketLabel}
+              totalCount={localMarketItems.length}
+              accentColor="bg-teal-100 text-teal-600"
+              items={localMarketItems.slice(0, 4)}
+              onItemClick={() => setActiveOverlay('marketplace')}
+              onSeeAll={() => setActiveOverlay('marketplace')}
+              emptyMessage="No items listed in this area."
+              renderItem={(item: any) => (
+                <div key={item.id} className="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors px-1 rounded-lg">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden">
+                    {item.imageUrl && <img src={item.imageUrl} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />}
+                  </div>
+                  <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold text-secondary truncate">{item.title}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.category}</p>
+                    </div>
+                    <span className="text-[10px] font-black text-secondary">€{item.price}</span>
+                  </div>
+                </div>
+              )}
+            />
+
+            {/* MATCHES */}
+            <PreviewTile
+              icon={Users}
+              label={labels.matchesLabel}
+              totalCount={matches.length}
+              accentColor="bg-purple-100 text-purple-600"
+              items={matches.slice(0, 4)}
+              onItemClick={(match: any) => onSelectFamily(match.family)}
+              onSeeAll={() => setActiveOverlay('matches')}
+              emptyMessage="Looking for more nomads nearby..."
+              renderItem={(match: any) => (
+                <div key={match.family.id} className="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors px-1 rounded-lg">
+                  <Avatar src={match.family.photoUrl} name={match.family.familyName} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[11px] font-bold text-secondary truncate">{match.family.familyName}</p>
+                      {match.reasons?.some((r: string) => r.includes('Overlap')) && <Plane className="w-2.5 h-2.5 text-primary" />}
+                    </div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 line-clamp-1">
+                      {match.reasons?.[0] || 'Match'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            />
           </section>
+
+          {/* Tribe Deals - Horizontal Rail */}
+          {filteredDeals.length > 0 && (
+            <section className="space-y-6">
+              <div className="flex items-center justify-between px-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
+                    <Tag className="w-5 h-5 font-black" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black tracking-tight">Tribe Deals</h3>
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-30">Exclusive neighborhood perks</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setActiveOverlay('deals')}
+                  className="px-6 py-2.5 rounded-xl border border-slate-100 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all"
+                >
+                  View All
+                </button>
+              </div>
+              
+              <div className="flex gap-6 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 snap-x">
+                {filteredDeals.map(deal => (
+                  <div key={deal.id} className="min-w-[300px] max-w-[320px] snap-start">
+                    <DealCard deal={deal} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Tribe Overlays */}
           <TribeBrowserOverlay 
@@ -2476,7 +2687,7 @@ const TribeView = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {matches.map(match => (
                 <FamilyCard 
-                  key={match.id}
+                  key={match.family.id}
                   family={match.family}
                   connectionStatus={getConnection(match.family.id)?.status}
                   onConnect={() => requestConnection(match.family.id)}
@@ -2540,7 +2751,7 @@ const TribeView = ({
                 {marketItems.filter(i => i.sellerId === currentUser?.id).map(item => (
                   <div key={item.id} className={cn("p-6 rounded-[2.5rem] border flex gap-4 items-center", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
                     {item.imageUrl ? (
-                      <img src={item.imageUrl || null} className="w-16 h-16 rounded-2xl object-cover" alt="" />
+                      <img src={item.imageUrl || undefined} className="w-16 h-16 rounded-2xl object-cover" alt="" />
                     ) : (
                       <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
                         <ShoppingBag className="w-6 h-6 opacity-20" />
@@ -2976,6 +3187,51 @@ const TribeView = ({
         onClose={() => setIsVibeCheckOpen(false)} 
         onSave={(metrics) => saveVibeCheck(metrics)} 
       />
+
+      <Modal
+        isOpen={isEmergencyOpen}
+        onClose={() => setIsEmergencyOpen(false)}
+        title="Emergency Lookup"
+      >
+        <div className="space-y-6">
+          <div className="p-6 bg-red-50 rounded-[2rem] border border-red-100">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-white text-red-500 shadow-xl shadow-red-500/10 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-red-400">Emergency Numbers</p>
+                <h3 className="text-2xl font-black text-red-600 tracking-tight">{emergency.country}</h3>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            {[
+              { label: 'General / Police', value: emergency.primary, icon: Shield },
+              { label: 'Ambulance', value: emergency.ambulance, icon: Heart },
+              { label: 'Fire Department', value: emergency.fire, icon: Flame }
+            ].map((num, i) => (
+              <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center text-slate-400">
+                    {num.label === 'General / Police' ? <Shield className="w-4 h-4" /> : num.label === 'Ambulance' ? <Heart className="w-4 h-4" /> : <Flame className="w-4 h-4" />}
+                  </div>
+                  <span className="text-xs font-bold text-slate-600">{num.label}</span>
+                </div>
+                <span className="text-xl font-black tabular-nums text-secondary">{num.value}</span>
+              </div>
+            ))}
+          </div>
+
+          <button 
+            onClick={() => setIsEmergencyOpen(false)}
+            className="w-full py-4 bg-secondary text-white rounded-2xl text-[10px] font-black uppercase tracking-widest"
+          >
+            Close
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 };
@@ -3271,7 +3527,7 @@ const ConnectView = ({ onPaywall, onSayHello }: { onPaywall: () => void, onSayHe
                               <div className="flex items-center gap-3 min-w-0">
                                 <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
                                   {family?.photoUrl ? (
-                                    <img src={family.photoUrl || null} alt="" className="w-full h-full object-cover" />
+                                    <img src={family.photoUrl || undefined} alt="" className="w-full h-full object-cover" />
                                   ) : <User className="w-5 h-5 text-slate-300" />}
                                 </div>
                                 <div className="min-w-0">
@@ -3962,7 +4218,7 @@ const TribeNearbyView = ({
                     {(() => {
                       const requester = profiles.find(p => p.id === request.userId);
                       return requester?.photoUrl ? (
-                        <img src={requester.photoUrl || null} alt="" className="w-full h-full object-cover" />
+                        <img src={requester.photoUrl || undefined} alt="" className="w-full h-full object-cover" />
                       ) : request.familyName[0];
                     })()}
                   </div>
@@ -4583,7 +4839,8 @@ const ProfileView = ({
   onShare, onLogout, onAddTrip, onEditTrip, setIsNotificationCenterOpen, 
   isNotificationCenterOpen, setIsConnectOpen, onSetLocation, setIsAddPastPlaceOpen,
   isLookingForOpen, setIsLookingForOpen, isAddItemOpen, setIsAddItemOpen,
-  isAddEventOpen, setIsAddEventOpen, isRecommendSpotOpen, setIsRecommendSpotOpen
+  isAddEventOpen, setIsAddEventOpen, isRecommendSpotOpen, setIsRecommendSpotOpen,
+  setReportingTarget
 }: { 
   onShare: () => void, 
   onLogout: () => void, 
@@ -4601,7 +4858,8 @@ const ProfileView = ({
   isAddEventOpen: boolean,
   setIsAddEventOpen: (open: boolean) => void,
   isRecommendSpotOpen: boolean,
-  setIsRecommendSpotOpen: (open: boolean) => void
+  setIsRecommendSpotOpen: (open: boolean) => void,
+  setReportingTarget: (target: { id: string, type: Report['targetType'] } | null) => void
 }) => {
   const { 
     currentUser, 
@@ -5198,7 +5456,7 @@ const ProfileView = ({
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xl overflow-hidden">
                           {parent.photoUrl ? (
-                            <img src={parent.photoUrl || null} alt={parent.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <img src={parent.photoUrl || undefined} alt={parent.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                           ) : (
                             parent.name[0]
                           )}
@@ -5562,7 +5820,7 @@ const ProfileView = ({
             {editProfile.photoUrl && (
               <div className="w-24 h-24 rounded-[2rem] overflow-hidden mx-auto border-4 border-white shadow-lg mt-2">
                 <img 
-                  src={editProfile.photoUrl || null} 
+                  src={editProfile.photoUrl || undefined} 
                   onError={(e) => {
                     console.error("Image preview error, falling back to placeholder");
                     (e.target as HTMLImageElement).src = `https://picsum.photos/seed/preview/200/200`;
@@ -5974,7 +6232,8 @@ const EmptyStatePioneer = ({ cityName, onAddSpot }: { cityName: string, onAddSpo
   );
 };
 const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void }) => {
-  const { spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent, fetchCities, exploreHubQuery, setExploreHubQuery } = useNomadStore() as any;
+  const { opportunities, spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent, fetchCities, exploreHubQuery, setExploreHubQuery } = useNomadStore() as any;
+  const [activeView, setActiveView] = useState<'hubs' | 'opportunities'>(collabMode ? 'opportunities' : 'hubs');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -6053,189 +6312,224 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void })
       collabMode ? "bg-[#006d77] text-white" : "text-slate-900"
     )}>
       <header className="space-y-6">
-        <div>
-          <h1 className={cn("text-3xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>Explore Hubs</h1>
-          <p className={cn("font-medium", collabMode ? "text-white/60" : "text-slate-500")}>
-            {collabMode ? "Identify your next professional hub" : "Research your next family adventure"}
-          </p>
-        </div>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div>
+            <h1 className={cn("text-3xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>
+              {activeView === 'hubs' ? 'Explore Hubs' : 'Mission Board'}
+            </h1>
+            <p className={cn("font-medium", collabMode ? "text-white/60" : "text-slate-500")}>
+              {activeView === 'hubs' 
+                ? (collabMode ? "Identify your next professional hub" : "Research your next family adventure")
+                : "Professional gigs and partnerships for nomads"
+              }
+            </p>
+          </div>
 
-        <div className="space-y-4">
-          <div className="relative">
-            <div className="relative flex gap-2">
-              <div className="relative flex-1">
-                <Search className={cn("absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5", collabMode ? "text-white/40" : "text-slate-400")} />
-                <input 
-                  type="text"
-                  placeholder="Search hubs..."
-                  className={cn(
-                    "w-full pl-12 pr-4 py-4 rounded-[2rem] card-shadow focus:outline-none focus:ring-2 transition-all font-bold",
-                    collabMode 
-                      ? "bg-white/10 border-white/10 text-white placeholder:text-white/30 focus:ring-white/20" 
-                      : "bg-white border-slate-100 text-secondary focus:ring-primary/20"
-                  )}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <button 
-                onClick={() => setShowFilters(!showFilters)}
+          <div className="flex p-1.5 bg-slate-100/50 backdrop-blur-md rounded-2xl md:self-start self-center">
+            {[
+              { id: 'hubs', label: 'Hubs', icon: Globe },
+              { id: 'opportunities', label: 'Missions', icon: Briefcase }
+            ].map(view => (
+              <button
+                key={view.id}
+                onClick={() => setActiveView(view.id as any)}
                 className={cn(
-                  "p-4 rounded-2xl border transition-all flex items-center justify-center",
-                  showFilters ? "bg-primary text-white border-primary" : "bg-white border-slate-100 text-slate-400"
+                  "flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                  activeView === view.id 
+                    ? (collabMode ? "bg-[#004d55] text-white shadow-xl" : "bg-white text-secondary shadow-sm")
+                    : "text-slate-400 hover:text-slate-600"
                 )}
               >
-                <Filter size={20} />
+                <view.icon className="w-4 h-4" />
+                {view.label}
               </button>
+            ))}
+          </div>
+        </div>
+
+        {activeView === 'hubs' && (
+          <div className="space-y-4">
+            <div className="relative">
+              <div className="relative flex gap-2">
+                <div className="relative flex-1">
+                  <Search className={cn("absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5", collabMode ? "text-white/40" : "text-slate-400")} />
+                  <input 
+                    type="text"
+                    placeholder="Search hubs..."
+                    className={cn(
+                      "w-full pl-12 pr-4 py-4 rounded-[2rem] card-shadow focus:outline-none focus:ring-2 transition-all font-bold",
+                      collabMode 
+                        ? "bg-white/10 border-white/10 text-white placeholder:text-white/30 focus:ring-white/20" 
+                        : "bg-white border-slate-100 text-secondary focus:ring-primary/20"
+                    )}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <button 
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={cn(
+                    "p-4 rounded-2xl border transition-all flex items-center justify-center",
+                    showFilters ? "bg-primary text-white border-primary" : "bg-white border-slate-100 text-slate-400"
+                  )}
+                >
+                  <Filter size={20} />
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {searchQuery && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute top-full left-0 right-12 mt-2 bg-white rounded-3xl border border-slate-100 shadow-xl z-50 overflow-hidden"
+                  >
+                    {cityProfiles.filter((c: any) => 
+                      c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                      c.country.toLowerCase().includes(searchQuery.toLowerCase())
+                    ).slice(0, 5).map((city: any) => (
+                      <button
+                        key={city.id}
+                        onClick={() => {
+                          setSelectedCity(city);
+                          setSearchQuery('');
+                        }}
+                        className="w-full p-4 text-left hover:bg-slate-50 flex items-center justify-between group transition-colors"
+                      >
+                        <div>
+                          <p className="font-bold text-secondary">{city.name}</p>
+                          <p className="text-xs text-slate-400">{city.country}</p>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-primary transition-colors" />
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <AnimatePresence>
-              {searchQuery && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute top-full left-0 right-12 mt-2 bg-white rounded-3xl border border-slate-100 shadow-xl z-50 overflow-hidden"
+              {showFilters && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="bg-white/50 backdrop-blur-sm rounded-[2.5rem] p-6 border border-slate-100 overflow-hidden"
                 >
-                  {cityProfiles.filter((c: any) => 
-                    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                    c.country.toLowerCase().includes(searchQuery.toLowerCase())
-                  ).slice(0, 5).map((city: any) => (
-                    <button
-                      key={city.id}
-                      onClick={() => {
-                        setSelectedCity(city);
-                        setSearchQuery('');
-                      }}
-                      className="w-full p-4 text-left hover:bg-slate-50 flex items-center justify-between group transition-colors"
-                    >
-                      <div>
-                        <p className="font-bold text-secondary">{city.name}</p>
-                        <p className="text-xs text-slate-400">{city.country}</p>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-primary transition-colors" />
-                    </button>
-                  ))}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Family Score ({filters.minFamilyScore})</label>
+                      <input type="range" min="0" max="100" value={filters.minFamilyScore} onChange={e => setFilters({...filters, minFamilyScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Safety Score ({filters.minSafetyScore})</label>
+                      <input type="range" min="0" max="100" value={filters.minSafetyScore} onChange={e => setFilters({...filters, minSafetyScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Internet Score ({filters.minInternetScore})</label>
+                      <input type="range" min="0" max="100" value={filters.minInternetScore} onChange={e => setFilters({...filters, minInternetScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Max Budget (Level {filters.maxCost})</label>
+                      <input type="range" min="1" max="5" value={filters.maxCost} onChange={e => setFilters({...filters, maxCost: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                    </div>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
+        )}
 
-          <AnimatePresence>
-            {showFilters && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="bg-white/50 backdrop-blur-sm rounded-[2.5rem] p-6 border border-slate-100 overflow-hidden"
-              >
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Family Score ({filters.minFamilyScore})</label>
-                    <input type="range" min="0" max="100" value={filters.minFamilyScore} onChange={e => setFilters({...filters, minFamilyScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Safety Score ({filters.minSafetyScore})</label>
-                    <input type="range" min="0" max="100" value={filters.minSafetyScore} onChange={e => setFilters({...filters, minSafetyScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Internet Score ({filters.minInternetScore})</label>
-                    <input type="range" min="0" max="100" value={filters.minInternetScore} onChange={e => setFilters({...filters, minInternetScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Max Budget (Level {filters.maxCost})</label>
-                    <input type="range" min="1" max="5" value={filters.maxCost} onChange={e => setFilters({...filters, maxCost: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          {continents.map(continent => (
-            <button
-              key={continent}
-              onClick={() => setActiveContinent(continent)}
-              className={cn(
-                "px-5 py-2.5 rounded-full font-black text-xs transition-all border whitespace-nowrap",
-                activeContinent === continent 
-                  ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" 
-                  : (collabMode ? "bg-white/5 border-white/10 text-white/60 hover:bg-white/10" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200")
-              )}
-            >
-              {continent}
-            </button>
-          ))}
-        </div>
-      </header>
-
-      {/* Recommended Hubs */}
-      <section className="space-y-6">
-        <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
-          {activeContinent === 'All' ? 'Recommended Hubs' : `${activeContinent} Hubs`}
-        </h2>
-        
-        {dashboardCities.length === 0 ? (
-          <div className="py-20 text-center space-y-4 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
-             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-slate-200 mx-auto shadow-sm">
-                <Globe className="w-10 h-10" />
-             </div>
-             <p className="text-slate-400 font-bold">Soon more hubs in this region!</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-            {dashboardCities.map((city: any) => (
-              <motion.div
-                key={city.id}
-                whileHover={{ y: -4 }}
-                onClick={() => setSelectedCity(city)}
+        {activeView === 'hubs' && (
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            {continents.map(continent => (
+              <button
+                key={continent}
+                onClick={() => setActiveContinent(continent)}
                 className={cn(
-                  "rounded-[2.5rem] overflow-hidden border cursor-pointer transition-all flex flex-col h-full",
-                  collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
+                  "px-5 py-2.5 rounded-full font-black text-xs transition-all border whitespace-nowrap",
+                  activeContinent === continent 
+                    ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" 
+                    : (collabMode ? "bg-white/5 border-white/10 text-white/60 hover:bg-white/10" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200")
                 )}
               >
-                <div className="h-48 relative bg-slate-100">
-                  <img 
-                    src={city.coverImageUrl || `https://picsum.photos/seed/cover${city.id}/600/450`} 
-                    alt={city.name} 
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-black text-secondary flex items-center gap-1 shadow-sm">
-                    <Star size={10} className="text-amber-500 fill-amber-500" />
-                    {city.familyScore}
-                  </div>
-                </div>
-                <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
-                  <div>
-                    <h3 className="font-black text-secondary leading-tight">{city.name}</h3>
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{city.country} • {city.continent}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 pt-4 border-t border-slate-50">
-                    <div className="flex items-center gap-1.5 p-2 bg-slate-50 rounded-xl">
-                      <Shield size={12} className="text-slate-400" />
-                      <span className="text-[10px] font-black text-slate-500">{city.safetyScore}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 p-2 bg-slate-50 rounded-xl">
-                      <Zap size={12} className="text-slate-400" />
-                      <span className="text-[10px] font-black text-slate-500">{city.internetScore}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between pt-2">
-                    <div className="flex items-center gap-1">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < city.costIndex ? "bg-green-500" : "bg-slate-200")} />
-                      ))}
-                    </div>
-                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">Budget Lvl {city.costIndex}</span>
-                  </div>
-                </div>
-              </motion.div>
+                {continent}
+              </button>
             ))}
           </div>
         )}
-      </section>
+      </header>
+
+      {activeView === 'hubs' ? (
+        <section className="space-y-6">
+          <h2 className={cn("text-xs font-black uppercase tracking-[0.2em]", collabMode ? "text-white/40" : "text-slate-400")}>
+            {activeContinent === 'All' ? 'Recommended Hubs' : `${activeContinent} Hubs`}
+          </h2>
+          
+          {dashboardCities.length === 0 ? (
+            <div className="py-20 text-center space-y-4 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
+               <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-slate-200 mx-auto shadow-sm">
+                  <Globe className="w-10 h-10" />
+               </div>
+               <p className="text-slate-400 font-bold">Soon more hubs in this region!</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              {dashboardCities.map((city: any) => (
+                <motion.div
+                  key={city.id}
+                  whileHover={{ y: -4 }}
+                  onClick={() => setSelectedCity(city)}
+                  className={cn(
+                    "rounded-[2.5rem] overflow-hidden border cursor-pointer transition-all flex flex-col h-full",
+                    collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
+                  )}
+                >
+                  <div className="h-48 relative bg-slate-100">
+                    <img 
+                      src={city.coverImageUrl || `https://picsum.photos/seed/cover${city.id}/600/450`} 
+                      alt={city.name} 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-black text-secondary flex items-center gap-1 shadow-sm">
+                      <Star size={10} className="text-amber-500 fill-amber-500" />
+                      {city.familyScore}
+                    </div>
+                  </div>
+                  <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-black text-secondary leading-tight">{city.name}</h3>
+                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{city.country} • {city.continent}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-4 border-t border-slate-50">
+                      <div className="flex items-center gap-1.5 p-2 bg-slate-50 rounded-xl">
+                        <Shield size={12} className="text-slate-400" />
+                        <span className="text-[10px] font-black text-slate-500">{city.safetyScore}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 p-2 bg-slate-50 rounded-xl">
+                        <Zap size={12} className="text-slate-400" />
+                        <span className="text-[10px] font-black text-slate-500">{city.internetScore}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-2">
+                      <div className="flex items-center gap-1">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < city.costIndex ? "bg-green-500" : "bg-slate-200")} />
+                        ))}
+                      </div>
+                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">Budget Lvl {city.costIndex}</span>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        <OpportunitiesBoard />
+      )}
     </div>
   );
 };
@@ -6503,14 +6797,9 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
 
 // --- Main App ---
 
-import { auth, googleProvider, facebookProvider, appleProvider } from './firebase';
-import { signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth';
-
 const WelcomeModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
   return null;
 };
-
-// ... existing code ...
 
 export default function App() {
   const { 
@@ -6533,8 +6822,13 @@ export default function App() {
     isLocationModalOpen,
     setIsLocationModalOpen,
     cancelConnection,
-    profiles
+    profiles,
+    blocks,
+    collabAsks
   } = useNomadStore();
+
+  const labels = useModeLabels();
+  const { hasCollabAccess } = useCollabAccess();
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -6806,12 +7100,18 @@ export default function App() {
   }, [currentUser?.role]);
 
   // --- Real-time Notification Watcher ---
-  const prevNotificationsRef = useRef(notifications);
+  const prevNotificationsRef = useRef<AppNotification[] | null>(null);
   useEffect(() => {
     if (currentUser) {
+      // Establish baseline on first load to prevent toasting history
+      if (prevNotificationsRef.current === null) {
+        prevNotificationsRef.current = notifications;
+        return;
+      }
+
       const newNotifications = notifications.filter(n => 
         !n.isRead && 
-        !prevNotificationsRef.current.some(prev => prev.id === n.id)
+        !prevNotificationsRef.current!.some(prev => prev.id === n.id)
       );
       
       newNotifications.forEach(n => {
@@ -6827,7 +7127,7 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       const pendingIncoming = connections.filter(c => c.recipientId === currentUser.id && c.status === 'pending');
-      const prevPendingIncoming = prevNotificationsRef.current.filter((n: any) => n.type === 'ConnectionRequest').length; // Fallback or check count
+      const prevPendingIncoming = prevNotificationsRef.current ? prevNotificationsRef.current.filter((n: any) => n.type === 'ConnectionRequest').length : 0;
       
       // If connections length increased and we have a new pending request from someone else
       if (connections.length > prevConnectionsCount.current) {
@@ -7088,6 +7388,7 @@ export default function App() {
           setIsAddEventOpen={setIsAddEventOpen}
           isRecommendSpotOpen={isRecommendSpotOpen}
           setIsRecommendSpotOpen={setIsRecommendSpotOpen}
+          setReportingTarget={setReportingTarget}
         />
       );
       case 'profile': return (
@@ -7120,6 +7421,7 @@ export default function App() {
           setIsAddEventOpen={setIsAddEventOpen}
           isRecommendSpotOpen={isRecommendSpotOpen}
           setIsRecommendSpotOpen={setIsRecommendSpotOpen}
+          setReportingTarget={setReportingTarget}
         />
       );
       case 'explore': return (
@@ -7176,6 +7478,7 @@ export default function App() {
           setIsAddEventOpen={setIsAddEventOpen}
           isRecommendSpotOpen={isRecommendSpotOpen}
           setIsRecommendSpotOpen={setIsRecommendSpotOpen}
+          setReportingTarget={setReportingTarget}
         />
       );
     }
@@ -7306,8 +7609,8 @@ export default function App() {
         </div>
 
         <nav className="flex-1 space-y-2">
-          <SidebarLink active={activeTab === 'tribe'} onClick={() => setActiveTab('tribe')} icon={<MapIcon />} label="Local Tribe" />
-          <SidebarLink active={activeTab === 'community'} onClick={() => setActiveTab('community')} icon={<UsersIcon />} label="Global Tribe" />
+          <SidebarLink active={activeTab === 'tribe'} onClick={() => setActiveTab('tribe')} icon={<MapIcon />} label={labels.navLocal} />
+          <SidebarLink active={activeTab === 'community'} onClick={() => setActiveTab('community')} icon={<UsersIcon />} label={labels.navGlobal} />
           <SidebarLink active={activeTab === 'explore'} onClick={() => setActiveTab('explore')} icon={<Globe />} label="Explore" />
           <SidebarLink active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={
             <div className="relative">
@@ -7316,7 +7619,7 @@ export default function App() {
                 <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-accent rounded-full border-2 border-white" />
               )}
             </div>
-          } label={collabMode ? "Collab Card" : "Journey"} />
+          } label={labels.navJourney} />
           {currentUser?.role === 'SuperAdmin' && (
             <SidebarLink active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} icon={<Shield className="w-5 h-5" />} label="Super Admin" />
           )}
@@ -7344,17 +7647,23 @@ export default function App() {
                 !collabMode ? "bg-white text-secondary shadow-md" : "text-slate-400 hover:text-slate-600"
               )}
             >
-              Family
+              {labels.familyMode}
             </button>
             <button 
-              onClick={() => setCollabMode(true)}
+              onClick={() => {
+                if (hasCollabAccess) {
+                  setCollabMode(true);
+                } else {
+                  setIsPaywallOpen(true);
+                }
+              }}
               className={cn(
                 "w-full px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 text-left",
                 collabMode ? "bg-[#006d77] text-white shadow-lg" : "text-slate-400 hover:text-slate-600"
               )}
             >
               <Briefcase className={cn("w-4 h-4", collabMode ? "text-white" : "text-slate-400")} />
-              Collab
+              {labels.collabMode}
               <span className="ml-auto bg-amber-400 text-[#264653] text-[8px] px-1 py-0.5 rounded-md font-black shadow-sm">BETA</span>
             </button>
           </div>
@@ -7463,12 +7772,19 @@ export default function App() {
                     : "bg-white/10 text-white/60 border-white/10"
                 )}
               >
-                <Home className="w-3.5 h-3.5" /> Family
+                <Home className="w-3.5 h-3.5" /> {labels.familyMode}
               </button>
 
               {/* Collab Mode */}
               <button
-                onClick={() => { setCollabMode(true); setIsNavExpanded(false); }}
+                onClick={() => {
+                  if (hasCollabAccess) {
+                    setCollabMode(true);
+                    setIsNavExpanded(false);
+                  } else {
+                    setIsPaywallOpen(true);
+                  }
+                }}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border",
                   collabMode
@@ -7476,7 +7792,7 @@ export default function App() {
                     : "bg-slate-50 text-slate-500 border-slate-100"
                 )}
               >
-                <Briefcase className="w-3.5 h-3.5" /> Collab
+                <Briefcase className="w-3.5 h-3.5" /> {labels.collabMode}
               </button>
 
               {/* Super Admin — only for SuperAdmin role */}
@@ -7506,7 +7822,7 @@ export default function App() {
             active={activeTab === 'tribe'}
             onClick={() => { setActiveTab('tribe'); setIsNavExpanded(false); }}
             icon={<MapIcon className="w-6 h-6" />}
-            label="Local"
+            label={labels.navLocal}
             dark={collabMode}
           />
 
@@ -7515,7 +7831,7 @@ export default function App() {
             active={activeTab === 'community'}
             onClick={() => { setActiveTab('community'); setIsNavExpanded(false); }}
             icon={<Sparkles className="w-6 h-6" />}
-            label="Global"
+            label={labels.navGlobal}
             dark={collabMode}
           />
 
@@ -7539,7 +7855,7 @@ export default function App() {
               "text-[10px] font-black uppercase tracking-widest leading-none",
               collabMode ? "text-white/60" : "text-primary"
             )}>
-              Post
+              {labels.navPost}
             </span>
           </button>
 
@@ -7564,7 +7880,7 @@ export default function App() {
                 )}
               </div>
             }
-            label="Journey"
+            label={labels.navJourney}
             dark={collabMode}
           />
         </div>
@@ -7631,8 +7947,7 @@ export default function App() {
       {/* Global Modals */}
       <ToastContainer />
       <ReportModal isOpen={!!reportingTarget} onClose={() => setReportingTarget(null)} target={reportingTarget} />
-      
-      <Modal isOpen={!!selectedFamily} onClose={() => setSelectedFamily(null)} title={selectedFamily?.familyName || ''}>
+      <CollabPaywall isOpen={isPaywallOpen} onClose={() => setIsPaywallOpen(false)} />
         {selectedFamily && (
           <div className="space-y-6">
             <div className="flex justify-end -mt-2 -mr-2">
@@ -8069,7 +8384,10 @@ export default function App() {
       </Modal>
 
       {/* Floating Connect Widget */}
-      <div className="fixed bottom-24 right-6 md:bottom-8 md:right-8 z-[120] flex flex-col items-end gap-4 pointer-events-none">
+      <div className={cn(
+        "fixed z-[120] flex flex-col items-end gap-4 pointer-events-none",
+        "bottom-24 right-0 md:bottom-8 md:right-8" // Stick to right edge on mobile
+      )}>
         <AnimatePresence>
           {isConnectOpen && (
             <motion.div 
@@ -8077,17 +8395,17 @@ export default function App() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className={cn(
-                "w-[90vw] md:w-[420px] h-[75vh] max-h-[800px] rounded-[2.5rem] shadow-2xl border flex flex-col overflow-hidden pointer-events-auto",
+                "fixed inset-0 z-[130] flex flex-col md:relative md:inset-auto md:w-[420px] md:h-[75vh] md:max-h-[800px] md:rounded-[2.5rem] md:shadow-2xl md:border md:overflow-hidden pointer-events-auto transition-colors",
                 collabMode ? "bg-[#004d55] border-white/10" : "bg-white border-slate-100"
               )}
             >
-              <div className="flex-1 overflow-hidden relative">
+              <div className="flex-1 overflow-hidden relative h-full">
                 {/* Internal Close Button - for better accessibility and WhatsApp feel */}
                 <button 
                   onClick={() => setIsConnectOpen(false)}
-                  className="absolute top-4 right-4 z-50 p-2 bg-black/20 hover:bg-black/30 text-white rounded-full transition-colors backdrop-blur-md"
+                  className="absolute top-6 right-6 md:top-4 md:right-4 z-50 p-3 md:p-2 bg-black/20 hover:bg-black/30 text-white rounded-full transition-colors backdrop-blur-md"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5 md:w-4 md:h-4" />
                 </button>
                 
                 <ConnectView 
@@ -8105,21 +8423,38 @@ export default function App() {
         <button 
           onClick={() => setIsConnectOpen(!isConnectOpen)}
           className={cn(
-            "w-16 h-16 rounded-[2rem] flex items-center justify-center shadow-2xl transition-all active:scale-90 relative group pointer-events-auto",
+            "pointer-events-auto transition-all active:scale-95 group relative overflow-hidden",
+            // Desktop: Circular button
+            "md:w-16 md:h-16 md:rounded-[2rem] md:flex md:items-center md:justify-center md:shadow-2xl",
+            // Mobile: Sticky side tab
+            "flex items-center gap-1.5 pr-2.5 pl-1.5 py-4 rounded-l-2xl shadow-xl",
             collabMode ? "bg-accent text-white shadow-accent/40" : "bg-primary text-white shadow-primary/40"
           )}
         >
-          {isConnectOpen ? <X className="w-8 h-8" /> : <MessageSquare className="w-8 h-8 group-hover:scale-110 transition-transform" />}
+          {isConnectOpen ? (
+            <X className="w-8 h-8 md:w-8 md:h-8" />
+          ) : (
+            <>
+              <MessageSquare className="w-5 h-5 md:w-8 md:h-8 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase tracking-widest md:hidden vertical-text leading-none whitespace-nowrap">
+                {labels.chatTitle}
+              </span>
+            </>
+          )}
+          
           {/* Badge */}
           {(() => {
             const pendingCount = connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending').length;
-            // Simulated unread: every 4th message in conversations as unread for visual feedback
             const unreadCount = conversations.length > 0 ? Math.ceil(conversations.length / 4) : 0;
             const total = pendingCount + unreadCount;
             
             if (total > 0) {
               return (
-                <div className="absolute -top-1 -right-1 min-w-[24px] h-[24px] px-1.5 bg-accent text-white rounded-full border-4 border-white flex items-center justify-center text-[10px] font-black shadow-lg">
+                <div className={cn(
+                  "bg-accent text-white rounded-full flex items-center justify-center font-black shadow-lg",
+                  "md:absolute md:-top-1 md:-right-1 md:min-w-[24px] md:h-[24px] md:text-[10px] md:border-4 md:border-white",
+                  "absolute top-2.5 left-1 min-w-[15px] h-[15px] text-[8px] border border-white md:top-auto md:left-auto md:border-4" // Mobile level with icon
+                )}>
                   {total}
                 </div>
               );

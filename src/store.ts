@@ -25,12 +25,15 @@ import {
   SpotCategory,
   EventCategory,
   DestinationGuidance,
-  Deal,           // Added
-  Advertiser,     // Added
-  DealCategory,   // Added
-  DealStatus,      // Added
+  Deal,
+  Advertiser,
+  DealCategory,
+  DealStatus,
   PlaceResult,
-  PastPlace
+  PastPlace,
+  Opportunity,
+  OpportunityType,
+  ContentContext
 } from './types';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { 
@@ -112,6 +115,7 @@ interface NomadStore {
   adminDeals: Deal[];
   advertisers: Advertiser[];
   pastPlaces: PastPlace[];
+  opportunities: Opportunity[];
   
   // Actions
   init: () => void;
@@ -151,6 +155,8 @@ interface NomadStore {
   addCollabAsk: (ask: CollabAsk) => Promise<void>;
   removeCollabAsk: (askId: string) => Promise<void>;
   addCollabEndorsement: (endorsement: CollabEndorsement) => Promise<void>;
+  addOpportunity: (opportunity: Opportunity) => Promise<void>;
+  removeOpportunity: (opportunityId: string) => Promise<void>;
 
   // Community (Global Tribe)
   createThread: (data: { 
@@ -162,6 +168,7 @@ interface NomadStore {
     hashtags?: string[] 
   }) => Promise<string | null>;
   addReply: (threadId: string, body: string) => Promise<void>;
+  deleteReply: (replyId: string) => Promise<void>;
   markReplyHelpful: (threadId: string, replyId: string) => Promise<void>;
   toggleFollowThread: (threadId: string) => Promise<void>;
   toggleFollowTopic: (topicId: any) => Promise<void>;
@@ -255,6 +262,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   adminDeals: [],
   advertisers: [],
   pastPlaces: [],
+  opportunities: [],
   messages: {},
   appSettings: {
     maxUploadSizeKB: 500,
@@ -504,6 +512,10 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           set({ trips: snapshot.docs.map(d => d.data() as Trip) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'trips')));
 
+        unsubscribes.push(onSnapshot(collection(db, 'opportunities'), (snapshot) => {
+          set({ opportunities: snapshot.docs.map(d => d.data() as Opportunity) });
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'opportunities')));
+
         unsubscribes.push(onSnapshot(collection(db, 'cities'), (snapshot) => {
           set({ cities: snapshot.docs.map(d => d.data() as CityProfile) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'cities')));
@@ -513,25 +525,53 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'cityEvents')));
 
         unsubscribes.push(onSnapshot(collection(db, 'events'), (snapshot) => {
-          set({ events: snapshot.docs.map(d => d.data() as PopUpEvent) });
+          set({ events: snapshot.docs.map(d => {
+            const data = d.data() as PopUpEvent;
+            return {
+              ...data,
+              id: d.id,
+              context: data.context ?? 'family'
+            };
+          }) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'events')));
 
         unsubscribes.push(onSnapshot(collection(db, 'marketplace'), (snapshot) => {
-          set({ marketItems: snapshot.docs.map(d => d.data() as MarketItem) });
+          set({ marketItems: snapshot.docs.map(d => {
+            const data = d.data() as MarketItem;
+            return {
+              ...data,
+              id: d.id,
+              context: data.context ?? (data.category === 'Professional Services' ? 'collab' : 'family')
+            };
+          }) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'marketplace')));
 
         unsubscribes.push(onSnapshot(collection(db, 'lookingFor'), (snapshot) => {
-          set({ lookingFor: snapshot.docs.map(d => d.data() as LookingForRequest) });
+          set({ lookingFor: snapshot.docs.map(d => {
+            const data = d.data() as LookingForRequest;
+            return {
+              ...data,
+              id: d.id,
+              context: data.context ?? (data.category === 'Collab' ? 'collab' : 'family')
+            };
+          }) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'lookingFor')));
 
         unsubscribes.push(onSnapshot(collection(db, 'users'), (snapshot) => {
-          const allProfiles = snapshot.docs.map(d => d.data() as FamilyProfile);
+          const allProfiles = snapshot.docs.map(d => ({ ...(d.data() as FamilyProfile), id: d.id }));
           console.log(`[Admin] Loaded ${allProfiles.length} user profiles`);
           set({ profiles: allProfiles });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'users')));
 
         unsubscribes.push(onSnapshot(collection(db, 'spots'), (snapshot) => {
-          set({ spots: snapshot.docs.map(d => d.data() as Spot) });
+          set({ spots: snapshot.docs.map(d => {
+            const data = d.data() as Spot;
+            return {
+              ...data,
+              id: d.id,
+              context: data.context ?? (data.category === 'Workspace' ? 'collab' : 'family')
+            };
+          }) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'spots')));
 
         unsubscribes.push(onSnapshot(collection(db, 'collabAsks'), (snapshot) => {
@@ -553,7 +593,14 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         // Topics: load all
         unsubscribes.push(onSnapshot(
           query(collection(db, 'topics'), orderBy('order')),
-          (snap) => set({ topics: snap.docs.map(d => ({ ...d.data(), id: d.id })) })
+          (snap) => set({ topics: snap.docs.map(d => {
+            const data = d.data();
+            return {
+              ...data,
+              id: d.id,
+              modeContext: data.modeContext ?? 'family'
+            };
+          }) })
         ));
 
         // User-specific: their topic + thread follows
@@ -976,6 +1023,24 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       await setDoc(doc(db, 'activities', newActivity.id), newActivity);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `collabEndorsements/${endorsement.id}`);
+    }
+  },
+
+  addOpportunity: async (opportunity) => {
+    try {
+      await setDoc(doc(db, 'opportunities', opportunity.id), opportunity);
+      get().addToast("Opportunity posted!", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `opportunities/${opportunity.id}`);
+    }
+  },
+
+  removeOpportunity: async (opportunityId) => {
+    try {
+      await deleteDoc(doc(db, 'opportunities', opportunityId));
+      get().addToast("Opportunity removed", "info");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `opportunities/${opportunityId}`);
     }
   },
 
@@ -2248,6 +2313,15 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     }
   },
 
+  deleteReply: async (replyId: string) => {
+    try {
+      await deleteDoc(doc(db, 'threadReplies', replyId));
+      get().addToast("Reply removed", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `threadReplies/${replyId}`);
+    }
+  },
+
   markReplyHelpful: async (threadId, replyId) => {
     try {
       const thread = get().threads.find(t => t.id === threadId);
@@ -2388,6 +2462,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     try {
       await setDoc(doc(db, 'topics', id), {
         ...topicData,
+        modeContext: topicData.modeContext || 'family',
         createdAt: new Date().toISOString(),
         createdBy: get().currentUser?.id || 'system',
         threadCount: 0

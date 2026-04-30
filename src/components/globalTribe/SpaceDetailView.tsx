@@ -135,7 +135,7 @@ export const SpaceDetailView: React.FC<SpaceDetailViewProps> = ({ threadId, onBa
           <div>
             <p className="text-xs font-black text-secondary uppercase tracking-widest">{thread.authorFamilyName}</p>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              {thread.region} • {format(parseISO(thread.createdAt), 'MMMM d, yyyy')}
+              {thread.region} • {thread.createdAt ? format(parseISO(thread.createdAt), 'MMMM d, yyyy') : ''}
             </p>
           </div>
         </div>

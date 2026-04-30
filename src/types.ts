@@ -70,13 +70,14 @@ export interface LookingForRequest {
   lat: number;
   lng: number;
   place?: PlaceResult;
-  category: 'Help' | 'Playdate' | 'Gear' | 'Advice' | 'Work' | 'Transport' | 'Care';
+  category: 'Help' | 'Playdate' | 'Gear' | 'Advice' | 'Work' | 'Transport' | 'Care' | 'Collab';
   title: string;
   description: string;
   date?: string;
   createdAt: string;
   upvotes?: string[];
   downvotes?: string[];
+  context?: ContentContext;
 }
 
 export interface PrivacySettings {
@@ -140,6 +141,10 @@ export interface CollabEndorsement {
   createdAt: string;
 }
 
+export type PremiumType = 'NONE' | 'MONTHLY' | 'ANNUAL' | 'LIFETIME' | 'TRIAL' | 'COLLAB_MONTHLY' | 'COLLAB_ANNUAL';
+
+export type ContentContext = 'family' | 'collab' | 'both';
+
 export interface FamilyProfile {
   id: string;
   familyName: string;
@@ -150,7 +155,7 @@ export interface FamilyProfile {
   parents: Parent[];
   kids: Kid[];
   isPremium: boolean;
-  premiumType: 'NONE' | 'MONTHLY' | 'ANNUAL' | 'LIFETIME' | 'TRIAL';
+  premiumType: PremiumType;
   premiumUntil?: string;
   verificationLevel: 1 | 2 | 3;
   vouchedBy: string[];
@@ -304,6 +309,7 @@ export interface Spot {
   saveCount: number;
   createdAt: string;
   updatedAt: string;
+  context?: ContentContext;
 }
 
 export interface DestinationGuidance {
@@ -464,6 +470,7 @@ export interface MarketItem {
   createdAt: string;
   upvotes?: string[];
   downvotes?: string[];
+  context?: ContentContext;
 }
 
 export interface PopUpEvent {
@@ -488,6 +495,7 @@ export interface PopUpEvent {
   isCollaborative?: boolean;
   upvotes?: string[];
   downvotes?: string[];
+  context?: ContentContext;
 }
 
 // ── DEALS ──────────────────────────────────────────────
@@ -597,6 +605,7 @@ export interface Topic {
   createdBy: string;         // Super Admin uid
   createdAt: string;
   order: number;             // Display order in UI
+  modeContext: 'family' | 'collab' | 'both';
 }
 
 // ── THREADS (user-created discussions inside a topic) ──
@@ -673,6 +682,38 @@ export interface TopicFollow {
   userId: string;
   topicId: TopicId;
   followedAt: string;
+}
+
+export type OpportunityType =
+  | 'Gig'
+  | 'Full-time'
+  | 'Partnership'
+  | 'Investment'
+  | 'Mentorship';
+
+export interface Opportunity {
+  id: string;
+  type: OpportunityType;
+  posterId: string;
+  posterName: string;
+  posterPhoto?: string;
+  title: string;
+  description: string;
+  skillTags: string[];
+  isRemote: boolean;
+  countryCode?: string;
+  city?: string;
+  compensation?: {
+    type: 'hourly' | 'fixed' | 'equity' | 'unpaid';
+    amount?: number;
+    currency?: string;
+  };
+  startsAt?: string;
+  duration?: string;
+  status: 'open' | 'filled' | 'closed';
+  createdAt: string;
+  updatedAt: string;
+  reportCount: number;
 }
 
 export interface ThreadFollow {

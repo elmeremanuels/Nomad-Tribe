@@ -27,13 +27,13 @@ export const Avatar = ({ src, name, size = 'sm', className }: {
   const textClass = textClasses[size];
 
   // Get initials: "The Smiths" -> "TS"
-  const initials = name
-    .split(/\s+/)
-    .map(w => w[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  const initials = (name || '')
+     .split(/\s+/)
+     .map(w => w[0])
+     .filter(Boolean)
+     .slice(0, 2)
+     .join('')
+     .toUpperCase();
 
   if (src && !src.includes('avatar-placeholder.png')) {
     return (

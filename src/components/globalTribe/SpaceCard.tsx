@@ -152,7 +152,7 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
 
         <div className="flex items-center justify-between mt-4">
           <span className="text-[10px] font-bold text-slate-400">
-            {format(parseISO(thread.createdAt), 'MMM d, yyyy')}
+            {thread.createdAt ? format(parseISO(thread.createdAt), 'MMM d, yyyy') : 'Recently'}
           </span>
           <div className="flex items-center gap-2">
              <button 
