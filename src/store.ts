@@ -425,7 +425,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               gamification: data.gamification || { hasClaimedPioneerBonus: false, totalSpotsAdded: 0 },
               spokenLanguages: data.spokenLanguages || ['English'],
               role: data.role || 'User',
-              privacySettings: data.privacySettings || { isIncognito: false },
+              privacySettings: data.privacySettings || { isGhostMode: false },
               collabCard: data.collabCard || (data as any).professional || { occupation: '', superpowers: [], currentMission: '', linkedInUrl: '' },
               openToCollabs: data.openToCollabs || (data as any).professional?.openToNetworking || false,
               hasCompletedOnboarding: data.hasCompletedOnboarding === true || (data.familyName ? data.familyName.length >= 2 : false),
@@ -508,7 +508,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               role: (firebaseUser.email?.toLowerCase() === 'e.emanuels@gmail.com') ? 'SuperAdmin' : 'User',
               collabCard: { occupation: '', superpowers: [], currentMission: '', linkedInUrl: '' },
               openToCollabs: false,
-              privacySettings: { isIncognito: false },
+              privacySettings: { isGhostMode: false },
               preferences: {
                 language: 'EN',
                 showNextLocationSuggestions: true,
@@ -1033,7 +1033,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   addCollabAsk: async (ask) => {
     try {
-      await setDoc(doc(db, 'collabAsks', ask.id), ask);
+      const cleanAsk = Object.fromEntries(Object.entries(ask).filter(([_, v]) => v !== undefined));
+      await setDoc(doc(db, 'collabAsks', ask.id), cleanAsk);
       
       const user = get().currentUser;
       const newActivity: Activity = {
@@ -1079,7 +1080,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   addOpportunity: async (opportunity) => {
     try {
-      await setDoc(doc(db, 'opportunities', opportunity.id), opportunity);
+      const cleanOpportunity = Object.fromEntries(Object.entries(opportunity).filter(([_, v]) => v !== undefined));
+      await setDoc(doc(db, 'opportunities', opportunity.id), cleanOpportunity);
       get().addToast("Opportunity posted!", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `opportunities/${opportunity.id}`);
@@ -1099,10 +1101,13 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     const user = get().currentUser;
     if (user?.role !== 'SuperAdmin') return;
     const id = `deal-${Date.now()}`;
-    // Genereer een unieke report token
     const reportToken = `rpt-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+    
+    // Filter undefined values
+    const cleanData = Object.fromEntries(Object.entries(dealData).filter(([_, v]) => v !== undefined));
+    
     const deal: Deal = {
-      ...dealData,
+      ...cleanData as any,
       id,
       impressions: 0,
       clicks: 0,
@@ -1121,7 +1126,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   updateDeal: async (dealId, updates) => {
     try {
-      await updateDoc(doc(db, 'deals', dealId), updates);
+      const cleanUpdates = Object.fromEntries(Object.entries(updates).filter(([_, v]) => v !== undefined));
+      await updateDoc(doc(db, 'deals', dealId), cleanUpdates);
       get().addToast("Deal updated!", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `deals/${dealId}`);
@@ -1192,13 +1198,14 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     if (user?.role !== 'SuperAdmin') return;
     
     try {
+      const cleanData = Object.fromEntries(Object.entries(advertiserData).filter(([_, v]) => v !== undefined));
       // In deze sandbox omgeving gebruiken we een willekeurige ID als we geen Cloud Function hebben
       // OF we verwachten dat de admin het account handmatig aanmaakt in Firebase Console
       // Voor nu genereren we een ID en voegen we het doc toe.
       const id = advertiserData.email.replace(/[^a-zA-Z0-9]/g, '_');
       
       const advertiser: Advertiser = {
-        ...advertiserData,
+        ...cleanData as any,
         id,
         createdAt: new Date().toISOString(),
         createdBy: user.id
@@ -1213,7 +1220,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   updateAdvertiser: async (advertiserId, updates) => {
     try {
-      await updateDoc(doc(db, 'advertisers', advertiserId), updates);
+      const cleanUpdates = Object.fromEntries(Object.entries(updates).filter(([_, v]) => v !== undefined));
+      await updateDoc(doc(db, 'advertisers', advertiserId), cleanUpdates);
       get().addToast("Advertiser updated!", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `advertisers/${advertiserId}`);
@@ -2066,7 +2074,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         vouchedBy: [],
         travelReasons: profileData.travelReasons || [],
         gamification: { hasClaimedPioneerBonus: false, totalSpotsAdded: 0 },
-        privacySettings: { isIncognito: false },
+        privacySettings: { isGhostMode: false },
         preferences: {
           language: (profileData.nativeLanguage as any) || 'EN',
           showNextLocationSuggestions: true,

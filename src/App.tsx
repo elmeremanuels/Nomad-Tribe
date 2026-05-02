@@ -16,7 +16,7 @@ import ToastContainer from './components/ToastContainer';
 import { DateRangePicker } from './components/DateRangePicker';
 import { standardizeInterest } from './lib/interestUtils';
 import { fetchFirstPlacePhoto } from './lib/googlePlaces';
-import { Radar, Map as MapIcon, BookOpen, Package, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon, Locate, Sparkles, Plane, Flame, ExternalLink } from 'lucide-react';
+import { Radar, Map as MapIcon, BookOpen, Package, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon, Locate, Sparkles, Plane, Flame, ExternalLink, Flag } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'motion/react';
 import { useNomadStore } from './store';
 import { containsBlockedContent, cleanContent } from './lib/contentFilter';
@@ -186,6 +186,13 @@ const ReportModal = ({ isOpen, onClose, target }: { isOpen: boolean, onClose: ()
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Report Content">
       <div className="space-y-6">
+        <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-center gap-3">
+          <ShieldAlert className="w-5 h-5 text-amber-600" />
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 opacity-60">Reporting</p>
+            <p className="text-sm font-bold text-amber-900">{target.type}</p>
+          </div>
+        </div>
         {step === 1 ? (
           <>
             <div className="space-y-3">
@@ -253,11 +260,15 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
     { code: 'RU', name: 'Русский' }
   ];
 
-  const toggleIncognito = async () => {
+  const toggleGhostMode = async () => {
+    const nextVal = !currentUser.privacySettings?.isGhostMode;
+    if (nextVal) {
+      useNomadStore.getState().setRealTimeLocation(null);
+    }
     await updateProfile({
       privacySettings: {
         ...currentUser.privacySettings,
-        isIncognito: !currentUser.privacySettings?.isIncognito
+        isGhostMode: nextVal
       }
     });
   };
@@ -302,19 +313,19 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
           </div>
           <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
             <div>
-              <h4 className="font-bold text-secondary text-sm">Incognito Mode</h4>
-              <p className="text-[10px] text-slate-500 font-medium">Hide from matching radars</p>
+              <h4 className="font-bold text-secondary text-sm">Ghost Mode</h4>
+              <p className="text-[10px] text-slate-500 font-medium">Disable GPS sharing & hide from radars</p>
             </div>
             <button 
-              onClick={toggleIncognito}
+              onClick={toggleGhostMode}
               className={cn(
                 "w-12 h-6 rounded-full transition-colors relative",
-                currentUser.privacySettings?.isIncognito ? "bg-primary" : "bg-slate-200"
+                currentUser.privacySettings?.isGhostMode ? "bg-primary" : "bg-slate-200"
               )}
             >
               <div className={cn(
                 "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                currentUser.privacySettings?.isIncognito ? "left-7" : "left-1"
+                currentUser.privacySettings?.isGhostMode ? "left-7" : "left-1"
               )} />
             </button>
           </div>
@@ -460,7 +471,7 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
 
 // --- AdminDashboard handles ---
 const AdminDashboard = () => {
-  const { appSettings, updateAppSettings, profiles, deleteUser, updateUserRole, marketItems, removeMarketItem, spots, removeSpot, reports, moderateReport, moderateUser } = useNomadStore() as any;
+  const { appSettings, updateAppSettings, profiles, deleteUser, updateUserRole, marketItems, removeMarketItem, spots, removeSpot, reports, moderateReport, moderateUser, messages } = useNomadStore() as any;
   const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'content' | 'reports' | 'deals' | 'community' | 'seed'>('settings');
 
   const getReportSummary = (report: Report) => {
@@ -468,10 +479,28 @@ const AdminDashboard = () => {
       const user = profiles.find((p: FamilyProfile) => p.id === report.targetId);
       return user ? `User: ${user.familyName}` : 'Unknown User';
     }
-    if (report.targetType === 'Message') return 'Chat Message';
-    if (report.targetType === 'CollabAsk') {
-      return 'Collab Asset';
+    if (report.targetType === 'Message') {
+      // Find the message to show content snippet
+      let msgText = '';
+      if (messages) {
+        Object.values(messages).some((convoMsgs: any) => {
+          const msg = convoMsgs.find((m: any) => m.id === report.targetId);
+          if (msg) {
+            msgText = msg.text;
+            return true;
+          }
+          return false;
+        });
+      }
+      return msgText ? `Msg: ${msgText.substring(0, 40)}...` : 'Chat Message';
     }
+    if (report.targetType === 'CollabAsk') return 'Collab Asset';
+    if (report.targetType === 'LookingFor') return 'Looking For Request';
+    if (report.targetType === 'MarketItem') return 'Marketplace Item';
+    if (report.targetType === 'Deal') return 'Exclusive Deal';
+    if (report.targetType === 'Spot') return 'Vetted Spot';
+    if (report.targetType === 'Thread') return 'Forum Thread';
+    if (report.targetType === 'ThreadReply') return 'Forum Reply';
     return report.targetType;
   };
 
@@ -787,7 +816,7 @@ const AdminDashboard = () => {
                           <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                               report.status === 'resolved' ? 'bg-green-50 text-green-500' :
-                              report.category === 'CSAM' || report.category === 'Harassment' ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-500'
+                              report.category === 'IllegalContent' || report.category === 'Harassment' ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-500'
                             }`}>
                               <Shield className="w-5 h-5" />
                             </div>
@@ -812,8 +841,57 @@ const AdminDashboard = () => {
                           </span>
                         </div>
 
-                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 italic text-xs text-slate-500">
-                          "{report.description}"
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Reason</p>
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 italic text-xs text-slate-500">
+                            "{report.description || 'No description provided'}"
+                          </div>
+                        </div>
+
+                        {/* Content Preview/Context */}
+                        <div className="space-y-2">
+                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Context / Target</p>
+                           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs">
+                              {report.targetType === 'Message' && (
+                                <div className="space-y-1">
+                                  <p className="font-bold text-secondary">Message Content:</p>
+                                  <p className="text-slate-600 italic">"{(report as any)._contextData?.content || 'Message context not found'}"</p>
+                                  <p className="text-[9px] text-slate-400 mt-2">Sender ID: {(report as any)._contextData?.senderId || 'Unknown'}</p>
+                                </div>
+                              )}
+                              {report.targetType === 'MarketItem' && (
+                                <div className="flex items-center gap-3">
+                                  <p className="font-bold">Item ID:</p>
+                                  <p className="font-mono text-[10px]">{report.targetId}</p>
+                                </div>
+                              )}
+                              {(report.targetType === 'Thread' || report.targetType === 'ThreadReply') && (
+                                <div className="flex items-center gap-3">
+                                  <p className="font-bold">Forum Target ID:</p>
+                                  <p className="font-mono text-[10px]">{report.targetId}</p>
+                                </div>
+                              )}
+                              {report.targetType === 'User' && (
+                                <div className="flex items-center gap-3">
+                                  <p className="font-bold">User UID:</p>
+                                  <p className="font-mono text-[10px]">{report.targetId}</p>
+                                </div>
+                              )}
+                              <div className="mt-2 flex gap-2">
+                                <button 
+                                  onClick={() => {
+                                    const user = profiles.find((p: any) => p.id === ((report as any)._contextData?.senderId || report.targetId));
+                                    if (user) {
+                                      setActiveTab('users');
+                                      // Scroll or filter logic would go here ideally
+                                    }
+                                  }}
+                                  className="text-[9px] font-black text-primary uppercase tracking-widest hover:underline"
+                                >
+                                  View Related User
+                                </button>
+                              </div>
+                           </div>
                         </div>
                         
                         <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
@@ -837,7 +915,8 @@ const AdminDashboard = () => {
                                     <button 
                                       onClick={() => {
                                         moderateReport(report.id, 'resolved', 'Banned');
-                                        if (report.targetType === 'User') moderateUser(report.targetId, { isBanned: true });
+                                        const targetUid = (report as any)._contextData?.senderId || (report.targetType === 'User' ? report.targetId : null);
+                                        if (targetUid) moderateUser(targetUid, { isBanned: true });
                                       }}
                                       className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest"
                                     >
@@ -846,7 +925,8 @@ const AdminDashboard = () => {
                                     <button 
                                       onClick={() => {
                                         moderateReport(report.id, 'resolved', 'UGC_Revoked');
-                                        if (report.targetType === 'User') moderateUser(report.targetId, { ugcPrivilegesRevoked: true });
+                                        const targetUid = (report as any)._contextData?.senderId || (report.targetType === 'User' ? report.targetId : null);
+                                        if (targetUid) moderateUser(targetUid, { ugcPrivilegesRevoked: true });
                                       }}
                                       className="w-full text-left px-4 py-2 hover:bg-amber-50 text-amber-600 rounded-xl text-[10px] font-black uppercase tracking-widest"
                                     >
@@ -854,10 +934,23 @@ const AdminDashboard = () => {
                                     </button>
                                     <button 
                                       onClick={() => {
+                                        if (report.targetType === 'MarketItem') removeMarketItem(report.targetId);
+                                        if (report.targetType === 'Thread') useNomadStore.getState().deleteThread(report.targetId);
+                                        if (report.targetType === 'ThreadReply') useNomadStore.getState().deleteReply(report.targetId);
+                                        if (report.targetType === 'Spot') removeSpot(report.targetId);
+                                        moderateReport(report.id, 'resolved', 'ContentRemoved');
+                                      }}
+                                      className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                                    >
+                                      Delete Item
+                                    </button>
+                                    <button 
+                                      onClick={() => {
                                         moderateReport(report.id, 'resolved', 'Warned');
-                                        if (report.targetType === 'User') {
-                                          const user = profiles.find((p: any) => p.id === report.targetId);
-                                          moderateUser(report.targetId, { warnings: (user?.warnings || 0) + 1 });
+                                        const targetUid = (report as any)._contextData?.senderId || (report.targetType === 'User' ? report.targetId : null);
+                                        if (targetUid) {
+                                          const user = profiles.find((p: any) => p.id === targetUid);
+                                          moderateUser(targetUid, { warnings: (user?.warnings || 0) + 1 });
                                         }
                                       }}
                                       className="w-full text-left px-4 py-2 hover:bg-slate-50 text-secondary rounded-xl text-[10px] font-black uppercase tracking-widest"
@@ -1079,14 +1172,15 @@ const VoteControls = ({ post, collection, dark }: { post: any, collection: 'mark
 
 const MarketplaceView = ({ 
   onBack, onContactSeller, collabMode, onPaywall,
-  isAddItemOpen, setIsAddItemOpen
+  isAddItemOpen, setIsAddItemOpen, onReport
 }: { 
   onBack: () => void, 
   onContactSeller: (item: MarketItem) => void, 
   collabMode?: boolean, 
   onPaywall: () => void,
   isAddItemOpen: boolean,
-  setIsAddItemOpen: (open: boolean) => void
+  setIsAddItemOpen: (open: boolean) => void,
+  onReport: (id: string) => void
 }) => {
   const { marketItems, currentUser, reserveItem, cancelReservation, addItem, addLookingFor, processPayment, addToast, dataSaver } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
@@ -1282,19 +1376,13 @@ const MarketplaceView = ({
                       </button>
                     </PremiumAction>
                     <button 
-                      onClick={() => {
-                        const reason = prompt("Why are you reporting this item?");
-                        if (reason) {
-                          useNomadStore.getState().reportContent(item.id, 'MarketItem', reason);
-                          addToast("Report sent.", "info");
-                        }
-                      }}
+                      onClick={() => onReport(item.id)}
                       className={cn(
                         "p-2.5 rounded-xl border transition-all hover:text-red-400",
                         collabMode ? "bg-white/5 border-white/10 text-white/40" : "bg-slate-50 text-slate-400 border-slate-100"
                       )}
                     >
-                      <Info className="w-4 h-4" />
+                      <ShieldAlert className="w-4 h-4" />
                     </button>
                   </>
                 ) : item.reservedBy === currentUser?.id ? (
@@ -1339,7 +1427,7 @@ const MarketplaceView = ({
             mode: 'Sell',
             imageUrls: newItem.imageUrls,
             meetingPlace: newItem.meetingPlace,
-            place: newItem.place || undefined,
+            place: newItem.place || null,
             location: newItem.place ? `${newItem.place.city}, ${newItem.place.country}` : 'Unknown',
             lat: newItem.place?.lat || 0,
             lng: newItem.place?.lng || 0,
@@ -1423,7 +1511,7 @@ const MarketplaceView = ({
             id: `lf-${Date.now()}`,
             userId: currentUser?.id || '',
             familyName: currentUser?.familyName || '',
-            place: newRequest.place || undefined,
+            place: newRequest.place || null,
             location: newRequest.place ? `${newRequest.place.city}, ${newRequest.place.country}` : 'Current Location',
             lat: newRequest.place?.lat || 0,
             lng: newRequest.place?.lng || 0,
@@ -1457,7 +1545,7 @@ const MarketplaceView = ({
   );
 };
 
-const DealsView = ({ onBack, onPaywall }: { onBack: () => void, onPaywall: () => void }) => {
+const DealsView = ({ onBack, onPaywall, onReport }: { onBack: () => void, onPaywall: () => void, onReport: (id: string, type: Report['targetType']) => void }) => {
   const { deals, currentUser, trackDealClick } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [filter, setFilter] = useState('All');
@@ -1501,7 +1589,7 @@ const DealsView = ({ onBack, onPaywall }: { onBack: () => void, onPaywall: () =>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filtered.map(deal => (
-          <DealCard key={deal.id} deal={deal} />
+          <DealCard key={deal.id} deal={deal} onReport={onReport} />
         ))}
         {filtered.length === 0 && (
           <div className="col-span-full py-24 text-center bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
@@ -1519,11 +1607,13 @@ const DealDetailModal = ({
   isOpen,
   onClose,
   onCtaClick,
+  onReport
 }: {
   deal: Deal;
   isOpen: boolean;
   onClose: () => void;
   onCtaClick: () => void;
+  onReport: (id: string, type: Report['targetType']) => void;
 }) => (
   <Modal isOpen={isOpen} onClose={onClose} title="" fullScreen>
     <div className="max-w-2xl mx-auto pb-8">
@@ -1630,8 +1720,7 @@ const DealDetailModal = ({
       <div className="text-center mt-6">
         <button
           onClick={() => {
-            // Report logic would go here if needed
-            useNomadStore.getState().addToast("Reported for review. Thanks!", "info");
+            onReport(deal.id, 'Deal');
           }}
           className="text-[9px] font-black text-slate-300 hover:text-red-400 uppercase tracking-widest transition-colors"
         >
@@ -1642,7 +1731,7 @@ const DealDetailModal = ({
   </Modal>
 );
 
-const DealCard = ({ deal }: { deal: Deal }) => {
+const DealCard = ({ deal, onReport }: { deal: Deal; onReport: (id: string, type: Report['targetType']) => void }) => {
   const { trackDealClick, trackDealImpression } = useNomadStore();
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   
@@ -1739,6 +1828,7 @@ const DealCard = ({ deal }: { deal: Deal }) => {
           handleCtaClick();
           setIsDetailOpen(false);
         }}
+        onReport={onReport}
       />
     </>
   );
@@ -1899,7 +1989,7 @@ const TribeView = ({
     if (!currentUser || !activeNode) return [];
     return profiles.filter(p => {
        if (p.id === currentUser.id) return false;
-       if (p.privacySettings?.isIncognito) return false;
+       if (p.privacySettings?.isGhostMode) return false;
        
        // Always show connects regardless of location
        const conn = getConnection(p.id);
@@ -1923,7 +2013,7 @@ const TribeView = ({
 
     return profiles.filter(p => {
       if (p.id === currentUser?.id) return false;
-      if (p.privacySettings?.isIncognito) return false;
+      if (p.privacySettings?.isGhostMode) return false;
       if (isBlocked(p.id, currentUser, blocks)) return false;
 
       // Check if they have a trip to the same city with overlap
@@ -2067,14 +2157,14 @@ const TribeView = ({
         id: `lf-${Date.now()}`,
         userId: currentUser.id,
         familyName: currentUser.familyName,
-        place: newRequest.place || undefined,
+        place: newRequest.place || null,
         location: newRequest.place ? `${newRequest.place.city}, ${newRequest.place.country}` : activeNode.label,
         lat: newRequest.place?.lat || activeNode.lat,
         lng: newRequest.place?.lng || activeNode.lng,
         category: newRequest.category,
         title: cleanContent(newRequest.title),
         description: cleanContent(newRequest.description),
-        date: newRequest.category === 'Playdate' ? newRequest.date : undefined,
+        date: newRequest.category === 'Playdate' ? newRequest.date : null,
         createdAt: new Date().toISOString()
       };
       await addLookingFor(request);
@@ -2133,7 +2223,7 @@ const TribeView = ({
       imageUrls: newItem.imageUrls,
       meetingPlace: newItem.meetingPlace,
       status: 'Available',
-      place: newItem.place || undefined,
+      place: newItem.place || null,
       location: newItem.place ? `${newItem.place.city}, ${newItem.place.country}` : activeNode.label,
       lat: newItem.place?.lat || activeNode.lat,
       lng: newItem.place?.lng || activeNode.lng,
@@ -2157,7 +2247,7 @@ const TribeView = ({
       description: newEvent.description,
       date: newEvent.date,
       time: newEvent.time,
-      place: newEvent.place || undefined,
+      place: newEvent.place || null,
       location: newEvent.place ? `${newEvent.place.city}, ${newEvent.place.country}` : activeNode.label,
       lat: newEvent.place?.lat || activeNode.lat,
       lng: newEvent.place?.lng || activeNode.lng,
@@ -2660,7 +2750,7 @@ const TribeView = ({
               <div className="flex gap-6 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 snap-x">
                 {filteredDeals.map(deal => (
                   <div key={deal.id} className="min-w-[300px] max-w-[320px] snap-start">
-                    <DealCard deal={deal} />
+                    <DealCard deal={deal} onReport={setReportingTarget ? (id, type) => setReportingTarget({ id, type }) : undefined} />
                   </div>
                 ))}
               </div>
@@ -3449,7 +3539,7 @@ const CollabOpportunitySummary = ({ onUpgrade, stats }: { onUpgrade: () => void,
   );
 };
 
-const ConnectView = ({ onPaywall, onSayHello }: { onPaywall: () => void, onSayHello: (family: FamilyProfile, msg: string) => void }) => {
+const ConnectView = ({ onPaywall, onSayHello, onReport }: { onPaywall: () => void, onSayHello: (family: FamilyProfile, msg: string) => void, onReport: (id: string, type: Report['targetType']) => void }) => {
   const { currentUser, profiles, conversations, messages, sendMessage, subscribeToMessages, connections, acceptConnection, cancelConnection, addToast, trips, collabMode, notifications, markNotificationRead, lookingFor } = useNomadStore();
   const [activeConvoId, setActiveConvoId] = useState<string | null>(null);
   const [activePortalTab, setActivePortalTab] = useState<'chat' | 'notifications'>('chat');
@@ -3875,6 +3965,15 @@ const ConnectView = ({ onPaywall, onSayHello }: { onPaywall: () => void, onSayHe
                       )}
                     >
                       {msg.content}
+                      {!isMine && (
+                        <button 
+                          onClick={() => onReport(msg.id, 'Message')}
+                          className="absolute -top-2 -right-2 p-1.5 bg-white rounded-full shadow-lg border border-slate-100 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all z-20"
+                          title="Report Message"
+                        >
+                          <Flag className="w-3 h-3" />
+                        </button>
+                      )}
                       <div className={cn(
                         "text-[9px] mt-1 flex items-center justify-end gap-1 font-bold",
                         isMine ? "text-white/70" : "text-slate-400"
@@ -3939,7 +4038,8 @@ const TribeNearbyView = ({
   isAddEventOpen,
   setIsAddEventOpen,
   isRecommendSpotOpen,
-  setIsRecommendSpotOpen
+  setIsRecommendSpotOpen,
+  onReport
 }: { 
   onPaywall: () => void, 
   onViewAllDeals: () => void, 
@@ -3957,7 +4057,8 @@ const TribeNearbyView = ({
   isAddEventOpen: boolean,
   setIsAddEventOpen: (open: boolean) => void,
   isRecommendSpotOpen: boolean,
-  setIsRecommendSpotOpen: (open: boolean) => void
+  setIsRecommendSpotOpen: (open: boolean) => void,
+  onReport: (id: string, type: Report['targetType']) => void
 }) => {
   const { spots, destinations, currentUser, trips, marketItems, lookingFor, addLookingFor, removeLookingFor, removeMarketItem, removeSpot, reserveItem, reviews, profiles, collabMode, blocks, tribeRadius, setTribeRadius, deals } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
@@ -4035,14 +4136,14 @@ const TribeNearbyView = ({
         id: `lf-${Date.now()}`,
         userId: currentUser.id,
         familyName: currentUser.familyName,
-        place: newRequest.place || undefined,
+        place: newRequest.place || null,
         location: newRequest.place ? `${newRequest.place.city}, ${newRequest.place.country}` : activeLocation.name,
         lat: newRequest.place?.lat || activeLocation.lat,
         lng: newRequest.place?.lng || activeLocation.lng,
         category: newRequest.category,
         title: cleanContent(newRequest.title),
         description: cleanContent(newRequest.description),
-        date: newRequest.category === 'Playdate' ? newRequest.date : undefined,
+        date: newRequest.category === 'Playdate' ? newRequest.date : null,
         createdAt: new Date().toISOString()
       };
       await addLookingFor(request);
@@ -4066,7 +4167,7 @@ const TribeNearbyView = ({
     if (!currentUser) return [];
     return profiles.filter(p => {
        if (p.id === currentUser.id) return false;
-       if (p.privacySettings?.isIncognito) return false;
+       if (p.privacySettings?.isGhostMode) return false;
        if (blocks.some(b => (b.blockerId === currentUser.id && b.blockedId === p.id) || (b.blockerId === p.id && b.blockedId === currentUser.id))) return false;
        
        // Distance filter (100km radius for families)
@@ -4364,14 +4465,23 @@ const TribeNearbyView = ({
                 )}>
                   {request.category}
                 </span>
-                {currentUser?.id === request.userId && (
-                  <button 
-                    onClick={() => removeLookingFor(request.id)}
-                    className={cn("transition-colors", collabMode ? "text-white/20 hover:text-red-400" : "text-slate-300 hover:text-red-500")}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
+                <div className="flex gap-2">
+                  {currentUser?.id === request.userId ? (
+                    <button 
+                      onClick={() => removeLookingFor(request.id)}
+                      className={cn("transition-colors", collabMode ? "text-white/20 hover:text-red-400" : "text-slate-300 hover:text-red-500")}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => onReport(request.id, 'LookingFor')}
+                      className={cn("transition-colors", collabMode ? "text-white/20 hover:text-amber-500" : "text-slate-200 hover:text-amber-500")}
+                    >
+                      <ShieldAlert className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
               <h3 className={cn("font-bold mb-1 line-clamp-1", collabMode ? "text-white" : "text-secondary")}>{request.title}</h3>
               <p className={cn("text-xs mb-4 line-clamp-2", collabMode ? "text-white/60" : "text-slate-500")}>{request.description}</p>
@@ -4434,12 +4544,19 @@ const TribeNearbyView = ({
               <div className="h-32 bg-slate-100 relative">
                 <img src={item.imageUrl || `https://picsum.photos/seed/${item.id}/400/300`} alt="" className="w-full h-full object-cover" />
                 <div className="absolute top-3 right-3 flex gap-2">
-                  {currentUser?.id === item.sellerId && (
+                  {currentUser?.id === item.sellerId ? (
                     <button 
                       onClick={() => removeMarketItem(item.id)}
-                      className="bg-white/90 backdrop-blur-sm p-1.5 rounded-lg text-red-500 shadow-sm"
+                      className="bg-white/90 backdrop-blur-sm p-1.5 rounded-lg text-red-500 shadow-sm hover:bg-red-50 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => onReport(item.id, 'MarketItem')}
+                      className="bg-white/90 backdrop-blur-sm p-1.5 rounded-lg text-amber-500 shadow-sm hover:bg-amber-50 transition-colors"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
                     </button>
                   )}
                   <div className="bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-black text-secondary">
@@ -4495,12 +4612,19 @@ const TribeNearbyView = ({
               <div className="h-40 bg-slate-100 relative overflow-hidden">
                 <img src={spot.imageUrl || `https://picsum.photos/seed/${spot.id}/600/400`} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 <div className="absolute top-3 right-3 flex gap-2">
-                  {currentUser?.id === spot.recommendedBy && (
+                  {currentUser?.id === spot.recommendedBy ? (
                     <button 
                       onClick={() => removeSpot(spot.id)}
                       className="bg-white/90 backdrop-blur-sm p-1.5 rounded-lg text-red-500 shadow-sm"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => onReport(spot.id, 'Spot')}
+                      className="bg-white/90 backdrop-blur-sm p-1.5 rounded-lg text-amber-500 shadow-sm hover:bg-amber-50 transition-colors"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
                     </button>
                   )}
                   <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg flex items-center gap-1 text-[10px] font-black text-secondary">
@@ -4600,7 +4724,16 @@ const TribeNearbyView = ({
               <div className="flex-1 space-y-2">
                 <div className="flex justify-between items-start">
                   <h3 className={cn("font-bold text-lg", collabMode ? "text-white" : "text-secondary")}>{spot.name}</h3>
-                  <span className="bg-accent text-white px-2 py-1 rounded-lg text-[10px] font-black">{spot.discountLabel}</span>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => onReport(spot.id, 'Deal')}
+                      className="p-1 px-2 bg-white/10 hover:bg-white/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors flex items-center gap-1"
+                      title="Report Deal"
+                    >
+                      <Flag className="w-3 h-3" />
+                    </button>
+                    <span className="bg-accent text-white px-2 py-1 rounded-lg text-[10px] font-black">{spot.discountLabel}</span>
+                  </div>
                 </div>
                 <p className={cn("text-sm font-medium", collabMode ? "text-white/60" : "text-slate-600")}>{spot.description}</p>
                 <div className="flex items-center gap-2 pt-2">
@@ -7014,8 +7147,13 @@ export default function App() {
   const labels = useModeLabels();
   const { hasCollabAccess } = useCollabAccess();
 
+  const isSharingInProgress = useRef(false);
+
   useEffect(() => {
     if (!navigator.geolocation) return;
+    if (currentUser?.privacySettings?.isGhostMode) {
+      return;
+    }
 
     const watchId = navigator.geolocation.watchPosition(
       async (position) => {
@@ -7112,7 +7250,7 @@ export default function App() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [currentUser?.privacySettings?.isGhostMode]);
   const [isAddPastPlaceOpen, setIsAddPastPlaceOpen] = useState(false);
   const [newPastPlace, setNewPastPlace] = useState<{ place: PlaceResult | null, year: number }>({ place: null, year: new Date().getFullYear() });
 
@@ -7509,7 +7647,9 @@ export default function App() {
     );
   }
 
-  const handleShareProfile = () => {
+  const handleShareProfile = async () => {
+    if (isSharingInProgress.current) return;
+    
     const shareData = {
       title: 'NomadTribe Profile',
       text: `Check out ${currentUser?.familyName}'s profile on NomadTribe!`,
@@ -7517,13 +7657,18 @@ export default function App() {
     };
 
     if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-      navigator.share(shareData).catch(err => {
+      isSharingInProgress.current = true;
+      try {
+        await navigator.share(shareData);
+      } catch (err: any) {
         // Only log if it's not a user cancellation
         if (err.name !== 'AbortError') {
           console.error("Share failed:", err);
+          copyToClipboard();
         }
-        copyToClipboard();
-      });
+      } finally {
+        isSharingInProgress.current = false;
+      }
     } else {
       copyToClipboard();
     }
@@ -7623,6 +7768,7 @@ export default function App() {
           onPaywall={() => setIsPaywallOpen(true)}
           isAddItemOpen={isAddItemOpen}
           setIsAddItemOpen={setIsAddItemOpen}
+          onReport={(id) => setReportingTarget({ id, type: 'MarketItem' })}
         />
       );
       case 'community': return (
@@ -8599,6 +8745,7 @@ export default function App() {
                     setIsPaywallOpen(true);
                   }} 
                   onSayHello={handleSayHello}
+                  onReport={(id, type) => setReportingTarget({ id, type })}
                 />
               </div>
             </motion.div>

@@ -102,7 +102,7 @@ const AdminDealsTab = () => {
         location: newDeal.place ? `${newDeal.place.city}, ${newDeal.place.country}` : newDeal.location,
         lat: newDeal.place?.lat || newDeal.lat,
         lng: newDeal.place?.lng || newDeal.lng,
-        place: newDeal.place || undefined
+        place: newDeal.place || null
       };
 
       if (editingDeal) {

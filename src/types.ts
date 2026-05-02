@@ -81,7 +81,7 @@ export interface LookingForRequest {
 }
 
 export interface PrivacySettings {
-  isIncognito: boolean; // Default: false. If true, user is hidden from all matching radars.
+  isGhostMode: boolean; // Default: false. If true, user is hidden from all matching radars and GPS sharing is disabled.
 }
 
 export interface Connection {
@@ -196,7 +196,7 @@ export interface Report {
   id: string;
   reporterId: string;
   targetId: string;
-  targetType: 'User' | 'Message' | 'Spot' | 'MarketItem' | 'CollabAsk' | 'Thread' | 'ThreadReply' | 'LookingFor' | 'Event';
+  targetType: 'User' | 'Message' | 'Spot' | 'MarketItem' | 'CollabAsk' | 'Thread' | 'ThreadReply' | 'LookingFor' | 'Event' | 'Deal';
   category: 'Harassment' | 'Spam' | 'IllegalContent' | 'FakeProfile' | 'DangerousLocation';
   description?: string;
   status: 'Pending' | 'Reviewed' | 'Resolved' | 'Dismissed';
