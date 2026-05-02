@@ -3,6 +3,7 @@ import { cn } from '../../lib/utils';
 import { MapPin, Calendar, Plus, X, Search } from 'lucide-react';
 import { Trip, PlaceResult } from '../../types';
 import { PlacesAutocomplete } from '../PlacesAutocomplete';
+import { useNomadStore } from '../../store';
 
 interface Step3Props {
   trips: Trip[];
@@ -68,33 +69,59 @@ export const Step3Trip: React.FC<Step3Props> = ({ trips, onChange }) => {
             </div>
 
             <div className="space-y-4">
-              <PlacesAutocomplete 
-                label="Location"
-                placeholder="Where are you going? (e.g. Bali, Indonesia)"
-                value={trip.place || null}
-                searchType="cities"
-                onChange={(place) => {
-                  if (place) {
-                    updateTrip(trip.id, {
-                      place,
-                      location: `${place.city}, ${place.country}`,
-                      lat: place.lat,
-                      lng: place.lng,
-                      citySlug: place.city.toLowerCase().replace(/\s+/g, '-'),
-                      countryCode: place.countryCode
-                    });
-                  } else {
-                    updateTrip(trip.id, {
-                      place: undefined,
-                      location: '',
-                      lat: 0,
-                      lng: 0,
-                      citySlug: undefined,
-                      countryCode: undefined
-                    });
-                  }
-                }}
-              />
+              <div className="relative">
+                <PlacesAutocomplete 
+                  label="Location"
+                  placeholder="Where are you going? (e.g. Bali, Indonesia)"
+                  value={trip.place || null}
+                  searchType="cities"
+                  onChange={(place) => {
+                    if (place) {
+                      updateTrip(trip.id, {
+                        place,
+                        location: `${place.city}, ${place.country}`,
+                        lat: place.lat,
+                        lng: place.lng,
+                        citySlug: place.city.toLowerCase().replace(/\s+/g, '-'),
+                        countryCode: place.countryCode
+                      });
+                    } else {
+                      updateTrip(trip.id, {
+                        place: undefined,
+                        location: '',
+                        lat: 0,
+                        lng: 0,
+                        citySlug: undefined,
+                        countryCode: undefined
+                      });
+                    }
+                  }}
+                />
+                
+                {index === 0 && !trip.place && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const realLoc = useNomadStore.getState().realTimeLocation;
+                      if (realLoc) {
+                        updateTrip(trip.id, {
+                          place: realLoc,
+                          location: `${realLoc.city}, ${realLoc.country}`,
+                          lat: realLoc.lat,
+                          lng: realLoc.lng,
+                          citySlug: realLoc.city.toLowerCase().replace(/\s+/g, '-'),
+                          countryCode: realLoc.countryCode
+                        });
+                      } else {
+                        useNomadStore.getState().addToast("Waiting for GPS location...", "info");
+                      }
+                    }}
+                    className="absolute top-0 right-0 text-[9px] font-black text-primary uppercase tracking-widest hover:underline"
+                  >
+                    Use Current Location
+                  </button>
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">

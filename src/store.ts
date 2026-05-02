@@ -100,9 +100,13 @@ interface NomadStore {
   threadReplies: any[];
   topicFollows: any[];
   threadFollows: any[];
-  hashtags: any[];
   hashtagFollows: any[];
+  hashtags: any[];
   isAuthReady: boolean;
+  isPaywallOpen: boolean;
+  setIsPaywallOpen: (isOpen: boolean) => void;
+  dataSaver: boolean;
+  setDataSaver: (enabled: boolean) => void;
   collabMode: boolean;
   activeTab: 'tribe' | 'connect' | 'tribe-nearby' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin' | 'community';
   toasts: { id: string; message: string; type: 'success' | 'error' | 'info' }[];
@@ -194,6 +198,9 @@ interface NomadStore {
   // Deals
   addDeal: (deal: Omit<Deal, 'id' | 'createdAt' | 'impressions' | 'clicks' | 'reportToken'>) => Promise<void>;
   updateDeal: (dealId: string, updates: Partial<Deal>) => Promise<void>;
+  archiveDeal: (dealId: string) => Promise<void>;
+  unarchiveDeal: (dealId: string) => Promise<void>;
+  deleteDeal: (dealId: string) => Promise<void>;
   trackDealClick: (dealId: string) => Promise<void>;
   trackDealImpression: (dealId: string) => Promise<void>;
 
@@ -221,6 +228,9 @@ interface NomadStore {
   setTribeRadius: (radius: number) => void;
   realTimeLocation: PlaceResult | null;
   setRealTimeLocation: (loc: PlaceResult | null) => void;
+  mergeProfiles: (incoming: FamilyProfile[]) => void;
+  mergeSpots: (incoming: Spot[]) => void;
+  mergeTrips: (incoming: Trip[]) => void;
   
   // Admin Actions
   updateAppSettings: (settings: Partial<AppSettings>) => Promise<void>;
@@ -272,6 +282,10 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   reports: [],
   blocks: [],
   isAuthReady: false,
+  isPaywallOpen: false,
+  setIsPaywallOpen: (isOpen) => set({ isPaywallOpen: isOpen }),
+  dataSaver: false,
+  setDataSaver: (enabled) => set({ dataSaver: enabled }),
   collabMode: false,
   activeTab: 'tribe',
   toasts: [],
@@ -282,6 +296,33 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   setIsLocationModalOpen: (open) => set({ isLocationModalOpen: open }),
   setTribeRadius: (radius) => set({ tribeRadius: radius }),
   setRealTimeLocation: (loc) => set({ realTimeLocation: loc }),
+
+  mergeProfiles: (incoming: FamilyProfile[]) => {
+    set(state => {
+      const map = new Map<string, FamilyProfile>();
+      state.profiles.forEach(p => map.set(p.id, p));
+      incoming.forEach(p => map.set(p.id, p));
+      return { profiles: Array.from(map.values()) };
+    });
+  },
+
+  mergeSpots: (incoming: Spot[]) => {
+    set(state => {
+      const map = new Map<string, Spot>();
+      state.spots.forEach(s => map.set(s.id, s));
+      incoming.forEach(s => map.set(s.id, s));
+      return { spots: Array.from(map.values()) };
+    });
+  },
+
+  mergeTrips: (incoming: Trip[]) => {
+    set(state => {
+      const map = new Map<string, Trip>();
+      state.trips.forEach(t => map.set(t.id, t));
+      incoming.forEach(t => map.set(t.id, t));
+      return { trips: Array.from(map.values()) };
+    });
+  },
 
   addToast: (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -412,15 +453,15 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
             
             // Admin only listeners
             if (updatedData.role === 'SuperAdmin') {
-              unsubscribes.push(onSnapshot(collection(db, 'reports'), (snapshot) => {
+              unsubscribes.push(onSnapshot(query(collection(db, 'reports'), limit(200)), (snapshot) => {
                 set({ reports: snapshot.docs.map(d => d.data() as Report) });
               }, (err) => handleFirestoreError(err, OperationType.LIST, 'reports')));
               
-              unsubscribes.push(onSnapshot(query(collection(db, 'deals'), where('id', '>=', '')), (snapshot) => {
+              unsubscribes.push(onSnapshot(query(collection(db, 'deals'), limit(200)), (snapshot) => {
                 set({ adminDeals: snapshot.docs.map(d => d.data() as Deal) });
               }, (err) => handleFirestoreError(err, OperationType.LIST, 'deals')));
 
-              unsubscribes.push(onSnapshot(collection(db, 'advertisers'), (snapshot) => {
+              unsubscribes.push(onSnapshot(query(collection(db, 'advertisers'), limit(100)), (snapshot) => {
                 set({ advertisers: snapshot.docs.map(d => d.data() as Advertiser) });
               }, (err) => handleFirestoreError(err, OperationType.LIST, 'advertisers')));
 
@@ -496,11 +537,20 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           set({ blocks: snapshot.docs.map(d => d.data() as BlockedUser) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'blocks')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'destinations'), (snapshot) => {
-          set({ destinations: snapshot.docs.map(d => d.data() as DestinationGuidance) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'destinations')));
+        // One-time fetch for static/semi-static data (Cities, Destinations, CityEvents)
+        getDocs(query(collection(db, 'destinations'), limit(100))).then(snap => {
+          set({ destinations: snap.docs.map(d => d.data() as DestinationGuidance) });
+        }).catch(err => handleFirestoreError(err, OperationType.LIST, 'destinations'));
 
-        unsubscribes.push(onSnapshot(query(collection(db, 'notifications'), where('userId', '==', firebaseUser.uid)), (snapshot) => {
+        getDocs(query(collection(db, 'cities'), limit(300))).then(snap => {
+          set({ cities: snap.docs.map(d => d.data() as CityProfile) });
+        }).catch(err => handleFirestoreError(err, OperationType.LIST, 'cities'));
+
+        getDocs(query(collection(db, 'cityEvents'), limit(200))).then(snap => {
+          set({ cityEvents: snap.docs.map(d => d.data() as CityEvent) });
+        }).catch(err => handleFirestoreError(err, OperationType.LIST, 'cityEvents'));
+
+        unsubscribes.push(onSnapshot(query(collection(db, 'notifications'), where('userId', '==', firebaseUser.uid), limit(50)), (snapshot) => {
           set({ notifications: snapshot.docs.map(d => d.data() as AppNotification) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'notifications')));
         
@@ -508,23 +558,21 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           set({ pastPlaces: snapshot.docs.map(d => d.data() as PastPlace) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'pastPlaces')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'trips'), (snapshot) => {
-          set({ trips: snapshot.docs.map(d => d.data() as Trip) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'trips')));
+        // Trips: User's trips + small subset of recent public trips for matching
+        unsubscribes.push(onSnapshot(query(collection(db, 'trips'), where('familyId', '==', firebaseUser.uid)), (snapshot) => {
+          get().mergeTrips(snapshot.docs.map(d => d.data() as Trip));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'trips/user')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'opportunities'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'trips'), limit(200)), (snapshot) => {
+          get().mergeTrips(snapshot.docs.map(d => d.data() as Trip));
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'trips/recent')));
+
+        unsubscribes.push(onSnapshot(query(collection(db, 'opportunities'), limit(100)), (snapshot) => {
           set({ opportunities: snapshot.docs.map(d => d.data() as Opportunity) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'opportunities')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'cities'), (snapshot) => {
-          set({ cities: snapshot.docs.map(d => d.data() as CityProfile) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'cities')));
-
-        unsubscribes.push(onSnapshot(collection(db, 'cityEvents'), (snapshot) => {
-          set({ cityEvents: snapshot.docs.map(d => d.data() as CityEvent) });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'cityEvents')));
-
-        unsubscribes.push(onSnapshot(collection(db, 'events'), (snapshot) => {
+        const today = new Date().toISOString().split('T')[0];
+        unsubscribes.push(onSnapshot(query(collection(db, 'events'), where('endDate', '>=', today), limit(100)), (snapshot) => {
           set({ events: snapshot.docs.map(d => {
             const data = d.data() as PopUpEvent;
             return {
@@ -535,7 +583,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           }) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'events')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'marketplace'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'marketplace'), limit(100)), (snapshot) => {
           set({ marketItems: snapshot.docs.map(d => {
             const data = d.data() as MarketItem;
             return {
@@ -546,7 +594,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           }) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'marketplace')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'lookingFor'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'lookingFor'), limit(100)), (snapshot) => {
           set({ lookingFor: snapshot.docs.map(d => {
             const data = d.data() as LookingForRequest;
             return {
@@ -557,13 +605,12 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           }) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'lookingFor')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'users'), (snapshot) => {
-          const allProfiles = snapshot.docs.map(d => ({ ...(d.data() as FamilyProfile), id: d.id }));
-          console.log(`[Admin] Loaded ${allProfiles.length} user profiles`);
-          set({ profiles: allProfiles });
-        }, (err) => handleFirestoreError(err, OperationType.LIST, 'users')));
+        unsubscribes.push(onSnapshot(query(collection(db, 'users'), limit(50)), (snapshot) => {
+          const incoming = snapshot.docs.map(d => ({ ...(d.data() as FamilyProfile), id: d.id }));
+          get().mergeProfiles(incoming);
+        }, (err) => handleFirestoreError(err, OperationType.LIST, 'users/recent')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'spots'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'spots'), limit(200)), (snapshot) => {
           set({ spots: snapshot.docs.map(d => {
             const data = d.data() as Spot;
             return {
@@ -574,16 +621,16 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
           }) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'spots')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'collabAsks'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'collabAsks'), limit(100)), (snapshot) => {
           set({ collabAsks: snapshot.docs.map(d => d.data() as CollabAsk) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabAsks')));
 
-        unsubscribes.push(onSnapshot(collection(db, 'collabEndorsements'), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'collabEndorsements'), limit(100)), (snapshot) => {
           set({ collabEndorsements: snapshot.docs.map(d => d.data() as CollabEndorsement) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'collabEndorsements')));
 
         unsubscribes.push(onSnapshot(
-          query(collection(db, 'deals'), where('status', '==', 'Active')),
+          query(collection(db, 'deals'), where('status', '==', 'Active'), limit(100)),
           (snapshot) => { set({ deals: snapshot.docs.map(d => d.data() as Deal) }); },
           (err) => handleFirestoreError(err, OperationType.LIST, 'deals')
         ));
@@ -592,7 +639,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         
         // Topics: load all
         unsubscribes.push(onSnapshot(
-          query(collection(db, 'topics'), orderBy('order')),
+          query(collection(db, 'topics'), orderBy('order'), limit(100)),
           (snap) => set({ topics: snap.docs.map(d => {
             const data = d.data();
             return {
@@ -605,17 +652,17 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
         // User-specific: their topic + thread follows
         unsubscribes.push(onSnapshot(
-          query(collection(db, 'topicFollows'), where('userId', '==', firebaseUser.uid)),
+          query(collection(db, 'topicFollows'), where('userId', '==', firebaseUser.uid), limit(200)),
           (snap) => set({ topicFollows: snap.docs.map(d => d.data()) })
         ));
         
         unsubscribes.push(onSnapshot(
-          query(collection(db, 'threadFollows'), where('userId', '==', firebaseUser.uid)),
+          query(collection(db, 'threadFollows'), where('userId', '==', firebaseUser.uid), limit(200)),
           (snap) => set({ threadFollows: snap.docs.map(d => d.data()) })
         ));
 
         unsubscribes.push(onSnapshot(
-          query(collection(db, 'hashtagFollows'), where('userId', '==', firebaseUser.uid)),
+          query(collection(db, 'hashtagFollows'), where('userId', '==', firebaseUser.uid), limit(200)),
           (snap) => set({ hashtagFollows: snap.docs.map(d => d.data()) })
         ));
 
@@ -625,12 +672,12 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         ));
 
         // Connections: Use array-contains for participantIds
-        unsubscribes.push(onSnapshot(query(collection(db, 'connections'), where('participantIds', 'array-contains', firebaseUser.uid)), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'connections'), where('participantIds', 'array-contains', firebaseUser.uid), limit(500)), (snapshot) => {
           set({ connections: snapshot.docs.map(d => d.data() as Connection) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'connections')));
 
         // Conversations: Use array-contains for participantIds
-        unsubscribes.push(onSnapshot(query(collection(db, 'conversations'), where('participantIds', 'array-contains', firebaseUser.uid)), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'conversations'), where('participantIds', 'array-contains', firebaseUser.uid), limit(500)), (snapshot) => {
           set({ conversations: snapshot.docs.map(d => d.data() as Conversation) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'conversations')));
 
@@ -695,10 +742,13 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         scheduledDate.setHours(14, 0, 0, 0);
         
         const locName = profile.currentLocation.city || profile.currentLocation.name;
+        // Deterministic ID for today/city to prevent duplicates
+        const todayStr = now.toISOString().split('T')[0];
+        const deterministicId = `vibe-${userId}-${locName.replace(/\s+/g, '-').toLowerCase()}-${todayStr}`;
         
         try {
           const notification: AppNotification = {
-            id: `notif-${Date.now()}`,
+            id: deterministicId,
             userId,
             title: 'Vibe Check! 🌍',
             message: `Hey Pioneer! Is the vibe in ${locName} still as good as we think? Help the Tribe with a quick check!`,
@@ -708,7 +758,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
             scheduledFor: scheduledDate.toISOString(),
             createdAt: now.toISOString()
           };
-          await setDoc(doc(db, 'notifications', notification.id), notification);
+          // setDoc with specific ID will overwrite or skip if same day
+          await setDoc(doc(db, 'notifications', deterministicId), notification, { merge: true });
         } catch (err) {
           console.warn('Vibe check notification failed:', err);
         }
@@ -1064,6 +1115,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       get().addToast("Deal added!", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `deals/${id}`);
+      throw err;
     }
   },
 
@@ -1073,6 +1125,43 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       get().addToast("Deal updated!", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `deals/${dealId}`);
+      throw err;
+    }
+  },
+
+  archiveDeal: async (dealId) => {
+    const user = get().currentUser;
+    if (user?.role !== 'SuperAdmin') return;
+    try {
+      await updateDoc(doc(db, 'deals', dealId), { status: 'Paused' });
+      get().addToast('Deal archived.', 'info');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `deals/${dealId}`);
+      throw err;
+    }
+  },
+
+  unarchiveDeal: async (dealId) => {
+    const user = get().currentUser;
+    if (user?.role !== 'SuperAdmin') return;
+    try {
+      await updateDoc(doc(db, 'deals', dealId), { status: 'Active' });
+      get().addToast('Deal restored.', 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `deals/${dealId}`);
+      throw err;
+    }
+  },
+
+  deleteDeal: async (dealId) => {
+    const user = get().currentUser;
+    if (user?.role !== 'SuperAdmin') return;
+    try {
+      await deleteDoc(doc(db, 'deals', dealId));
+      get().addToast('Deal permanently deleted.', 'info');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `deals/${dealId}`);
+      throw err;
     }
   },
 

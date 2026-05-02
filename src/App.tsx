@@ -16,7 +16,7 @@ import ToastContainer from './components/ToastContainer';
 import { DateRangePicker } from './components/DateRangePicker';
 import { standardizeInterest } from './lib/interestUtils';
 import { fetchFirstPlacePhoto } from './lib/googlePlaces';
-import { Radar, Map as MapIcon, BookOpen, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon, Locate, Sparkles, Plane, Flame } from 'lucide-react';
+import { Radar, Map as MapIcon, BookOpen, Package, User, Plus, Star, MapPin, Calendar, Users, CheckCircle2, ShieldCheck, MessageSquare, ShoppingBag, X, Download, Trash2, ArrowRight, Info, Heart, Search, Filter, Database, ArrowLeft, Settings, ChevronLeft, ChevronRight, Globe, Lock, Bell, BellOff, LogOut, BarChart3, Shield, Hammer, ArrowBigUp, ArrowBigDown, Navigation, Loader2, Edit2, Send, Compass, Radar as RadarIcon, BarChart3 as BarChartIcon, ShieldCheck as ShieldIcon, Users as UsersIcon, MapPin as MapPinIcon, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, Plus as PlusIcon, Globe as GlobeIcon, Search as SearchIcon, Radar as RadarIcon2, Award, UserCheck, Zap, Coffee, Pizza, Beer, Briefcase, ThumbsUp, ThumbsDown, Tag, MoreVertical, ChevronUp, ChevronDown, Home, ShieldAlert, ArrowUp, ArrowDown, History as HistoryIcon, Locate, Sparkles, Plane, Flame, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'motion/react';
 import { useNomadStore } from './store';
 import { containsBlockedContent, cleanContent } from './lib/contentFilter';
@@ -36,12 +36,14 @@ import { Avatar } from './components/Avatar';
 import { useCollabAccess } from './hooks/usePremium';
 import { isVisibleInMode } from './lib/contextFilter';
 import { useModeLabels } from './hooks/useModeLabels';
+import { CollabPaywall } from './components/CollabPaywall';
 import { calculateFamilyMatch } from './lib/familyMatching';
 import { calculateCollabMatch } from './lib/collabMatching';
 
 import { CategoryTile } from './components/CategoryTile';
 import { CardActionsMenu } from './components/CardActionsMenu';
 import { TribeBrowserOverlay } from './components/TribeBrowserOverlay';
+import { ImageUpload } from './components/ImageUpload';
 import AdminSeedTab from './components/admin/AdminSeedTab';
 import AdminDealsTab from './components/admin/AdminDealsTab';
 import AdminCommunityTab from './components/admin/AdminCommunityTab';
@@ -56,7 +58,7 @@ const isBlocked = (targetId: string, currentUser: FamilyProfile | null, blocks: 
   );
 };
 
-const FamilyCard = ({ 
+const FamilyCard = React.memo(({ 
   family, 
   connectionStatus, 
   onConnect, 
@@ -71,6 +73,8 @@ const FamilyCard = ({
   onSelect: () => void,
   specialBadge?: string
 }) => {
+  const dataSaver = useNomadStore(state => state.dataSaver);
+
   return (
     <div 
       onClick={onSelect}
@@ -78,11 +82,19 @@ const FamilyCard = ({
     >
       <div className="flex items-center gap-4 mb-4">
         <div className="relative">
-          <img 
-            src={family.photoUrl || '/avatar-placeholder.png'} 
-            className="w-14 h-14 rounded-2xl object-cover shadow-md" 
-            alt={family.familyName} 
-          />
+          {!dataSaver ? (
+            <img 
+              src={family.photoUrl || '/avatar-placeholder.png'} 
+              className="w-14 h-14 rounded-2xl object-cover shadow-md" 
+              alt={family.familyName} 
+              referrerPolicy="no-referrer"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-300">
+              <User className="w-6 h-6" />
+            </div>
+          )}
           {family.verificationLevel >= 2 && (
             <div className="absolute -top-2 -right-2 bg-primary text-white p-1 rounded-lg border-2 border-white shadow-lg">
               <ShieldCheck className="w-3 h-3" />
@@ -134,7 +146,13 @@ const FamilyCard = ({
       </div>
     </div>
   );
-};
+}, (prev, next) => {
+  return prev.family.id === next.family.id && 
+         prev.family.photoUrl === next.family.photoUrl &&
+         prev.connectionStatus === next.connectionStatus &&
+         prev.specialBadge === next.specialBadge &&
+         prev.family.kids?.length === next.family.kids?.length;
+});
 
 const ReportModal = ({ isOpen, onClose, target }: { isOpen: boolean, onClose: () => void, target: { id: string, type: Report['targetType'] } | null }) => {
   const { submitReport, currentUser } = useNomadStore();
@@ -224,7 +242,7 @@ const ReportModal = ({ isOpen, onClose, target }: { isOpen: boolean, onClose: ()
 };
 
 const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
-  const { currentUser, updatePreferences, updateProfile } = useNomadStore();
+  const { currentUser, updatePreferences, updateProfile, dataSaver, setDataSaver, addToast } = useNomadStore();
   if (!currentUser) return null;
 
   const languages = [
@@ -247,6 +265,35 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Settings">
       <div className="space-y-8">
+        {/* Data Usage */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-secondary">
+            <Zap className="w-5 h-5 text-accent" />
+            <h3 className="font-bold">Data & Performance</h3>
+          </div>
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+            <div>
+              <h4 className="font-bold text-secondary text-sm">Data Saver Mode</h4>
+              <p className="text-[10px] text-slate-500 font-medium tracking-tight">Hide photos to save bandwidth on expensive roaming data.</p>
+            </div>
+            <button 
+              onClick={() => {
+                setDataSaver(!dataSaver);
+                addToast(`Data saver ${!dataSaver ? 'enabled' : 'disabled'}`, 'info');
+              }}
+              className={cn(
+                "w-12 h-6 rounded-full transition-all relative",
+                dataSaver ? "bg-accent" : "bg-slate-300"
+              )}
+            >
+              <div className={cn(
+                "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                dataSaver ? (languages.length > 0 ? "right-1" : "left-7") : "left-1"
+              )} />
+            </button>
+          </div>
+        </div>
+
         {/* Privacy */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-secondary">
@@ -842,73 +889,11 @@ const AdminDashboard = () => {
   );
 };
 
-const ImageUpload = ({ onUpload, label }: { onUpload: (url: string) => void, label: string }) => {
-  const [isUploading, setIsUploading] = useState(false);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    console.log("File selected:", file.name, file.size, file.type);
-
-    // Check file size (limit to 500KB for Base64 storage in Firestore)
-    if (file.size > 500 * 1024) {
-      useNomadStore.getState().addToast("Afbeelding is te groot. Kies een afbeelding kleiner dan 500KB.", "error");
-      return;
-    }
-
-    setIsUploading(true);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      if (result && result.startsWith('data:image/')) {
-        console.log("Image read successfully, calling onUpload");
-        onUpload(result);
-      } else {
-        console.error("Failed to read image as data URL");
-        useNomadStore.getState().addToast("Bestand lezen mislukt.", "error");
-      }
-      setIsUploading(false);
-    };
-    reader.onerror = (err) => {
-      console.error("FileReader error:", err);
-      setIsUploading(false);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <div className="space-y-1">
-      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>
-      <div className="relative group">
-        <input 
-          type="file" 
-          accept="image/*" 
-          onChange={handleFileChange}
-          className="hidden" 
-          id={`upload-${label}`}
-        />
-        <label 
-          htmlFor={`upload-${label}`}
-          className="flex flex-col items-center justify-center w-full h-32 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer group-hover:border-primary/40 transition-all"
-        >
-          {isUploading ? (
-            <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
-          ) : (
-            <>
-              <Plus className="w-6 h-6 text-slate-400 mb-2 group-hover:text-primary transition-colors" />
-              <span className="text-xs font-bold text-slate-400 group-hover:text-primary transition-colors">Click to upload photo</span>
-            </>
-          )}
-        </label>
-      </div>
-    </div>
-  );
-};
 
 
 
-const Modal = ({ isOpen, onClose, title, children, dark, fullScreen }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode, dark?: boolean, fullScreen?: boolean }) => (
+
+const Modal = React.memo(({ isOpen, onClose, title, children, dark, fullScreen }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode, dark?: boolean, fullScreen?: boolean }) => (
   <AnimatePresence>
     {isOpen && (
       <div className={cn("fixed inset-0 z-[100] flex items-center justify-center", fullScreen ? "p-0" : "p-4")}>
@@ -952,7 +937,7 @@ const Modal = ({ isOpen, onClose, title, children, dark, fullScreen }: { isOpen:
       </div>
     )}
   </AnimatePresence>
-);
+));
 
 const Badge: React.FC<{ name: string, size?: 'sm' | 'md' }> = ({ name, size = 'sm' }) => {
   const getBadgeInfo = (name: string) => {
@@ -1012,108 +997,6 @@ const VoteButtons = ({ type, id, votes }: { type: 'lookingFor' | 'marketplace' |
 
 // --- Views ---
 
-const MultiTierPaywall = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
-  const { currentUser, updateProfile, addToast, setCollabMode } = useNomadStore();
-  const [loadingTier, setLoadingTier] = useState<'MONTHLY' | 'ANNUAL' | 'LIFETIME' | null>(null);
-
-  const handleSubscribe = async (tier: 'MONTHLY' | 'ANNUAL' | 'LIFETIME') => {
-    setLoadingTier(tier);
-    // Simulate payment
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    let premiumUntil: string | undefined;
-    if (tier === 'MONTHLY') {
-      premiumUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    } else if (tier === 'ANNUAL') {
-      premiumUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
-    }
-
-    await updateProfile({
-      isPremium: true,
-      premiumType: tier,
-      premiumUntil
-    });
-
-    setLoadingTier(null);
-    onClose();
-    addToast("Welcome to the Inner Circle. All professional features are now unlocked!", "success");
-  };
-
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Choose Your Tribe Access">
-      <div className="space-y-6">
-        <div className="text-center space-y-2">
-          <p className="text-slate-500 font-medium text-sm">
-            Switch to Collab Focus, unlock the Professional Match Center and connect with world-class remote experts.
-          </p>
-          <p className="text-[10px] text-primary font-black uppercase tracking-widest">
-            Family Focus features are 100% free
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4">
-          {/* Card 1: Monthly */}
-          <button 
-            onClick={() => handleSubscribe('MONTHLY')}
-            disabled={!!loadingTier}
-            className="group relative p-6 bg-slate-50 border-2 border-slate-100 rounded-3xl text-left transition-all hover:border-primary active:scale-[0.98] disabled:opacity-50"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-black text-secondary">Pro Monthly</h3>
-                <p className="text-2xl font-black text-primary">€14,99 <span className="text-xs text-slate-400">/ month</span></p>
-              </div>
-              {loadingTier === 'MONTHLY' ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : <Zap className="w-6 h-6 text-primary group-hover:scale-110 transition-transform" />}
-            </div>
-            <p className="text-xs text-slate-400 font-medium">Connect locally, share skills, and scale your business while traveling.</p>
-          </button>
-
-          {/* Card 2: Annual - Best Value */}
-          <button 
-            onClick={() => handleSubscribe('ANNUAL')}
-            disabled={!!loadingTier}
-            className="group relative p-6 bg-secondary border-2 border-primary rounded-3xl text-left transition-all hover:ring-2 hover:ring-primary/20 active:scale-[0.98] disabled:opacity-50"
-          >
-            <div className="absolute -top-3 right-6 bg-accent text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg">
-              Best Value - 2 Months Free
-            </div>
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-black text-white">Pro Annual</h3>
-                <p className="text-2xl font-black text-white">€149,00 <span className="text-xs text-white/40">/ year</span></p>
-              </div>
-              {loadingTier === 'ANNUAL' ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : <Award className="w-6 h-6 text-[#e9c46a] group-hover:scale-110 transition-transform" />}
-            </div>
-            <p className="text-xs text-white/60 font-medium">All Pro features with full annual commitment savings.</p>
-          </button>
-
-          {/* Card 3: Lifetime */}
-          <button 
-            onClick={() => handleSubscribe('LIFETIME')}
-            disabled={!!loadingTier}
-            className="group relative p-6 bg-slate-900 border-2 border-slate-800 rounded-3xl text-left transition-all hover:border-accent active:scale-[0.98] disabled:opacity-50"
-          >
-            <div className="absolute -top-3 right-6 bg-white text-slate-900 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg">
-              Founding Member LTD
-            </div>
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-black text-white">Lifetime Access</h3>
-                <p className="text-2xl font-black text-accent">€399,00 <span className="text-xs text-white/40">once</span></p>
-              </div>
-              {loadingTier === 'LIFETIME' ? <Loader2 className="w-5 h-5 animate-spin text-accent" /> : <ShieldCheck className="w-6 h-6 text-accent group-hover:scale-110 transition-transform" />}
-            </div>
-            <p className="text-xs text-white/40 font-medium italic">BEST FOR LONG-TERM NOMADS. Pay once, use forever.</p>
-          </button>
-        </div>
-
-        <p className="text-[10px] text-center text-slate-400 font-medium">
-          Secure payment with Stripe. Cancel anytime for subscriptions.
-        </p>
-      </div>
-    </Modal>
-  );
-};
 
 const PremiumAction = ({ 
   children, 
@@ -1205,13 +1088,31 @@ const MarketplaceView = ({
   isAddItemOpen: boolean,
   setIsAddItemOpen: (open: boolean) => void
 }) => {
-  const { marketItems, currentUser, reserveItem, cancelReservation, addItem, addLookingFor, processPayment, addToast } = useNomadStore();
+  const { marketItems, currentUser, reserveItem, cancelReservation, addItem, addLookingFor, processPayment, addToast, dataSaver } = useNomadStore();
   const isPremium = currentUser?.isPremium || false;
   const [radius, setRadius] = useState(20);
   const [isRequestItemOpen, setIsRequestItemOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
-  const [newItem, setNewItem] = useState<{ title: string; description: string; price: number; category: MarketItem['category']; mode: 'Sell' | 'Swap'; imageUrl: string; place: PlaceResult | null }>({ title: '', description: '', price: 0, category: collabMode ? 'Professional Services' : 'Gear', mode: 'Sell', imageUrl: '', place: null });
+  const [newItem, setNewItem] = useState<{ 
+    title: string; 
+    description: string; 
+    price: number; 
+    category: MarketItem['category']; 
+    mode: 'Sell' | 'Swap'; 
+    imageUrls: string[]; 
+    meetingPlace: string;
+    place: PlaceResult | null 
+  }>({ 
+    title: '', 
+    description: '', 
+    price: 0, 
+    category: collabMode ? 'Professional Services' : 'Gear', 
+    mode: 'Sell', 
+    imageUrls: [], 
+    meetingPlace: '',
+    place: null 
+  });
   const [newRequest, setNewRequest] = useState<{ title: string; description: string; category: LookingForRequest['category']; place: PlaceResult | null; date: string }>({ title: '', description: '', category: 'Help', place: null, date: '' });
 
   const filteredItems = marketItems.filter(item => {
@@ -1301,16 +1202,37 @@ const MarketplaceView = ({
             "rounded-3xl overflow-hidden border transition-all group",
             collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
           )}>
-            <div className={cn("h-48 relative", collabMode ? "bg-white/5" : "bg-slate-100")}>
-              <img 
-                src={item.imageUrl || `https://picsum.photos/seed/${item.id}/400/300`} 
-                alt="" 
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${item.id}/400/300`;
-                }}
-              />
+            <div className={cn("h-48 relative overflow-hidden", collabMode ? "bg-white/5" : "bg-slate-100")}>
+              {!dataSaver ? (
+                <div className="w-full h-full relative group/images">
+                  <img 
+                    src={(item.imageUrls && item.imageUrls.length > 0) ? item.imageUrls[0] : (item.imageUrl || `https://picsum.photos/seed/${item.id}/400/300`)} 
+                    alt="" 
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover/images:scale-105"
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${item.id}/400/300`;
+                    }}
+                  />
+                  {item.imageUrls && item.imageUrls.length > 1 && (
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                      {item.imageUrls.map((_, idx) => (
+                        <div key={idx} className="w-1.5 h-1.5 rounded-full bg-white/50" />
+                      ))}
+                    </div>
+                  )}
+                  {item.imageUrls && item.imageUrls.length > 1 && (
+                    <div className="absolute top-2 left-2 bg-black/40 backdrop-blur-sm text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">
+                      {item.imageUrls.length} Photos
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Package className="w-10 h-10 text-slate-300" />
+                </div>
+              )}
               <div className={cn(
                 "absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-black",
                 collabMode ? "bg-[#e9c46a] text-[#264653]" : "bg-white/90 backdrop-blur text-secondary"
@@ -1329,6 +1251,11 @@ const MarketplaceView = ({
                 <p className={cn("text-xs flex items-center gap-1", collabMode ? "text-white/40" : "text-slate-400")}>
                   <MapPin className="w-3 h-3" /> {item.location}
                 </p>
+                {item.meetingPlace && (
+                  <p className={cn("text-[10px] mt-1 flex items-center gap-1 font-bold", collabMode ? "text-accent" : "text-primary")}>
+                    <ShieldCheck className="w-3 h-3" /> Meeting at: {item.meetingPlace}
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-2">
@@ -1397,6 +1324,10 @@ const MarketplaceView = ({
       <Modal isOpen={isAddItemOpen} onClose={() => setIsAddItemOpen(false)} title="List an Item">
         <form className="space-y-4" onSubmit={(e) => {
           e.preventDefault();
+          if (newItem.imageUrls.length === 0) {
+            addToast("Please add at least one photo of your item.", "error");
+            return;
+          }
           addItem({
             id: `m-${Date.now()}`,
             sellerId: currentUser?.id || '',
@@ -1406,7 +1337,8 @@ const MarketplaceView = ({
             price: newItem.price,
             category: newItem.category,
             mode: 'Sell',
-            imageUrl: newItem.imageUrl,
+            imageUrls: newItem.imageUrls,
+            meetingPlace: newItem.meetingPlace,
             place: newItem.place || undefined,
             location: newItem.place ? `${newItem.place.city}, ${newItem.place.country}` : 'Unknown',
             lat: newItem.place?.lat || 0,
@@ -1415,18 +1347,56 @@ const MarketplaceView = ({
             createdAt: new Date().toISOString()
           });
           setIsAddItemOpen(false);
-          setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', place: null });
+          setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrls: [], place: null, meetingPlace: '' });
           addToast("Item posted!", "success");
         }}>
-          <ImageUpload label="Item Photo" onUpload={(url) => setNewItem(prev => ({...prev, imageUrl: url}))} />
-          {newItem.imageUrl && (
-            <div className="w-full h-32 rounded-2xl overflow-hidden">
-              <img src={newItem.imageUrl || undefined} alt="Preview" className="w-full h-full object-cover" />
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              {[0, 1, 2].map((idx) => (
+                <div key={idx} className="space-y-1">
+                  <ImageUpload 
+                    label={idx === 0 ? "Main Photo" : `Photo ${idx + 1}`} 
+                    onUpload={(url) => {
+                      const newUrls = [...newItem.imageUrls];
+                      newUrls[idx] = url;
+                      setNewItem(prev => ({...prev, imageUrls: newUrls.filter(u => u) }));
+                    }} 
+                  />
+                  {newItem.imageUrls[idx] && (
+                    <div className="w-full h-20 rounded-xl overflow-hidden relative group">
+                      <img src={newItem.imageUrls[idx]} alt="Preview" className="w-full h-full object-cover" />
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const newUrls = newItem.imageUrls.filter((_, i) => i !== idx);
+                          setNewItem(prev => ({...prev, imageUrls: newUrls}));
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          )}
+            <p className="text-[10px] text-slate-400 font-medium italic">Add up to 3 photos of your product or service.</p>
+          </div>
+
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Title</label>
             <input required type="text" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl" value={newItem.title} onChange={e => setNewItem({...newItem, title: e.target.value})} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Meeting Place (Optional - for safety)</label>
+            <input 
+              type="text" 
+              placeholder="e.g. Starbucks Main Square" 
+              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl" 
+              value={newItem.meetingPlace} 
+              onChange={e => setNewItem({...newItem, meetingPlace: e.target.value})} 
+            />
+            <p className="text-[9px] text-slate-400 px-1 italic">Suggest a public place to meet for safer exchanges.</p>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Price (€)</label>
@@ -1512,14 +1482,16 @@ const DealsView = ({ onBack, onPaywall }: { onBack: () => void, onPaywall: () =>
         </div>
       </header>
 
-      <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+      <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
         {categories.map(cat => (
           <button 
             key={cat}
             onClick={() => setFilter(cat)}
             className={cn(
-              "px-6 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border",
-              filter === cat ? "bg-secondary text-white border-secondary" : "bg-white text-slate-400 border-slate-100"
+              "px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border shadow-sm",
+              filter === cat 
+                ? "bg-secondary text-white border-secondary" 
+                : "bg-white text-slate-400 border-slate-100 hover:border-secondary/30"
             )}
           >
             {cat}
@@ -1527,122 +1499,248 @@ const DealsView = ({ onBack, onPaywall }: { onBack: () => void, onPaywall: () =>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filtered.map(deal => (
-          <div key={deal.id} className="bg-white rounded-[2.5rem] overflow-hidden border border-slate-100 card-shadow flex flex-col">
-            <div className="h-48 relative">
-              <img 
-                src={deal.imageUrl || `https://picsum.photos/seed/${deal.id}/600/400`} 
-                alt="" 
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute top-4 right-4 bg-accent text-white px-4 py-2 rounded-2xl font-black text-sm shadow-lg">
-                {deal.discountLabel}
-              </div>
-            </div>
-            <div className="p-8 flex-1 flex flex-col justify-between space-y-6">
-              <div className="space-y-2">
-                <h3 className="text-2xl font-black text-secondary">{deal.name}</h3>
-                <p className="text-slate-500 font-medium leading-relaxed">{deal.description}</p>
-              </div>
-              
-              <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">by {deal.advertiserName}</p>
-                </div>
-                <PremiumAction isPremium={isPremium} onPaywall={onPaywall} onClick={() => {
-                  trackDealClick(deal.id);
-                  if (deal.affiliateUrl) window.open(deal.affiliateUrl, '_blank');
-                  if (deal.promoCode) alert(`Your promo code is: ${deal.promoCode}`);
-                }}>
-                  <button className="bg-accent text-white px-8 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-accent/20 active:scale-95 transition-transform">
-                    {deal.ctaText || "Claim Deal"}
-                  </button>
-                </PremiumAction>
-              </div>
-            </div>
-          </div>
+          <DealCard key={deal.id} deal={deal} />
         ))}
+        {filtered.length === 0 && (
+          <div className="col-span-full py-24 text-center bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
+            <Tag className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+            <p className="text-slate-400 font-bold italic">No deals found in this category.</p>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
+const DealDetailModal = ({
+  deal,
+  isOpen,
+  onClose,
+  onCtaClick,
+}: {
+  deal: Deal;
+  isOpen: boolean;
+  onClose: () => void;
+  onCtaClick: () => void;
+}) => (
+  <Modal isOpen={isOpen} onClose={onClose} title="" fullScreen>
+    <div className="max-w-2xl mx-auto pb-8">
+      {/* Hero image */}
+      <div className="relative -mx-6 -mt-6 h-64 mb-8 overflow-hidden rounded-b-[3rem]">
+        <img
+          src={deal.imageUrl}
+          alt=""
+          className="w-full h-full object-cover"
+          referrerPolicy="no-referrer"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        <div className="absolute top-6 left-6 bg-accent text-white px-3 py-1 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg">
+          {deal.category}
+        </div>
+        {deal.discountLabel && (
+          <div className="absolute bottom-6 left-6 bg-white/95 backdrop-blur px-3 py-1.5 rounded-xl font-black text-xs uppercase text-accent border border-accent/10">
+            {deal.discountLabel}
+          </div>
+        )}
+      </div>
+
+      {/* Header with brand */}
+      <div className="flex items-center gap-4 mb-6">
+        {deal.logoUrl && (
+          <div className="w-14 h-14 rounded-2xl border border-slate-100 p-2 flex-shrink-0 bg-white">
+            <img src={deal.logoUrl} className="w-full h-full object-contain" alt="" referrerPolicy="no-referrer" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
+            {deal.advertiserName}
+          </p>
+          <h2 className="font-black text-secondary text-2xl leading-tight">{deal.name}</h2>
+        </div>
+      </div>
+
+      {/* Pricing block */}
+      {(deal.originalPrice || deal.dealPrice !== undefined) && (
+        <div className="mb-8 p-6 rounded-[2.5rem] bg-accent/5 border border-accent/10 flex items-center gap-6">
+          <div className="flex flex-col">
+            {deal.originalPrice && (
+              <span className="text-sm text-slate-300 line-through font-bold">
+                {deal.currency} {deal.originalPrice}
+              </span>
+            )}
+            <span className="text-3xl font-black text-accent">
+              {deal.currency} {deal.dealPrice ?? 'Free'}
+            </span>
+          </div>
+          
+          {deal.promoCode && (
+            <div className="ml-auto flex items-center gap-2 px-4 py-2.5 bg-white border border-dashed border-slate-200 rounded-2xl shadow-sm">
+              <span className="text-sm font-mono font-black text-secondary tracking-wider">
+                {deal.promoCode}
+              </span>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(deal.promoCode!);
+                  useNomadStore.getState().addToast("Code copied!", "success");
+                }} 
+                className="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-50 rounded-lg transition-all"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Full description */}
+      <div className="mb-8">
+        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
+          About this deal
+        </h4>
+        <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap font-medium">
+          {deal.description}
+        </div>
+      </div>
+
+      {/* Disclaimer */}
+      {deal.disclaimer && (
+        <div className="mb-8 p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+          <div className="flex items-start gap-3">
+            <Info className="w-4 h-4 text-slate-300 flex-shrink-0 mt-0.5" />
+            <p className="text-[10px] font-bold text-slate-400 uppercase leading-snug">
+              {deal.disclaimer}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* CTA */}
+      <div className="sticky bottom-0 bg-white pt-4 pb-2 border-t border-slate-50">
+        <button
+          onClick={onCtaClick}
+          className="w-full py-4 bg-accent text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-xl shadow-accent/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+        >
+          {deal.ctaText || 'Get Deal'}
+          <ExternalLink className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="text-center mt-6">
+        <button
+          onClick={() => {
+            // Report logic would go here if needed
+            useNomadStore.getState().addToast("Reported for review. Thanks!", "info");
+          }}
+          className="text-[9px] font-black text-slate-300 hover:text-red-400 uppercase tracking-widest transition-colors"
+        >
+          Report an issue with this deal
+        </button>
+      </div>
+    </div>
+  </Modal>
+);
+
 const DealCard = ({ deal }: { deal: Deal }) => {
   const { trackDealClick, trackDealImpression } = useNomadStore();
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   
   useEffect(() => {
     trackDealImpression(deal.id);
   }, [deal.id, trackDealImpression]);
 
-  const onClick = () => trackDealClick(deal.id);
+  const handleCtaClick = () => {
+    trackDealClick(deal.id);
+    if (deal.affiliateUrl) window.open(deal.affiliateUrl, '_blank');
+  };
 
   return (
-    <motion.div 
-      whileHover={{ y: -4 }}
-      className="bg-white rounded-[2.5rem] overflow-hidden border border-slate-100 card-shadow flex flex-col h-full"
-    >
-      <div className="h-44 relative">
-        <img src={deal.imageUrl} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
-        <div className="absolute top-4 left-4 bg-accent text-white px-3 py-1 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg">
-          {deal.category}
-        </div>
-        {deal.discountLabel && (
-          <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-xl font-black text-xs uppercase text-accent border border-accent/20">
-            {deal.discountLabel}
+    <>
+      <motion.div 
+        whileHover={{ y: -4 }}
+        className="bg-white rounded-[2.5rem] overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all flex flex-col h-full group"
+      >
+        <div className="h-44 relative overflow-hidden">
+          <img src={deal.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" referrerPolicy="no-referrer" />
+          <div className="absolute top-4 left-4 bg-accent text-white px-3 py-1 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg">
+            {deal.category}
           </div>
-        )}
-      </div>
-      <div className="p-6 flex-1 flex flex-col">
-        <div className="flex items-center gap-3 mb-3">
-          {deal.logoUrl && (
-            <div className="w-8 h-8 rounded-lg border border-slate-100 p-1 flex-shrink-0">
-              <img src={deal.logoUrl} className="w-full h-full object-contain" alt="" referrerPolicy="no-referrer" />
+          {deal.discountLabel && (
+            <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur px-3 py-1 rounded-xl font-black text-xs uppercase text-accent border border-accent/10 shadow-sm">
+              {deal.discountLabel}
             </div>
           )}
-          <div className="min-w-0">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1 truncate">{deal.advertiserName}</p>
-            <h3 className="font-bold text-secondary text-sm leading-tight truncate">{deal.name}</h3>
-          </div>
         </div>
-        <p className="text-xs text-slate-500 line-clamp-2 italic mb-4">"{deal.description}"</p>
-        
-        <div className="mt-auto space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              {deal.originalPrice && (
-                <span className="text-[10px] text-slate-300 line-through font-bold">{deal.currency} {deal.originalPrice}</span>
-              )}
-              <span className="text-lg font-black text-secondary">{deal.currency} {deal.dealPrice ?? 'Free'}</span>
-            </div>
-            {deal.promoCode && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-dashed border-slate-200 rounded-xl group/code relative">
-                <span className="text-[10px] font-mono font-black text-secondary tracking-wider">{deal.promoCode}</span>
-                <button onClick={() => {
-                  navigator.clipboard.writeText(deal.promoCode!);
-                  useNomadStore.getState().addToast("Code gekopieerd!", "success");
-                }} className="text-slate-400 hover:text-primary transition-colors">
-                  <Download className="w-3 h-3" />
-                </button>
+        <div className="p-6 flex-1 flex flex-col">
+          <div className="flex items-center gap-3 mb-4">
+            {deal.logoUrl && (
+              <div className="w-10 h-10 rounded-xl border border-slate-50 p-1.5 flex-shrink-0 bg-white shadow-sm">
+                <img src={deal.logoUrl} className="w-full h-full object-contain" alt="" referrerPolicy="no-referrer" />
               </div>
             )}
+            <div className="min-w-0">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1 truncate">{deal.advertiserName}</p>
+              <h3 className="font-black text-secondary text-base leading-tight truncate">{deal.name}</h3>
+            </div>
           </div>
-          <button 
-            onClick={() => {
-              onClick();
-              window.open(deal.affiliateUrl, '_blank');
-            }}
-            className="w-full py-4 bg-accent text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-accent/20 hover:scale-[1.02] active:scale-95 transition-all"
-          >
-            {deal.ctaText}
-          </button>
-          {deal.disclaimer && (
-            <p className="text-center text-[8px] font-bold text-slate-400 uppercase leading-none">{deal.disclaimer}</p>
-          )}
+          
+          <p className="text-xs text-slate-500 line-clamp-2 italic mb-6 font-medium">"{deal.description}"</p>
+          
+          <div className="mt-auto space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                {deal.originalPrice && (
+                  <span className="text-[10px] text-slate-300 line-through font-bold">{deal.currency} {deal.originalPrice}</span>
+                )}
+                <span className="text-2xl font-black text-secondary tracking-tight">{deal.currency} {deal.dealPrice ?? 'Free'}</span>
+              </div>
+              {deal.promoCode && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                  <span className="text-[10px] font-mono font-black text-secondary tracking-wider">{deal.promoCode}</span>
+                  <button onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(deal.promoCode!);
+                    useNomadStore.getState().addToast("Code copied!", "success");
+                  }} className="text-slate-300 hover:text-primary transition-colors">
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2.5">
+              <button 
+                onClick={() => setIsDetailOpen(true)}
+                className="flex-1 py-4 bg-slate-50 border border-slate-100 text-secondary rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 active:scale-95 transition-all shadow-sm"
+              >
+                More Info
+              </button>
+              <button 
+                onClick={handleCtaClick}
+                className="flex-1 py-4 bg-accent text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest shadow-lg shadow-accent/10 hover:scale-[1.02] active:scale-95 transition-all"
+              >
+                {deal.ctaText || 'Get Deal'}
+              </button>
+            </div>
+
+            {deal.disclaimer && (
+              <p className="text-center text-[7px] font-black text-slate-300 uppercase leading-none tracking-widest">{deal.disclaimer}</p>
+            )}
+          </div>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+
+      <DealDetailModal 
+        deal={deal} 
+        isOpen={isDetailOpen} 
+        onClose={() => setIsDetailOpen(false)}
+        onCtaClick={() => {
+          handleCtaClick();
+          setIsDetailOpen(false);
+        }}
+      />
+    </>
   );
 };
 
@@ -1689,7 +1787,25 @@ const TribeView = ({
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [newRequest, setNewRequest] = useState<{ title: string; description: string; category: LookingForRequest['category']; place: PlaceResult | null; date: string }>({ title: '', description: '', category: 'Help', place: null, date: '' });
   const [newCollabAsk, setNewCollabAsk] = useState({ skillNeeded: '', description: '' });
-  const [newItem, setNewItem] = useState<{ title: string; description: string; price: number; category: MarketItem['category']; mode: 'Sell' | 'Swap'; imageUrl: string; place: PlaceResult | null }>({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', place: null });
+  const [newItem, setNewItem] = useState<{ 
+    title: string; 
+    description: string; 
+    price: number; 
+    category: MarketItem['category']; 
+    mode: 'Sell' | 'Swap'; 
+    imageUrls: string[]; 
+    meetingPlace: string;
+    place: PlaceResult | null 
+  }>({ 
+    title: '', 
+    description: '', 
+    price: 0, 
+    category: 'Gear', 
+    mode: 'Sell', 
+    imageUrls: [], 
+    meetingPlace: '',
+    place: null 
+  });
   const [newEvent, setNewEvent] = useState<{ title: string; description: string; date: string; time: string; category: string; imageUrl: string; place: PlaceResult | null; maxParticipants: number }>({ title: '', description: '', date: '', time: '', category: 'Social', imageUrl: '', place: null, maxParticipants: 10 });
   const [isLocalFeedOpen, setIsLocalFeedOpen] = useState(false);
   const [isVibeCheckOpen, setIsVibeCheckOpen] = useState(false);
@@ -1998,6 +2114,12 @@ const TribeView = ({
   const handleAddMarketItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+    
+    if (newItem.imageUrls.length === 0) {
+      addToast("Please add at least one photo of your item.", "error");
+      return;
+    }
+
     const { addItem } = useNomadStore.getState();
     const item: MarketItem = {
       id: `m-${Date.now()}`,
@@ -2008,17 +2130,19 @@ const TribeView = ({
       price: newItem.price,
       category: newItem.category,
       mode: newItem.mode || 'Sell',
-      imageUrl: newItem.imageUrl || '',
+      imageUrls: newItem.imageUrls,
+      meetingPlace: newItem.meetingPlace,
       status: 'Available',
       place: newItem.place || undefined,
       location: newItem.place ? `${newItem.place.city}, ${newItem.place.country}` : activeNode.label,
       lat: newItem.place?.lat || activeNode.lat,
       lng: newItem.place?.lng || activeNode.lng,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      context: collabMode ? 'collab' : 'family'
     };
     await addItem(item);
     setIsAddItemOpen(false);
-    setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrl: '', place: null });
+    setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrls: [], place: null, meetingPlace: '' });
   };
 
   const handleAddEvent = async (e: React.FormEvent) => {
@@ -2043,7 +2167,8 @@ const TribeView = ({
       waitlist: [],
       maxParticipants: newEvent.maxParticipants,
       isVerified: false,
-      isCollaborative: collabMode
+      isCollaborative: collabMode,
+      context: collabMode ? 'collab' : 'family'
     };
     await addEvent(event);
     setIsAddEventOpen(false);
@@ -2093,11 +2218,16 @@ const TribeView = ({
       }
     });
 
-    return combined.map(family => ({
-      ...family,
-      matchReason: matchedFamilies.find(f => f.id === family.id) ? 'Professional Match' : 'Travel Overlap'
-    }));
-  }, [matches, comingTogether]);
+    return combined.map(family => {
+      const match = matches.find(m => m.family.id === family.id);
+      return {
+        ...family,
+        matchReason: match 
+          ? (collabMode ? match.reasons[0] : 'Family Interest Match')
+          : 'Travel Overlap'
+      };
+    });
+  }, [matches, comingTogether, collabMode]);
 
   const categories = [
     { id: 'spots', label: 'Local Spots', count: filteredSpots.length, icon: MapPin, color: '#00b4d8' },
@@ -2187,6 +2317,19 @@ const TribeView = ({
               "flex items-center gap-1.5 p-1.5 rounded-full border transition-all",
               collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 shadow-sm"
             )}>
+              {currentIndex !== -1 && activeIndex !== currentIndex && (
+                <button 
+                  onClick={() => setActiveIndex(currentIndex)}
+                  className={cn(
+                    "w-10 h-10 rounded-full flex items-center justify-center transition-all bg-primary/10 text-primary hover:bg-primary/20",
+                    collabMode && "bg-white/10 text-white hover:bg-white/20"
+                  )}
+                  title="Go to Current Location"
+                >
+                  <Navigation className="w-5 h-5" />
+                </button>
+              )}
+
               <button 
                 onClick={goLeft}
                 disabled={!canGoLeft}
@@ -3090,13 +3233,30 @@ const TribeView = ({
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Image URL (Optional)</label>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Photos (Min 1, Max 3)</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[0, 1, 2].map((idx) => (
+                  <div key={idx} className="space-y-1">
+                    <ImageUpload 
+                      label={idx === 0 ? "Main" : `Photo ${idx + 1}`} 
+                      onUpload={(url) => {
+                        const newUrls = [...newItem.imageUrls];
+                        newUrls[idx] = url;
+                        setNewItem(prev => ({...prev, imageUrls: newUrls.filter(u => u) }));
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Meeting Place (Safety first!)</label>
               <input 
-                type="url" 
-                placeholder="https://..." 
+                type="text" 
+                placeholder="e.g. Starbucks Main Street / Library Lobby" 
                 className={cn("w-full p-4 border-2 rounded-2xl font-bold", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")}
-                value={newItem.imageUrl}
-                onChange={e => setNewItem({...newItem, imageUrl: e.target.value})}
+                value={newItem.meetingPlace}
+                onChange={e => setNewItem({...newItem, meetingPlace: e.target.value})}
               />
             </div>
           </div>
@@ -3922,6 +4082,7 @@ const TribeNearbyView = ({
   const localRequests = useMemo(() => {
     if (!currentUser) return [];
     return lookingFor.filter(r => {
+      if (!isVisibleInMode(r.context, collabMode)) return false;
       // Filter out blocked users
       if (blocks.some(b => (b.blockerId === currentUser.id && b.blockedId === r.userId) || (b.blockerId === r.userId && b.blockedId === currentUser.id))) return false;
       
@@ -3935,10 +4096,11 @@ const TribeNearbyView = ({
       const reqCityName = r.location;
       return reqCityName.toLowerCase().includes(activeLocation.name.toLowerCase().split(',')[0]);
     });
-  }, [currentUser, lookingFor, blocks, activeLocation, tribeRadius]);
+  }, [currentUser, lookingFor, blocks, activeLocation, tribeRadius, collabMode]);
 
   const filteredSpots = useMemo(() => {
     return spots.filter(spot => {
+      if (!isVisibleInMode(spot.context, collabMode)) return false;
       // Basic category filter for collab mode
       if (collabMode && (spot.category !== 'Workspace' && spot.category !== 'Accommodation')) return false;
       
@@ -3973,6 +4135,7 @@ const TribeNearbyView = ({
   const filteredMarketItems = useMemo(() => {
     if (!currentUser) return [];
     return marketItems.filter(i => {
+      if (!isVisibleInMode(i.context, collabMode)) return false;
       // Filter out blocked users
       if (blocks.some(b => (b.blockerId === currentUser.id && b.blockedId === i.sellerId) || (b.blockerId === i.sellerId && b.blockedId === currentUser.id))) return false;
       
@@ -3986,7 +4149,7 @@ const TribeNearbyView = ({
       const itemCityName = i.location;
       return itemCityName.toLowerCase().includes(activeLocation.name.toLowerCase().split(',')[0]);
     });
-  }, [currentUser, marketItems, blocks, activeLocation]);
+  }, [currentUser, marketItems, blocks, activeLocation, collabMode]);
 
   return (
     <div className={cn(
@@ -4681,7 +4844,7 @@ const VibeCheckSection = ({ dest }: { dest: DestinationGuidance }) => {
 };
 
 const NotificationCenter = ({ isOpen, onClose, onOpenConnect, onOpenVibeCheck }: { isOpen: boolean, onClose: () => void, onOpenConnect: () => void, onOpenVibeCheck: () => void }) => {
-  const { notifications, markNotificationRead, setActiveTab, currentUser } = useNomadStore();
+  const { notifications, markNotificationRead, setActiveTab, currentUser, setIsPaywallOpen } = useNomadStore();
   
   const unread = notifications.filter(n => !n.isRead && new Date(n.scheduledFor) <= new Date());
 
@@ -4716,7 +4879,7 @@ const NotificationCenter = ({ isOpen, onClose, onOpenConnect, onOpenVibeCheck }:
               <button 
                 onClick={() => {
                   onClose();
-                  (useNomadStore.getState() as any).setIsPaywallOpen(true);
+                  setIsPaywallOpen(true);
                 }}
                 className="w-full bg-accent text-white py-2 rounded-xl text-xs font-bold shadow-lg shadow-accent/20"
               >
@@ -6232,9 +6395,14 @@ const EmptyStatePioneer = ({ cityName, onAddSpot }: { cityName: string, onAddSpo
   );
 };
 const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void }) => {
-  const { opportunities, spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent, fetchCities, exploreHubQuery, setExploreHubQuery } = useNomadStore() as any;
+  const { opportunities, spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent, fetchCities, exploreHubQuery, setExploreHubQuery, dataSaver } = useNomadStore() as any;
   const [activeView, setActiveView] = useState<'hubs' | 'opportunities'>(collabMode ? 'opportunities' : 'hubs');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Sync activeView with collabMode when it changes externally
+  useEffect(() => {
+    setActiveView(collabMode ? 'opportunities' : 'hubs');
+  }, [collabMode]);
 
   useEffect(() => {
     if (exploreHubQuery) {
@@ -6487,12 +6655,19 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void })
                   )}
                 >
                   <div className="h-48 relative bg-slate-100">
-                    <img 
-                      src={city.coverImageUrl || `https://picsum.photos/seed/cover${city.id}/600/450`} 
-                      alt={city.name} 
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
+                    {!dataSaver ? (
+                      <img 
+                        src={city.coverImageUrl || `https://picsum.photos/seed/cover${city.id}/600/450`} 
+                        alt={city.name} 
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                        <Globe className="w-8 h-8 text-slate-300" />
+                      </div>
+                    )}
                     <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-black text-secondary flex items-center gap-1 shadow-sm">
                       <Star size={10} className="text-amber-500 fill-amber-500" />
                       {city.familyScore}
@@ -6535,12 +6710,12 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void })
 };
 
 const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () => void, onAddTrip: (place: PlaceResult) => void }) => {
-  const { spots, cityEvents, rsvpToCityEvent, collabMode, currentUser } = useNomadStore() as any;
+  const { spots, cityEvents, rsvpToCityEvent, collabMode, currentUser, dataSaver } = useNomadStore() as any;
   const [activeFilter, setActiveFilter] = useState<'All' | SpotCategory>('All');
   
   const citySpots = useMemo(() => {
-    return spots.filter((s: Spot) => s.citySlug === city.id || s.name.toLowerCase().includes(city.name.toLowerCase()));
-  }, [city, spots]);
+    return spots.filter((s: Spot) => (s.citySlug === city.id || s.name.toLowerCase().includes(city.name.toLowerCase())) && isVisibleInMode(s.context, collabMode));
+  }, [city, spots, collabMode]);
 
   const filteredSpots = useMemo(() => {
     if (activeFilter === 'All') return citySpots;
@@ -6548,8 +6723,8 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
   }, [citySpots, activeFilter]);
 
   const events = useMemo(() => {
-    return cityEvents.filter((e: CityEvent) => e.citySlug === city.id);
-  }, [city, cityEvents]);
+    return cityEvents.filter((e: CityEvent) => e.citySlug === city.id && isVisibleInMode(e.context, collabMode));
+  }, [city, cityEvents, collabMode]);
 
   return (
     <div className={cn(
@@ -6557,13 +6732,20 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
       collabMode ? "bg-[#006d77] text-white" : "bg-slate-50/50"
     )}>
       {/* Hero Banner */}
-      <div className="h-[350px] relative">
-        <img 
-          src={city.coverImageUrl || `https://picsum.photos/seed/${city.id}/1200/800`} 
-          alt={city.name}
-          className="w-full h-full object-cover"
-          referrerPolicy="no-referrer"
-        />
+      <div className="h-[350px] relative bg-slate-200">
+        {!dataSaver ? (
+          <img 
+            src={city.coverImageUrl || `https://picsum.photos/seed/${city.id}/1200/800`} 
+            alt={city.name}
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
+            loading="lazy"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-secondary/20 to-secondary/40 flex items-center justify-center">
+             <Globe className="w-20 h-20 text-white/20" />
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
         
         <button 
@@ -6824,7 +7006,9 @@ export default function App() {
     cancelConnection,
     profiles,
     blocks,
-    collabAsks
+    collabAsks,
+    isPaywallOpen,
+    setIsPaywallOpen
   } = useNomadStore();
 
   const labels = useModeLabels();
@@ -6949,7 +7133,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'tribe' | 'connect' | 'tribe-nearby' | 'community' | 'explore' | 'profile' | 'marketplace' | 'deals' | 'admin'>('tribe');
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isConnectOpen, setIsConnectOpen] = useState(false);
-  const [isPaywallOpen, setIsPaywallOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
@@ -7948,6 +8131,8 @@ export default function App() {
       <ToastContainer />
       <ReportModal isOpen={!!reportingTarget} onClose={() => setReportingTarget(null)} target={reportingTarget} />
       <CollabPaywall isOpen={isPaywallOpen} onClose={() => setIsPaywallOpen(false)} />
+      
+      <Modal isOpen={!!selectedFamily} onClose={() => setSelectedFamily(null)} title={selectedFamily?.familyName || ''}>
         {selectedFamily && (
           <div className="space-y-6">
             <div className="flex justify-end -mt-2 -mr-2">
@@ -8464,8 +8649,6 @@ export default function App() {
         </button>
       </div>
 
-      <MultiTierPaywall isOpen={isPaywallOpen} onClose={() => setIsPaywallOpen(false)} />
-
       <Modal isOpen={isAddPastPlaceOpen} onClose={() => setIsAddPastPlaceOpen(false)} title="Add to Past Adventures">
         <form onSubmit={handleAddPastPlace} className="space-y-6">
           <PlacesAutocomplete 
@@ -8573,7 +8756,7 @@ const ChatView = () => {
   );
 };
 
-function SidebarLink({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+const SidebarLink = React.memo(({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) => {
   const collabMode = useNomadStore(state => state.collabMode);
   return (
     <button 
@@ -8591,7 +8774,7 @@ function SidebarLink({ active, onClick, icon, label }: { active: boolean, onClic
       {label}
     </button>
   );
-}
+}, (prev, next) => prev.active === next.active && prev.label === next.label);
 
 function FullPageLoader({ message }: { message: string }) {
   return (

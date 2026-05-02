@@ -20,6 +20,7 @@ import { useNomadStore } from '../../store';
 import { Opportunity, OpportunityType } from '../../types';
 import { cn } from '../../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { useCollabAccess } from '../../hooks/usePremium';
 
 export const OpportunityCard = ({ 
   opportunity, 
@@ -115,6 +116,7 @@ export const OpportunityCard = ({
 
 export const OpportunitiesBoard = () => {
   const { opportunities, profiles, currentUser, collabMode } = useNomadStore();
+  const hasCollabAccess = useCollabAccess();
   const [filter, setFilter] = useState<OpportunityType | 'All'>('All');
   const [search, setSearch] = useState('');
   const [isPosting, setIsPosting] = useState(false);
@@ -195,7 +197,7 @@ export const OpportunitiesBoard = () => {
              <h3 className="text-xl font-black text-secondary">No missions found</h3>
              <p className="text-slate-400 font-medium max-w-xs mx-auto">Be the first to post a professional opportunity in this region!</p>
            </div>
-           {currentUser?.isPremium && (
+           {hasCollabAccess && (
              <button 
                onClick={() => setIsPosting(true)}
                className="bg-primary text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20"

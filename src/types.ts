@@ -402,6 +402,7 @@ export interface CityEvent {
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
+  context?: ContentContext;
 }
 
 export interface SpotReview {
@@ -465,6 +466,8 @@ export interface MarketItem {
   price: number | 'Free';
   status: 'Available' | 'Reserved' | 'Sold';
   imageUrl?: string;
+  imageUrls: string[]; 
+  meetingPlace?: string;
   reservedUntil?: string;
   reservedBy?: string;
   createdAt: string;
@@ -605,7 +608,7 @@ export interface Topic {
   createdBy: string;         // Super Admin uid
   createdAt: string;
   order: number;             // Display order in UI
-  modeContext: 'family' | 'collab' | 'both';
+  modeContext?: 'family' | 'collab' | 'both';
 }
 
 // ── THREADS (user-created discussions inside a topic) ──

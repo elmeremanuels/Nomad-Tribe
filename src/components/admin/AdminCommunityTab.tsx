@@ -9,7 +9,17 @@ export default function AdminCommunityTab() {
   const { topics, threads, hashtags, createTopic, updateTopic, deleteTopic, moderateThread, deleteThread, moderateUser, deleteHashtag, seedTopics } = useNomadStore();
   const [isAddTopicOpen, setIsAddTopicOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [topicForm, setTopicForm] = useState({ id: '', name: '', description: '', icon: 'Hand', isLocked: false, isActive: true, type: 'discussion', color: '#006d77' });
+  const [topicForm, setTopicForm] = useState({ 
+    id: '', 
+    name: '', 
+    description: '', 
+    icon: 'Hand', 
+    isLocked: false, 
+    isActive: true, 
+    type: 'discussion', 
+    color: '#006d77',
+    modeContext: 'family' as 'family' | 'collab' | 'both'
+  });
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState<{ type: 'topic' | 'thread' | 'hashtag', id: string } | null>(null);
 
@@ -31,7 +41,17 @@ export default function AdminCommunityTab() {
     
     setIsAddTopicOpen(false);
     setIsEditing(false);
-    setTopicForm({ id: '', name: '', description: '', icon: 'Hand', isLocked: false, isActive: true, type: 'discussion', color: '#006d77' });
+    setTopicForm({ 
+      id: '', 
+      name: '', 
+      description: '', 
+      icon: 'Hand', 
+      isLocked: false, 
+      isActive: true, 
+      type: 'discussion', 
+      color: '#006d77',
+      modeContext: 'family'
+    });
   };
 
   const handleDeleteTopic = async (id: string) => {
@@ -78,6 +98,13 @@ export default function AdminCommunityTab() {
                      })()}
                   </div>
                   <div className="flex gap-2">
+                     <span className={cn(
+                       "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest",
+                       topic.modeContext === 'collab' ? "bg-accent/10 text-accent" : 
+                       topic.modeContext === 'both' ? "bg-secondary/10 text-secondary" : "bg-primary/10 text-primary"
+                     )}>
+                       {topic.modeContext || 'family'}
+                     </span>
                      {topic.isLocked && <Lock className="w-4 h-4 text-amber-500" />}
                      {!topic.isActive && <EyeOff className="w-4 h-4 text-red-500" />}
                   </div>
@@ -361,21 +388,34 @@ export default function AdminCommunityTab() {
                        </select>
                     </div>
                     <div className="space-y-2">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Brand Color</label>
-                       <div className="flex gap-2">
-                          <input 
-                            type="color" 
-                            className="w-12 h-12 rounded-xl overflow-hidden cursor-pointer bg-transparent" 
-                            value={topicForm.color} 
-                            onChange={e => setTopicForm({...topicForm, color: e.target.value})}
-                          />
-                          <input 
-                            type="text"
-                            className="flex-1 p-4 bg-slate-50 border border-slate-100 rounded-2xl font-mono text-xs" 
-                            value={topicForm.color} 
-                            onChange={e => setTopicForm({...topicForm, color: e.target.value})}
-                          />
-                       </div>
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mode Context</label>
+                       <select 
+                         className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold"
+                         value={topicForm.modeContext}
+                         onChange={e => setTopicForm({...topicForm, modeContext: e.target.value as any})}
+                       >
+                          <option value="family">Family Only</option>
+                          <option value="collab">Collab Only</option>
+                          <option value="both">Both Contexts</option>
+                       </select>
+                    </div>
+                 </div>
+
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Brand Color</label>
+                    <div className="flex gap-2">
+                       <input 
+                         type="color" 
+                         className="w-12 h-12 rounded-xl overflow-hidden cursor-pointer bg-transparent" 
+                         value={topicForm.color} 
+                         onChange={e => setTopicForm({...topicForm, color: e.target.value})}
+                       />
+                       <input 
+                         type="text"
+                         className="flex-1 p-4 bg-slate-50 border border-slate-100 rounded-2xl font-mono text-xs" 
+                         value={topicForm.color} 
+                         onChange={e => setTopicForm({...topicForm, color: e.target.value})}
+                       />
                     </div>
                  </div>
 

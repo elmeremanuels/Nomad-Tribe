@@ -43,12 +43,16 @@ const REASON_COPY: Record<NonNullable<CollabPaywallProps['reason']>, { title: st
 };
 
 export const CollabPaywall = ({ isOpen, onClose, reason = 'collab-mode' }: CollabPaywallProps) => {
-  const { currentUser, setProfilePremium } = useNomadStore() as any;
+  const { currentUser, updateProfile } = useNomadStore();
   const copy = REASON_COPY[reason] || REASON_COPY['collab-mode'];
 
-  const handleStartTrial = () => {
+  const handleStartTrial = async () => {
     if (!currentUser) return;
-    setProfilePremium(currentUser.id, 'TRIAL');
+    await updateProfile({
+      isPremium: true,
+      premiumType: 'TRIAL',
+      premiumUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    });
     onClose();
   };
 

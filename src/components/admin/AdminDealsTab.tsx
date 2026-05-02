@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
 import { useNomadStore } from '../../store';
 import { Deal, Advertiser, DealCategory, DealStatus, PlaceResult } from '../../types';
-import { Plus, Trash2, Edit2, ExternalLink, Tag, Globe, MapPin, Building2, TrendingUp, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Plus, Trash2, Edit2, ExternalLink, Tag, Globe, MapPin, Building2, TrendingUp, CheckCircle2, XCircle, Clock, Link2, Loader2, Archive, RotateCcw, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PlacesAutocomplete } from '../PlacesAutocomplete';
+import { ImageUpload } from '../ImageUpload';
 
 const AdminDealsTab = () => {
-  const { deals, advertisers, addAdvertiser, updateAdvertiser, addDeal, updateDeal } = useNomadStore() as any;
+  const { deals, advertisers, addAdvertiser, updateAdvertiser, addDeal, updateDeal, archiveDeal, unarchiveDeal, deleteDeal } = useNomadStore() as any;
   const [activeSubTab, setActiveSubTab] = useState<'advertisers' | 'deals'>('advertisers');
   const [showAddAdvertiser, setShowAddAdvertiser] = useState(false);
   const [showAddDeal, setShowAddDeal] = useState(false);
   const [editingAdvertiser, setEditingAdvertiser] = useState<Advertiser | null>(null);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | DealStatus>('Active');
 
   const [newAdvertiser, setNewAdvertiser] = useState({
     companyName: '',
@@ -20,7 +24,7 @@ const AdminDealsTab = () => {
     phone: '',
     website: '',
     logoUrl: '',
-    description: '', // Note: description is not in Advertiser type but I'll store it in notes or ignore
+    description: '',
     notes: '',
     isActive: true
   });
@@ -45,36 +49,53 @@ const AdminDealsTab = () => {
     radiusKm: 50,
     startDate: new Date().toISOString(),
     endDate: '',
-    ctaText: 'Claim Deal',
+    ctaText: 'Get Deal',
     currency: 'EUR',
-    isFeatured: false
+    isFeatured: false,
+    originalPrice: 0,
+    dealPrice: 0,
+    disclaimer: ''
   });
 
   const handleAddAdvertiser = async (e: React.FormEvent) => {
     e.preventDefault();
-    const data = {
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const data = {
         companyName: newAdvertiser.companyName,
         contactName: newAdvertiser.contactName,
         email: newAdvertiser.email,
         phone: newAdvertiser.phone,
         isActive: newAdvertiser.isActive,
         notes: newAdvertiser.notes || newAdvertiser.description
-    };
+      };
 
-    if (editingAdvertiser) {
-      await updateAdvertiser(editingAdvertiser.id, data);
-    } else {
-      await addAdvertiser(data);
+      if (editingAdvertiser) {
+        await updateAdvertiser(editingAdvertiser.id, data);
+      } else {
+        await addAdvertiser(data);
+      }
+      setShowAddAdvertiser(false);
+      setEditingAdvertiser(null);
+      setNewAdvertiser({ companyName: '', contactName: '', email: '', phone: '', website: '', logoUrl: '', description: '', notes: '', isActive: true });
+    } catch (err) {
+      console.error("Advertiser save error:", err);
+    } finally {
+      setIsSubmitting(false);
     }
-    setShowAddAdvertiser(false);
-    setEditingAdvertiser(null);
-    setNewAdvertiser({ companyName: '', contactName: '', email: '', phone: '', website: '', logoUrl: '', description: '', notes: '', isActive: true });
   };
 
   const handleAddDeal = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     const advertiser = advertisers.find((a: Advertiser) => a.id === newDeal.advertiserId);
-    const data = {
+    
+    setIsSubmitting(true);
+    try {
+      const data = {
         ...newDeal,
         advertiserName: advertiser?.companyName || 'Unknown',
         endDate: newDeal.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -82,40 +103,52 @@ const AdminDealsTab = () => {
         lat: newDeal.place?.lat || newDeal.lat,
         lng: newDeal.place?.lng || newDeal.lng,
         place: newDeal.place || undefined
-    };
+      };
 
-    if (editingDeal) {
-      await updateDeal(editingDeal.id, data);
-    } else {
-      await addDeal(data);
+      if (editingDeal) {
+        await updateDeal(editingDeal.id, data);
+      } else {
+        await addDeal(data);
+      }
+      setShowAddDeal(false);
+      setEditingDeal(null);
+      setNewDeal({
+        advertiserId: '',
+        advertiserName: '',
+        name: '',
+        description: '',
+        discountLabel: '',
+        promoCode: '',
+        affiliateUrl: '',
+        imageUrl: '',
+        category: 'Hotel',
+        status: 'Active',
+        targetPremiumOnly: false,
+        isGlobal: false,
+        location: '',
+        lat: 0,
+        lng: 0,
+        place: null,
+        radiusKm: 50,
+        startDate: new Date().toISOString(),
+        endDate: '',
+        ctaText: 'Get Deal',
+        currency: 'EUR',
+        isFeatured: false,
+        originalPrice: 0,
+        dealPrice: 0,
+        disclaimer: ''
+      });
+    } catch (err) {
+      console.error("Deal save error:", err);
+    } finally {
+      setIsSubmitting(false);
     }
-    setShowAddDeal(false);
-    setEditingDeal(null);
-    setNewDeal({
-      advertiserId: '',
-      advertiserName: '',
-      name: '',
-      description: '',
-      discountLabel: '',
-      promoCode: '',
-      affiliateUrl: '',
-      imageUrl: '',
-      category: 'Hotel',
-      status: 'Active',
-      targetPremiumOnly: false,
-      isGlobal: false,
-      location: '',
-      lat: 0,
-      lng: 0,
-      place: null,
-      radiusKm: 50,
-      startDate: new Date().toISOString(),
-      endDate: '',
-      ctaText: 'Claim Deal',
-      currency: 'EUR',
-      isFeatured: false
-    });
   };
+
+  const visibleDeals = deals.filter((d: Deal) => 
+    statusFilter === 'all' || d.status === statusFilter
+  );
 
   return (
     <div className="space-y-8">
@@ -169,9 +202,12 @@ const AdminDealsTab = () => {
                 radiusKm: 50,
                 startDate: new Date().toISOString(),
                 endDate: '',
-                ctaText: 'Claim Deal',
+                ctaText: 'Get Deal',
                 currency: 'EUR',
-                isFeatured: false
+                isFeatured: false,
+                originalPrice: 0,
+                dealPrice: 0,
+                disclaimer: ''
               });
               setShowAddDeal(true);
             }
@@ -231,8 +267,25 @@ const AdminDealsTab = () => {
       )}
 
       {activeSubTab === 'deals' && (
-        <div className="space-y-4">
-          <div className="overflow-hidden border border-slate-100 rounded-[2.5rem]">
+        <div className="space-y-6">
+          <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide">
+            {(['Active', 'Paused', 'Expired', 'all'] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={cn(
+                  'px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-colors whitespace-nowrap',
+                  statusFilter === s
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-white text-slate-500 border-slate-100 hover:border-primary/30'
+                )}
+              >
+                {s === 'all' ? 'All' : s} ({deals.filter((d: Deal) => s === 'all' || d.status === s).length})
+              </button>
+            ))}
+          </div>
+
+          <div className="overflow-hidden border border-slate-100 rounded-[2.5rem] bg-white">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -244,16 +297,16 @@ const AdminDealsTab = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {deals.map((deal: Deal) => {
+                {visibleDeals.map((deal: Deal) => {
                   return (
                     <tr key={deal.id} className="group hover:bg-slate-50/50 transition-colors">
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden border border-slate-200">
+                          <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 flex-shrink-0">
                             {deal.imageUrl && <img src={deal.imageUrl} alt="" className="w-full h-full object-cover" />}
                           </div>
-                          <div>
-                            <p className="text-sm font-black text-secondary leading-tight">{deal.name}</p>
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-secondary leading-tight truncate">{deal.name}</p>
                             <p className="text-[10px] text-accent font-black uppercase mt-1">{deal.discountLabel}</p>
                           </div>
                         </div>
@@ -265,6 +318,7 @@ const AdminDealsTab = () => {
                         <span className={cn(
                           "px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest",
                           deal.status === 'Active' ? "bg-green-100 text-green-600" : 
+                          deal.status === 'Paused' ? "bg-amber-100 text-amber-600" :
                           "bg-red-100 text-red-600"
                         )}>
                           {deal.status}
@@ -283,7 +337,7 @@ const AdminDealsTab = () => {
                         </div>
                       </td>
                       <td className="px-6 py-5 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1">
                           <button 
                             onClick={() => {
                               setEditingDeal(deal);
@@ -300,28 +354,89 @@ const AdminDealsTab = () => {
                                 status: deal.status,
                                 targetPremiumOnly: deal.targetPremiumOnly || false,
                                 isGlobal: deal.isGlobal || false,
-                                location: deal.location,
+                                location: deal.location || '',
                                 lat: deal.lat || 0,
                                 lng: deal.lng || 0,
                                 place: deal.place || null,
                                 radiusKm: deal.radiusKm || 50,
                                 startDate: deal.startDate,
                                 endDate: deal.endDate,
-                                ctaText: deal.ctaText || 'Claim Deal',
+                                ctaText: deal.ctaText || 'Get Deal',
                                 currency: deal.currency || 'EUR',
-                                isFeatured: deal.isFeatured || false
+                                isFeatured: deal.isFeatured || false,
+                                originalPrice: deal.originalPrice || 0,
+                                dealPrice: deal.dealPrice || 0,
+                                disclaimer: deal.disclaimer || ''
                               });
                               setShowAddDeal(true);
                             }}
-                            className="p-2 text-slate-300 hover:text-primary transition-colors"
+                            className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                            title="Edit"
                           >
-                            <Edit2 size={16} />
+                            <Edit2 size={14} />
                           </button>
+
+                          {deal.status === 'Paused' ? (
+                            <button
+                              onClick={async () => {
+                                try { await unarchiveDeal(deal.id); } catch (e) { console.error(e); }
+                              }}
+                              className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Restore"
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                try { await archiveDeal(deal.id); } catch (e) { console.error(e); }
+                              }}
+                              className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                              title="Archive"
+                            >
+                              <Archive size={14} />
+                            </button>
+                          )}
+
+                          {confirmingDelete === deal.id ? (
+                            <div className="flex items-center gap-1 px-2 py-1 bg-red-50 border border-red-200 rounded-lg ml-2">
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await deleteDeal(deal.id);
+                                    setConfirmingDelete(null);
+                                  } catch (e) { console.error(e); }
+                                }}
+                                className="text-[10px] font-black text-red-600 uppercase tracking-widest hover:underline"
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => setConfirmingDelete(null)}
+                                className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600"
+                              >
+                                <X size={10} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmingDelete(deal.id)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete permanently"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
                   );
                 })}
+                {visibleDeals.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-20 text-center text-slate-400 italic">No deals found for this filter.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -374,7 +489,14 @@ const AdminDealsTab = () => {
                 />
               </div>
               <div className="flex gap-4">
-                <button type="submit" className="flex-1 bg-primary text-white py-4 rounded-2xl font-black shadow-lg shadow-primary/20">{editingAdvertiser ? 'Save Changes' : 'Create Advertiser'}</button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="flex-1 bg-primary text-white py-4 rounded-2xl font-black shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {editingAdvertiser ? 'Save Changes' : 'Create Advertiser'}
+                </button>
                 <button type="button" onClick={() => setShowAddAdvertiser(false)} className="px-6 py-4 bg-slate-100 text-slate-400 rounded-2xl font-bold">Cancel</button>
               </div>
             </form>
@@ -388,6 +510,7 @@ const AdminDealsTab = () => {
           <div className="bg-white w-full max-w-2xl rounded-[3rem] p-8 shadow-2xl relative overflow-y-auto max-h-[90vh]">
             <h2 className="text-2xl font-black text-secondary mb-6">{editingDeal ? 'Edit Deal' : 'New Deal'}</h2>
             <form onSubmit={handleAddDeal} className="space-y-6">
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Advertiser</label>
@@ -420,56 +543,130 @@ const AdminDealsTab = () => {
                     <option value="Overig">Overig</option>
                   </select>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Name / Title</label>
-                  <input 
-                    required
-                    type="text" 
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-primary/20 outline-none font-bold"
-                    value={newDeal.name}
-                    onChange={e => setNewDeal({...newDeal, name: e.target.value})}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Deal Image</label>
+                {newDeal.imageUrl ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-100">
+                    <img 
+                      src={newDeal.imageUrl} 
+                      alt="Deal preview" 
+                      className="w-full h-40 object-cover" 
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setNewDeal({ ...newDeal, imageUrl: '' })}
+                      className="absolute top-2 right-2 w-8 h-8 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <ImageUpload 
+                    onUpload={(url) => setNewDeal({ ...newDeal, imageUrl: url })}
+                    label="Upload deal image"
                   />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Discount Label (e.g. 10% OFF)</label>
-                  <input 
-                    required
-                    type="text" 
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-primary/20 outline-none font-bold"
-                    value={newDeal.discountLabel}
-                    onChange={e => setNewDeal({...newDeal, discountLabel: e.target.value})}
-                  />
-                </div>
+                )}
+                <p className="text-[10px] text-slate-400 font-medium italic">Landscape photo works best (e.g. 800x400).</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Deal Title</label>
+                <input 
+                  required
+                  type="text" 
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-primary/20 outline-none font-bold"
+                  value={newDeal.name}
+                  onChange={e => setNewDeal({...newDeal, name: e.target.value})}
+                  placeholder="e.g. 20% Discount for Tribes"
+                />
               </div>
 
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</label>
                 <textarea 
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-primary/20 outline-none font-medium resize-none shadow-inner"
-                  rows={2}
+                  required
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-primary/20 outline-none font-medium resize-y min-h-[120px] shadow-inner"
+                  rows={4}
+                  maxLength={1500}
                   value={newDeal.description}
                   onChange={e => setNewDeal({...newDeal, description: e.target.value})}
+                  placeholder="Full deal details, terms, and how to claim. Visible in the 'More Info' popup."
                 />
+                <div className="flex justify-between items-center px-1">
+                  <p className="text-[10px] text-slate-400 font-medium">Visible in full in the detail popup.</p>
+                  <p className="text-[10px] text-slate-400 font-bold tracking-tight">{(newDeal.description || '').length}/1500</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Original (€)</label>
+                  <input 
+                    type="number" 
+                    className="w-full p-3 bg-white border border-slate-100 rounded-xl font-bold"
+                    value={newDeal.originalPrice}
+                    onChange={e => setNewDeal({...newDeal, originalPrice: parseFloat(e.target.value) || 0})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Deal (€)</label>
+                  <input 
+                    type="number" 
+                    className="w-full p-3 bg-white border border-slate-100 rounded-xl font-bold text-accent"
+                    value={newDeal.dealPrice}
+                    onChange={e => setNewDeal({...newDeal, dealPrice: parseFloat(e.target.value) || 0})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Badge</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-3 bg-white border border-slate-100 rounded-xl font-bold text-accent"
+                    value={newDeal.discountLabel}
+                    onChange={e => setNewDeal({...newDeal, discountLabel: e.target.value})}
+                    placeholder="e.g. 10% OFF"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Promo Code</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-3 bg-white border border-slate-100 rounded-xl font-mono font-bold"
+                    value={newDeal.promoCode}
+                    onChange={e => setNewDeal({...newDeal, promoCode: e.target.value})}
+                    placeholder="TRIBE20"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Promo Code (Optional)</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CTA Button Text</label>
                   <input 
+                    required
                     type="text" 
                     className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-primary/20 outline-none font-bold"
-                    value={newDeal.promoCode}
-                    onChange={e => setNewDeal({...newDeal, promoCode: e.target.value})}
+                    value={newDeal.ctaText}
+                    onChange={e => setNewDeal({...newDeal, ctaText: e.target.value})}
+                    placeholder="Get Deal"
+                    maxLength={20}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Affiliate / Target Link</label>
-                  <input 
-                    type="url" 
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-primary/20 outline-none font-bold"
-                    value={newDeal.affiliateUrl}
-                    onChange={e => setNewDeal({...newDeal, affiliateUrl: e.target.value})}
-                  />
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Destination URL</label>
+                  <div className="relative group/url">
+                    <Link2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none group-focus-within/url:text-primary transition-colors" />
+                    <input 
+                      required
+                      type="url" 
+                      className="w-full p-4 pl-12 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-primary/20 outline-none font-bold"
+                      value={newDeal.affiliateUrl}
+                      onChange={e => setNewDeal({...newDeal, affiliateUrl: e.target.value})}
+                      placeholder="https://advertiser.com/deal?ref=..."
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -529,8 +726,37 @@ const AdminDealsTab = () => {
                 </div>
               )}
 
-              <div className="flex gap-4">
-                <button type="submit" className="flex-1 bg-primary text-white py-4 rounded-2xl font-black shadow-lg shadow-primary/20">{editingDeal ? 'Save Changes' : 'Publish Deal'}</button>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Expiration Date (Optional)</label>
+                  <input 
+                    type="date"
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold"
+                    value={newDeal.endDate ? newDeal.endDate.split('T')[0] : ''}
+                    onChange={e => setNewDeal({...newDeal, endDate: e.target.value ? new Date(e.target.value).toISOString() : ''})}
+                  />
+                </div>
+                <div className="space-y-1">
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Disclaimer</label>
+                   <input 
+                     type="text" 
+                     className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold"
+                     value={newDeal.disclaimer}
+                     onChange={e => setNewDeal({...newDeal, disclaimer: e.target.value})}
+                     placeholder="e.g. Valid until stocks last"
+                   />
+                </div>
+              </div>
+
+              <div className="flex gap-4 sticky bottom-0 bg-white py-4 border-t border-slate-50">
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="flex-1 bg-primary text-white py-4 rounded-2xl font-black shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {editingDeal ? 'Update Deal' : 'Publish Deal'}
+                </button>
                 <button type="button" onClick={() => setShowAddDeal(false)} className="px-6 py-4 bg-slate-100 text-slate-400 rounded-2xl font-bold">Cancel</button>
               </div>
             </form>

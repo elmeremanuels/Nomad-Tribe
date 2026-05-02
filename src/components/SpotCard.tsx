@@ -3,6 +3,7 @@ import { ThumbsUp, ThumbsDown, ShieldCheck, Star, MapPin } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Spot } from '../types';
 import { CardActionsMenu } from './CardActionsMenu';
+import { useNomadStore } from '../store';
 
 interface SpotCardProps {
   spot: Spot;
@@ -15,7 +16,7 @@ interface SpotCardProps {
   className?: string;
 }
 
-export const SpotCard: React.FC<SpotCardProps> = ({
+export const SpotCard = React.memo(({
   spot,
   collabMode = false,
   currentUserId,
@@ -24,7 +25,8 @@ export const SpotCard: React.FC<SpotCardProps> = ({
   onReport,
   onClick,
   className
-}) => {
+}: SpotCardProps) => {
+  const dataSaver = useNomadStore(state => state.dataSaver);
   const isOwn = currentUserId === spot.recommendedBy;
   const upvotes = spot.votes?.up || [];
   const downvotes = spot.votes?.down || [];
@@ -60,7 +62,7 @@ export const SpotCard: React.FC<SpotCardProps> = ({
             dark={false}
           />
         </div>
-        {spot.imageUrl ? (
+        {spot.imageUrl && !dataSaver ? (
           <>
             <img
               src={spot.imageUrl}
@@ -68,6 +70,7 @@ export const SpotCard: React.FC<SpotCardProps> = ({
               className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
               onError={e => { (e.target as HTMLImageElement).parentElement!.querySelector('.fallback-gradient')?.classList.remove('hidden'); (e.target as HTMLImageElement).remove(); }}
               referrerPolicy="no-referrer"
+              loading="lazy"
             />
             {spot.googlePlaceId && (
               <div className="absolute bottom-2 right-2 bg-black/40 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
@@ -80,7 +83,7 @@ export const SpotCard: React.FC<SpotCardProps> = ({
         {/* Category Gradient Fallback */}
         <div className={cn(
           "fallback-gradient absolute inset-0 bg-gradient-to-br flex items-center justify-center",
-          spot.imageUrl ? "hidden" : "",
+          spot.imageUrl && !dataSaver ? "hidden" : "",
           spot.category === 'Playground' ? 'from-green-100 to-green-200' :
           spot.category === 'Workspace' ? 'from-primary/10 to-primary/20' :
           spot.category === 'Medical' ? 'from-red-50 to-red-100' :
@@ -190,4 +193,11 @@ export const SpotCard: React.FC<SpotCardProps> = ({
       </div>
     </div>
   );
-};
+}, (prev, next) => {
+  return prev.spot.id === next.spot.id &&
+         prev.spot.rating === next.spot.rating &&
+         prev.spot.votes?.up?.length === next.spot.votes?.up?.length &&
+         prev.spot.votes?.down?.length === next.spot.votes?.down?.length &&
+         prev.currentUserId === next.currentUserId &&
+         prev.collabMode === next.collabMode;
+});

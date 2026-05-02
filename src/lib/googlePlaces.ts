@@ -42,7 +42,7 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsRe
  */
 export function buildPhotoUrl(photoName: string, maxWidthPx = 800): string {
   if (!API_KEY || !photoName) return '';
-  return `${PLACES_API_BASE}/${photoName}/media?maxWidthPx=${maxWidthPx}&key=${API_KEY}&skipHttpRedirect=true`;
+  return `${PLACES_API_BASE}/${photoName}/media?maxWidthPx=${maxWidthPx}&key=${API_KEY}`;
 }
 
 /**
@@ -53,5 +53,5 @@ export async function fetchFirstPlacePhoto(placeId: string): Promise<string | nu
   const details = await fetchPlaceDetails(placeId);
   const firstPhoto = details?.photos?.[0];
   if (!firstPhoto?.name) return null;
-  return buildPhotoUrl(firstPhoto.name);
+  return buildPhotoUrl(firstPhoto.name, 400);
 }

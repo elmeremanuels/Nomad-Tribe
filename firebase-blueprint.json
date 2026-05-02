@@ -222,6 +222,22 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "threadId", "authorId", "body"]
+    },
+    "Opportunity": {
+      "title": "Opportunity",
+      "description": "A professional opportunity or job post.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["Gig", "Full-time", "Partnership", "Investment", "Mentorship"] },
+        "posterId": { "type": "string" },
+        "posterName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "filled", "closed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "type", "posterId", "title", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -264,6 +280,10 @@
     "collabEndorsements/{endorsementId}": {
       "schema": "CollabEndorsement",
       "description": "Professional endorsements."
+    },
+    "opportunities/{opportunityId}": {
+      "schema": "Opportunity",
+      "description": "Professional opportunities."
     },
     "notifications/{notificationId}": {
       "schema": "AppNotification",

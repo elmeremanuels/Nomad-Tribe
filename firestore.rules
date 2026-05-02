@@ -59,6 +59,13 @@ service cloud.firestore {
              data.authorId == request.auth.uid &&
              data.comment is string && data.comment.size() <= 1000;
     }
+    
+    function isValidOpportunity(data) {
+      return data.keys().hasAll(['id', 'posterId', 'title', 'type', 'status', 'createdAt']) &&
+             data.posterId == request.auth.uid &&
+             data.title is string && data.title.size() <= 200 &&
+             data.status in ['open', 'filled', 'closed'];
+    }
 
     // 3. Collection Rules
     
@@ -101,6 +108,18 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow create: if isVerified() && isValidId(endorsementId) && isValidCollabEndorsement(incoming());
       allow delete: if isVerified() && (existing().authorId == request.auth.uid || isAdmin());
+    }
+
+    // OPPORTUNITIES
+    match /opportunities/{opportunityId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isVerified() && isValidId(opportunityId) && isValidOpportunity(incoming());
+      allow update: if isVerified() && (existing().posterId == request.auth.uid || isAdmin()) && (
+        (incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'skillTags', 'isRemote', 'countryCode', 'city', 'compensation', 'startsAt', 'duration', 'status', 'updatedAt'])) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
     }
 
     // TRIPS
