@@ -95,14 +95,20 @@ const AdminDealsTab = () => {
     
     setIsSubmitting(true);
     try {
+      // Ensure no undefined values are sent to Firestore
       const data = {
         ...newDeal,
         advertiserName: advertiser?.companyName || 'Unknown',
         endDate: newDeal.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        location: newDeal.place ? `${newDeal.place.city}, ${newDeal.place.country}` : newDeal.location,
-        lat: newDeal.place?.lat || newDeal.lat,
-        lng: newDeal.place?.lng || newDeal.lng,
-        place: newDeal.place || null
+        location: newDeal.place ? `${newDeal.place.city}, ${newDeal.place.country}` : (newDeal.location || ''),
+        lat: newDeal.place?.lat || newDeal.lat || 0,
+        lng: newDeal.place?.lng || newDeal.lng || 0,
+        place: newDeal.place || null,
+        ctaText: newDeal.ctaText || 'Get Deal',
+        discountLabel: newDeal.discountLabel || '',
+        promoCode: newDeal.promoCode || '',
+        disclaimer: newDeal.disclaimer || '',
+        affiliateUrl: newDeal.affiliateUrl || ''
       };
 
       if (editingDeal) {

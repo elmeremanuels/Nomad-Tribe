@@ -105,6 +105,10 @@ interface NomadStore {
   isAuthReady: boolean;
   isPaywallOpen: boolean;
   setIsPaywallOpen: (isOpen: boolean) => void;
+  isFamilyPaywallOpen: boolean;
+  setIsFamilyPaywallOpen: (isOpen: boolean) => void;
+  paywallReason: 'post-spot' | 'post-event' | 'post-market' | 'post-request' | 'post-thread' | 'post-reply' | 'generic';
+  setPaywallReason: (reason: 'post-spot' | 'post-event' | 'post-market' | 'post-request' | 'post-thread' | 'post-reply' | 'generic') => void;
   dataSaver: boolean;
   setDataSaver: (enabled: boolean) => void;
   collabMode: boolean;
@@ -238,6 +242,7 @@ interface NomadStore {
   updateUserRole: (userId: string, role: FamilyProfile['role']) => Promise<void>;
   deleteAccount: () => Promise<void>;
   moderateReport: (reportId: string, status: Report['status'], action?: string) => Promise<void>;
+  deleteReport: (reportId: string) => Promise<void>;
   moderateUser: (userId: string, updates: Partial<FamilyProfile>) => Promise<void>;
   completeOnboarding: (profileData: Partial<FamilyProfile>, trips: Trip[]) => Promise<void>;
   fetchCities: () => Promise<void>;
@@ -277,13 +282,28 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   appSettings: {
     maxUploadSizeKB: 500,
     maintenanceMode: false,
-    featuredDestinations: ['d1']
+    featuredDestinations: ['d1'],
+    pricing: {
+      familyPosting: 3.99,
+      collab: {
+        monthly: 24.99,
+        annual: 249,
+        lifetime: 599,
+        monthlyEnabled: true,
+      },
+      currency: 'EUR',
+      trialDays: 30,
+    }
   },
   reports: [],
   blocks: [],
   isAuthReady: false,
   isPaywallOpen: false,
   setIsPaywallOpen: (isOpen) => set({ isPaywallOpen: isOpen }),
+  isFamilyPaywallOpen: false,
+  setIsFamilyPaywallOpen: (isOpen) => set({ isFamilyPaywallOpen: isOpen }),
+  paywallReason: 'generic',
+  setPaywallReason: (reason) => set({ paywallReason: reason }),
   dataSaver: false,
   setDataSaver: (enabled) => set({ dataSaver: enabled }),
   collabMode: false,
@@ -386,11 +406,11 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
       if (firebaseUser) {
         // Fetch app settings
-        unsubscribes.push(onSnapshot(doc(db, 'settings', 'global'), (doc) => {
+        unsubscribes.push(onSnapshot(doc(db, 'settings', 'app'), (doc) => {
           if (doc.exists()) {
             set({ appSettings: doc.data() as AppSettings });
           }
-        }, (err) => handleFirestoreError(err, OperationType.GET, 'settings/global')));
+        }, (err) => handleFirestoreError(err, OperationType.GET, 'settings/app')));
 
         // Fetch user profile with real-time updates
         unsubscribes.push(onSnapshot(doc(db, 'users', firebaseUser.uid), async (snapshot) => {
@@ -412,7 +432,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
             });
 
             // Ensure all fields exist (migration/defensive)
-            const updatedData: FamilyProfile = {
+            let updatedData: FamilyProfile = {
               ...data,
               id: snapshot.id, // CRITICAL: Ensure ID is always set from document ID
               parents: data.parents || [],
@@ -422,6 +442,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               isPremium: data.isPremium || false,
               premiumType: data.premiumType || 'NONE',
               premiumUntil: data.premiumUntil,
+              familyPostingUnlocked: data.familyPostingUnlocked ?? false,
               gamification: data.gamification || { hasClaimedPioneerBonus: false, totalSpotsAdded: 0 },
               spokenLanguages: data.spokenLanguages || ['English'],
               role: data.role || 'User',
@@ -440,7 +461,33 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               }
             };
 
-              // Ensure e.emanuels@gmail.com is SuperAdmin
+            // LEGACY MIGRATION: Existing users keep posting access
+            if (updatedData.familyPostingUnlockSource === undefined) {
+              await updateDoc(doc(db, 'users', firebaseUser.uid), {
+                familyPostingUnlocked: true,
+                familyPostingUnlockSource: 'admin-grant'
+              });
+              updatedData.familyPostingUnlocked = true;
+              updatedData.familyPostingUnlockSource = 'admin-grant';
+            }
+
+            // TRIAL EXPIRATION CHECK
+            const isTrial = updatedData.premiumType === 'TRIAL';
+            const trialExpired = updatedData.premiumUntil && new Date(updatedData.premiumUntil) < new Date();
+
+            if (isTrial && trialExpired) {
+              console.log("[Auth] Trial expired for:", firebaseUser.uid);
+              await updateDoc(doc(db, 'users', firebaseUser.uid), {
+                premiumType: 'NONE',
+                familyPostingUnlocked: false,
+                familyPostingUnlockSource: null
+              });
+              updatedData.premiumType = 'NONE';
+              updatedData.familyPostingUnlocked = false;
+              updatedData.familyPostingUnlockSource = null;
+            }
+
+            // Ensure e.emanuels@gmail.com is SuperAdmin
             if (firebaseUser.email?.toLowerCase() === 'e.emanuels@gmail.com' && updatedData.role !== 'SuperAdmin') {
               try {
                 await setDoc(doc(db, 'users', firebaseUser.uid), { role: 'SuperAdmin' }, { merge: true });
@@ -490,6 +537,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
             }
           } else {
             // Create default profile if not exists
+            const trialEnd = new Date();
+            trialEnd.setDate(trialEnd.getDate() + 30);
+
             const newProfile: FamilyProfile = {
               id: firebaseUser.uid,
               familyName: '',
@@ -500,8 +550,13 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
               parents: [{ id: `p-${Date.now()}`, name: firebaseUser.displayName?.split(' ')[0] || 'Parent', role: 'Parent', interests: [] }],
               kids: [],
               isPremium: false,
-              premiumType: 'NONE',
+              premiumType: 'TRIAL',
+              premiumUntil: trialEnd.toISOString(),
+              familyPostingUnlocked: true,
+              familyPostingUnlockedAt: new Date().toISOString(),
+              familyPostingUnlockSource: 'trial',
               verificationLevel: 1,
+              createdAt: new Date().toISOString(),
               vouchedBy: [],
               badges: [],
               gamification: { hasClaimedPioneerBonus: false, totalSpotsAdded: 0 },
@@ -1449,6 +1504,11 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     const user = get().currentUser;
     if (!user) return;
 
+    if (user.privacySettings?.isGhostMode) {
+      get().addToast("Disable Ghost Mode to send messages.", "info");
+      return;
+    }
+
     try {
       const convoDoc = await getDoc(doc(db, 'conversations', conversationId));
       if (!convoDoc.exists()) return;
@@ -2017,9 +2077,12 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   updateAppSettings: async (settings) => {
     try {
-      await setDoc(doc(db, 'settings', 'global'), settings, { merge: true });
+      const { appSettings } = get();
+      const updated = { ...appSettings, ...settings };
+      await setDoc(doc(db, 'settings', 'app'), updated, { merge: true });
+      get().addToast("Instellingen bijgewerkt", "success");
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'settings/global');
+      handleFirestoreError(err, OperationType.UPDATE, 'settings/app');
     }
   },
 
@@ -2041,6 +2104,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
   completeOnboarding: async (profileData, onboardingTrips) => {
     const user = get().currentUser;
+    const { appSettings } = get();
     if (!user) {
       console.error("[Onboarding] No current user found to complete onboarding for");
       return;
@@ -2050,7 +2114,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
     try {
       // 1. Update Profile
-      const premiumUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const trialDays = appSettings.pricing.trialDays || 30;
+      const premiumUntil = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString();
       const badges = (profileData.badges || []) as string[];
       let verificationLevel: 1 | 2 | 3 = 1;
 
@@ -2068,6 +2133,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         premiumType: 'TRIAL',
         premiumUntil,
         hasCompletedOnboarding: true,
+        familyPostingUnlocked: true,
+        familyPostingUnlockedAt: new Date().toISOString(),
+        familyPostingUnlockSource: 'trial',
         verificationLevel,
         role: 'User',
         badges,
@@ -2099,7 +2167,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         activeTab: 'tribe'
       });
       
-      get().addToast("Welkom bij the Tribe! Je 30-daagse trial is geactiveerd.", "success");
+      get().addToast(`Welkom bij the Tribe! Je ${trialDays}-daagse trial is geactiveerd.`, "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.id}`);
       throw err;
@@ -2110,6 +2178,10 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     const user = get().currentUser;
     const firebaseUser = auth.currentUser;
     if (!user || !firebaseUser) return;
+
+    if (!confirm("Weet je zeker dat je je account wilt verwijderen? Dit kan niet ongedaan worden gemaakt.")) {
+      return;
+    }
 
     try {
       // 1. Save email for trial abuse prevention (45 days)
@@ -2217,6 +2289,17 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       get().addToast("Report updated.", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `reports/${reportId}`);
+    }
+  },
+
+  deleteReport: async (reportId: string) => {
+    const user = get().currentUser;
+    if (user?.role !== 'SuperAdmin') return;
+    try {
+      await deleteDoc(doc(db, 'reports', reportId));
+      get().addToast('Report deleted.', 'info');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `reports/${reportId}`);
     }
   },
 
@@ -2333,6 +2416,11 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   addReply: async (threadId, body) => {
     const user = get().currentUser;
     if (!user) return;
+
+    if (user.privacySettings?.isGhostMode) {
+      get().addToast("Disable Ghost Mode to post in the community.", "info");
+      return;
+    }
 
     if (!user.hasAcceptedTribeRules) {
       get().addToast('Please accept the Tribe Rules first.', 'info');

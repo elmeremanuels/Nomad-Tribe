@@ -141,7 +141,7 @@ export interface CollabEndorsement {
   createdAt: string;
 }
 
-export type PremiumType = 'NONE' | 'MONTHLY' | 'ANNUAL' | 'LIFETIME' | 'TRIAL' | 'COLLAB_MONTHLY' | 'COLLAB_ANNUAL';
+export type PremiumType = 'NONE' | 'TRIAL' | 'COLLAB_MONTHLY' | 'COLLAB_ANNUAL' | 'COLLAB_LIFETIME';
 
 export type ContentContext = 'family' | 'collab' | 'both';
 
@@ -176,6 +176,7 @@ export interface FamilyProfile {
   collabCard?: CollabCard;
   openToCollabs: boolean;
   privacySettings: PrivacySettings;
+  createdAt: string;
   preferences: {
     language: 'NL' | 'EN' | 'DE' | 'RU' | 'FR';
     showNextLocationSuggestions: boolean;
@@ -190,6 +191,10 @@ export interface FamilyProfile {
   warnings?: { reason: string; issuedAt: string; issuedBy: string }[];
   coolDownUntil?: string;       // ISO string, gebruiker is beperkt tot deze datum
   isBanned?: boolean;
+  // Pricing & Access
+  familyPostingUnlocked: boolean;
+  familyPostingUnlockedAt?: string;
+  familyPostingUnlockSource?: 'trial' | 'one-time' | 'collab' | 'admin-grant' | null;
 }
 
 export interface Report {
@@ -204,6 +209,7 @@ export interface Report {
   resolvedAt?: string;
   resolvedBy?: string;
   action?: string;
+  contextData?: any; // To store a snapshot of the reported content
 }
 
 export interface BlockedUser {
@@ -428,7 +434,30 @@ export interface AppSettings {
   maxUploadSizeKB: number;
   maintenanceMode: boolean;
   featuredDestinations: string[];
+  pricing: {
+    familyPosting: number;
+    collab: {
+      monthly: number;
+      annual: number;
+      lifetime: number;
+      monthlyEnabled: boolean;
+    };
+    currency: 'EUR' | 'USD' | 'GBP';
+    trialDays: number;
+  };
 }
+
+export const DEFAULT_PRICING: AppSettings['pricing'] = {
+  familyPosting: 3.99,
+  collab: {
+    monthly: 24.99,
+    annual: 249,
+    lifetime: 599,
+    monthlyEnabled: true,
+  },
+  currency: 'EUR',
+  trialDays: 30,
+};
 
 export interface Activity {
   id: string;

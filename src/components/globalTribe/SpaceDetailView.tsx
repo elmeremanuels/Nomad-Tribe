@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNomadStore } from '../../store';
+import { usePostingAccess } from '../../hooks/usePostingAccess';
+import { FamilyPostingPaywall } from '../FamilyPostingPaywall';
 import { ArrowLeft, MessageSquare, Globe, Eye, Bell, BellOff, ArrowBigUp, ArrowBigDown, CheckCircle2, ThumbsUp, MessageCircle, X, Users } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '../../lib/utils';
@@ -26,8 +28,12 @@ export const SpaceDetailView: React.FC<SpaceDetailViewProps> = ({ threadId, onBa
     toggleFollowThread, 
     threadFollows,
     deleteThread,
-    deleteReply
+    deleteReply,
+    setIsFamilyPaywallOpen,
+    setPaywallReason
   } = useNomadStore();
+
+  const { canPostInFamilyMode } = usePostingAccess();
 
   const [replyText, setReplyText] = useState('');
   const [isReplying, setIsReplying] = useState(false);
@@ -58,6 +64,11 @@ export const SpaceDetailView: React.FC<SpaceDetailViewProps> = ({ threadId, onBa
 
   const handleSubmitReply = async () => {
     if (!replyText.trim()) return;
+    if (!canPostInFamilyMode) {
+      setPaywallReason('post-reply');
+      setIsFamilyPaywallOpen(true);
+      return;
+    }
     await addReply(threadId, replyText);
     setReplyText('');
     setIsReplying(false);

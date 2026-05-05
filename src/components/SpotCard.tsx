@@ -5,6 +5,8 @@ import { Spot } from '../types';
 import { CardActionsMenu } from './CardActionsMenu';
 import { useNomadStore } from '../store';
 
+import { DataSaverImage } from './DataSaverImage';
+
 interface SpotCardProps {
   spot: Spot;
   collabMode?: boolean;
@@ -62,15 +64,13 @@ export const SpotCard = React.memo(({
             dark={false}
           />
         </div>
-        {spot.imageUrl && !dataSaver ? (
+        {spot.imageUrl && (
           <>
-            <img
+            <DataSaverImage
               src={spot.imageUrl}
               alt={spot.name}
               className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-              onError={e => { (e.target as HTMLImageElement).parentElement!.querySelector('.fallback-gradient')?.classList.remove('hidden'); (e.target as HTMLImageElement).remove(); }}
-              referrerPolicy="no-referrer"
-              loading="lazy"
+              fallbackIcon={<div className="fallback-gradient flex items-center justify-center w-full h-full" />}
             />
             {spot.googlePlaceId && (
               <div className="absolute bottom-2 right-2 bg-black/40 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
@@ -78,7 +78,7 @@ export const SpotCard = React.memo(({
               </div>
             )}
           </>
-        ) : null}
+        )}
         
         {/* Category Gradient Fallback */}
         <div className={cn(

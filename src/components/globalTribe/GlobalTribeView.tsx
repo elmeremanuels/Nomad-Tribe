@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNomadStore } from '../../store';
+import { usePostingAccess } from '../../hooks/usePostingAccess';
+import { FamilyPostingPaywall } from '../FamilyPostingPaywall';
 import { Search, Globe, Plus, Hash, TrendingUp, Users, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -21,8 +23,11 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
     topicFollows, 
     hashtagFollows, 
     hashtags,
-    seedTopics 
+    seedTopics,
+    setIsFamilyPaywallOpen,
+    setPaywallReason
   } = useNomadStore();
+  const { canPostInFamilyMode } = usePostingAccess();
   
   const [activeTab, setActiveTab] = useState<'home' | 'following' | 'all' | string>('home');
   const [searchQuery, setSearchQuery] = useState('');
@@ -144,7 +149,14 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
              </div>
              {activeTab !== 'home' && activeTab !== 'following' && activeTab !== 'all' && (
                 <button 
-                  onClick={() => setIsNewSpaceModalOpen(true)}
+                  onClick={() => {
+                    if (!canPostInFamilyMode) {
+                      setPaywallReason('post-thread');
+                      setIsFamilyPaywallOpen(true);
+                      return;
+                    }
+                    setIsNewSpaceModalOpen(true);
+                  }}
                   className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:-translate-y-0.5 transition-all"
                 >
                     <Plus className="w-4 h-4" /> New Space

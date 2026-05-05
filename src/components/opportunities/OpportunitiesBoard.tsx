@@ -20,7 +20,7 @@ import { useNomadStore } from '../../store';
 import { Opportunity, OpportunityType } from '../../types';
 import { cn } from '../../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
-import { useCollabAccess } from '../../hooks/usePremium';
+import { usePostingAccess } from '../../hooks/usePostingAccess';
 
 export const OpportunityCard = ({ 
   opportunity, 
@@ -116,7 +116,7 @@ export const OpportunityCard = ({
 
 export const OpportunitiesBoard = () => {
   const { opportunities, profiles, currentUser, collabMode } = useNomadStore();
-  const hasCollabAccess = useCollabAccess();
+  const { hasCollabAccess } = usePostingAccess();
   const [filter, setFilter] = useState<OpportunityType | 'All'>('All');
   const [search, setSearch] = useState('');
   const [isPosting, setIsPosting] = useState(false);
