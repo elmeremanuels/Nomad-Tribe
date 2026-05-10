@@ -101,7 +101,7 @@ export const Step2Kids: React.FC<Step2Props> = ({ kids, onChange }) => {
                   <select
                     className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-3 text-sm font-bold text-secondary outline-none appearance-none"
                     value={kid.age}
-                    onChange={(e) => updateKid(kid.id, 'age', parseInt(e.target.value))}
+                    onChange={(e) => updateKid(kid.id, 'age', parseInt(e.target.value) || 0)}
                   >
                     {[...Array(18)].map((_, i) => (
                       <option key={i} value={i}>{i === 0 ? '0 (baby)' : i}</option>

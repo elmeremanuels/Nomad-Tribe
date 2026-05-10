@@ -13,6 +13,7 @@ interface SpotCardProps {
   currentUserId?: string;
   onVote: (direction: 'up' | 'down') => void;
   onDelete?: (id: string) => void;
+  onEdit?: (spot: Spot) => void;
   onReport?: (id: string, type: 'Spot') => void;
   onClick?: () => void;
   className?: string;
@@ -24,6 +25,7 @@ export const SpotCard = React.memo(({
   currentUserId,
   onVote,
   onDelete,
+  onEdit,
   onReport,
   onClick,
   className
@@ -61,6 +63,7 @@ export const SpotCard = React.memo(({
             isOwn={isOwn}
             onReport={() => onReport?.(spot.id, 'Spot')}
             onDelete={() => onDelete?.(spot.id)}
+            onEdit={() => onEdit?.(spot)}
             dark={false}
           />
         </div>

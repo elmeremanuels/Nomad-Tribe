@@ -159,6 +159,7 @@ interface NomadStore {
   vote: (type: 'lookingFor' | 'marketplace' | 'spots' | 'threads' | 'threadReplies', id: string, direction: 'up' | 'down') => Promise<void>;
   addSpot: (spot: Spot) => Promise<void>;
   removeSpot: (spotId: string) => Promise<void>;
+  updateSpot: (spotId: string, updates: Partial<Spot>) => Promise<void>;
   addReview: (review: SpotReview) => Promise<void>;
   addCollabAsk: (ask: CollabAsk) => Promise<void>;
   removeCollabAsk: (askId: string) => Promise<void>;
@@ -1622,8 +1623,21 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
   removeSpot: async (spotId) => {
     try {
       await deleteDoc(doc(db, 'spots', spotId));
+      get().addToast("Spot verwijderd", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `spots/${spotId}`);
+    }
+  },
+
+  updateSpot: async (spotId, updates) => {
+    try {
+      await updateDoc(doc(db, 'spots', spotId), {
+        ...updates,
+        updatedAt: new Date().toISOString()
+      });
+      get().addToast("Spot bijgewerkt", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `spots/${spotId}`);
     }
   },
 

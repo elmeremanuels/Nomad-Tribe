@@ -645,7 +645,7 @@ const AdminDashboard = () => {
                       type="number" 
                       className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-black text-secondary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       value={appSettings.maxUploadSizeKB}
-                      onChange={(e) => updateAppSettings({ maxUploadSizeKB: parseInt(e.target.value) })}
+                      onChange={(e) => updateAppSettings({ maxUploadSizeKB: parseInt(e.target.value) || 0 })}
                     />
                     <p className="text-[10px] text-slate-400 font-medium px-1">Limits the size of family photos and gear images.</p>
                   </div>
@@ -1308,7 +1308,7 @@ const MarketplaceView = ({
             min="5" 
             max="100" 
             value={radius} 
-            onChange={(e) => setRadius(parseInt(e.target.value))}
+            onChange={(e) => setRadius(parseInt(e.target.value) || 1)}
             className="w-32 accent-[#e9c46a]"
           />
         </div>
@@ -1532,7 +1532,7 @@ const MarketplaceView = ({
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Price (€)</label>
-            <input required type="number" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl" value={newItem.price} onChange={e => setNewItem({...newItem, price: parseInt(e.target.value)})} />
+            <input required type="number" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl" value={newItem.price} onChange={e => setNewItem({...newItem, price: parseInt(e.target.value) || 0})} />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Description</label>
@@ -1883,7 +1883,7 @@ const TribeView = ({
   setIsAddPastPlaceOpen, setActiveTab, onSetLocation, onAddTrip, onEditTrip,
   isLookingForOpen, setIsLookingForOpen, isAddItemOpen, setIsAddItemOpen,
   isAddEventOpen, setIsAddEventOpen, isRecommendSpotOpen, setIsRecommendSpotOpen,
-  setReportingTarget
+  setReportingTarget, onEditSpot, onDeleteSpot
 }: { 
   onViewAllMarketplace: () => void, 
   onSayHello: (family: FamilyProfile, message?: string) => void, 
@@ -1902,7 +1902,9 @@ const TribeView = ({
   setIsAddEventOpen: (open: boolean) => void,
   isRecommendSpotOpen: boolean,
   setIsRecommendSpotOpen: (open: boolean) => void,
-  setReportingTarget: (target: { id: string, type: Report['targetType'] } | null) => void
+  setReportingTarget: (target: { id: string, type: Report['targetType'] } | null) => void,
+  onEditSpot: (spot: Spot) => void,
+  onDeleteSpot: (id: string) => void
 }) => {
   const { 
     currentUser, trips, profiles, lookingFor, addLookingFor, 
@@ -2842,12 +2844,8 @@ const TribeView = ({
                   currentUserId={currentUser?.id}
                   onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
                   onReport={(id) => setReportingTarget({ id, type: 'Spot' })}
-                  onDelete={(id) => {
-                    if (window.confirm("Are you sure you want to remove this spot?")) {
-                      useNomadStore.getState().removeSpot(id);
-                      addToast("Spot removed", "success");
-                    }
-                  }}
+                  onDelete={onDeleteSpot}
+                  onEdit={onEditSpot}
                 />
               ))}
             </div>
@@ -3369,7 +3367,7 @@ const TribeView = ({
                   type="number" 
                   className={cn("w-full p-4 border-2 rounded-2xl font-bold", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")}
                   value={newItem.price}
-                  onChange={e => setNewItem({...newItem, price: parseInt(e.target.value)})}
+                  onChange={e => setNewItem({...newItem, price: parseInt(e.target.value) || 0})}
                 />
               </div>
               <div className="space-y-1">
@@ -3479,7 +3477,7 @@ const TribeView = ({
                </div>
                <div className="space-y-1">
                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Max Spots</label>
-                 <input required type="number" placeholder="Spots" className={cn("w-full p-4 border-2 rounded-2xl font-bold text-sm", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")} value={newEvent.maxParticipants} onChange={e => setNewEvent({...newEvent, maxParticipants: parseInt(e.target.value)})} />
+                 <input required type="number" placeholder="Spots" className={cn("w-full p-4 border-2 rounded-2xl font-bold text-sm", collabMode ? "bg-white/10 border-white/10 text-white" : "bg-slate-50 border-slate-100")} value={newEvent.maxParticipants} onChange={e => setNewEvent({...newEvent, maxParticipants: parseInt(e.target.value) || 0})} />
                </div>
             </div>
             <div className="space-y-1">
@@ -4371,7 +4369,7 @@ const TribeNearbyView = ({
                 min="1" 
                 max="100" 
                 value={tribeRadius} 
-                onChange={(e) => setTribeRadius(parseInt(e.target.value))}
+                onChange={(e) => setTribeRadius(parseInt(e.target.value) || 1)}
                 className="w-20 accent-primary cursor-pointer"
               />
               <span className="text-[10px] font-black text-primary">{tribeRadius}km</span>
@@ -5195,7 +5193,7 @@ const VibeCheckModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose:
                 min="1" 
                 max="10" 
                 value={val} 
-                onChange={(e) => onSave({ ...metrics, [key]: parseInt(e.target.value) })}
+                onChange={(e) => onSave({ ...metrics, [key]: parseInt(e.target.value) || 0 })}
                 className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-primary"
               />
             </div>
@@ -6609,7 +6607,7 @@ const EmptyStatePioneer = ({ cityName, onAddSpot }: { cityName: string, onAddSpo
     </div>
   );
 };
-const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void }) => {
+const ExploreView = ({ onAddTrip, onEditSpot, onDeleteSpot }: { onAddTrip: (place: PlaceResult) => void, onEditSpot: (spot: Spot) => void, onDeleteSpot: (id: string) => void }) => {
   const { opportunities, spots, currentUser, cities: cityProfiles, cityEvents, collabMode, rsvpToCityEvent, fetchCities, exploreHubQuery, setExploreHubQuery, dataSaver } = useNomadStore() as any;
   const [activeView, setActiveView] = useState<'hubs' | 'opportunities'>(collabMode ? 'opportunities' : 'hubs');
   const [searchQuery, setSearchQuery] = useState('');
@@ -6685,6 +6683,8 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void })
         city={selectedCity} 
         onBack={() => setSelectedCity(null)}
         onAddTrip={onAddTrip}
+        onEditSpot={onEditSpot}
+        onDeleteSpot={onDeleteSpot}
       />
     );
   }
@@ -6803,19 +6803,19 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void })
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Family Score ({filters.minFamilyScore})</label>
-                      <input type="range" min="0" max="100" value={filters.minFamilyScore} onChange={e => setFilters({...filters, minFamilyScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                      <input type="range" min="0" max="100" value={filters.minFamilyScore} onChange={e => setFilters({...filters, minFamilyScore: parseInt(e.target.value) || 0})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Safety Score ({filters.minSafetyScore})</label>
-                      <input type="range" min="0" max="100" value={filters.minSafetyScore} onChange={e => setFilters({...filters, minSafetyScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                      <input type="range" min="0" max="100" value={filters.minSafetyScore} onChange={e => setFilters({...filters, minSafetyScore: parseInt(e.target.value) || 0})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Internet Score ({filters.minInternetScore})</label>
-                      <input type="range" min="0" max="100" value={filters.minInternetScore} onChange={e => setFilters({...filters, minInternetScore: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                      <input type="range" min="0" max="100" value={filters.minInternetScore} onChange={e => setFilters({...filters, minInternetScore: parseInt(e.target.value) || 0})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Max Budget (Level {filters.maxCost})</label>
-                      <input type="range" min="1" max="5" value={filters.maxCost} onChange={e => setFilters({...filters, maxCost: parseInt(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                      <input type="range" min="1" max="5" value={filters.maxCost} onChange={e => setFilters({...filters, maxCost: parseInt(e.target.value) || 1})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" />
                     </div>
                   </div>
                 </motion.div>
@@ -6924,7 +6924,7 @@ const ExploreView = ({ onAddTrip }: { onAddTrip: (place: PlaceResult) => void })
   );
 };
 
-const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () => void, onAddTrip: (place: PlaceResult) => void }) => {
+const CityPage = ({ city, onBack, onAddTrip, onEditSpot, onDeleteSpot }: { city: CityProfile, onBack: () => void, onAddTrip: (place: PlaceResult) => void, onEditSpot: (spot: Spot) => void, onDeleteSpot: (id: string) => void }) => {
   const { spots, cityEvents, rsvpToCityEvent, collabMode, currentUser, dataSaver } = useNomadStore() as any;
   const [activeFilter, setActiveFilter] = useState<'All' | SpotCategory>('All');
   
@@ -7112,6 +7112,8 @@ const CityPage = ({ city, onBack, onAddTrip }: { city: CityProfile, onBack: () =
                           collabMode={collabMode}
                           currentUserId={currentUser?.id}
                           onVote={(direction) => useNomadStore.getState().vote('spots', spot.id, direction)}
+                          onDelete={onDeleteSpot}
+                          onEdit={onEditSpot}
                           className="w-full"
                         />
                       ))}
@@ -7382,6 +7384,28 @@ export default function App() {
   const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
   const [selectedItem, setSelectedItem] = useState<MarketItem | null>(null);
   const [isRecommendSpotOpen, setIsRecommendSpotOpen] = useState(false);
+  const [editingSpotId, setEditingSpotId] = useState<string | null>(null);
+
+  const handleEditSpot = (spot: Spot) => {
+    setEditingSpotId(spot.id);
+    setNewSpot({
+      name: spot.name,
+      description: spot.description,
+      category: spot.category as SpotCategory,
+      imageUrl: spot.imageUrl || '',
+      place: spot.place,
+      personallyVisited: false,
+      visitedYear: new Date().getFullYear()
+    });
+    setIsRecommendSpotOpen(true);
+  };
+
+  const handleDeleteSpot = (id: string) => {
+    if (window.confirm("Weet je zeker dat je deze spot wilt verwijderen?")) {
+      useNomadStore.getState().removeSpot(id);
+    }
+  };
+
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
@@ -7810,6 +7834,8 @@ export default function App() {
           isRecommendSpotOpen={isRecommendSpotOpen}
           setIsRecommendSpotOpen={setIsRecommendSpotOpen}
           setReportingTarget={setReportingTarget}
+          onEditSpot={handleEditSpot}
+          onDeleteSpot={handleDeleteSpot}
         />
       );
       case 'profile': return (
@@ -7851,6 +7877,8 @@ export default function App() {
             setNewTrip({ id: '', place: place, startDate: '', endDate: '' });
             setIsAddTripOpen(true);
           }}
+          onEditSpot={handleEditSpot}
+          onDeleteSpot={handleDeleteSpot}
         />
       );
       case 'marketplace': return (
@@ -7901,6 +7929,8 @@ export default function App() {
           isRecommendSpotOpen={isRecommendSpotOpen}
           setIsRecommendSpotOpen={setIsRecommendSpotOpen}
           setReportingTarget={setReportingTarget}
+          onEditSpot={handleEditSpot}
+          onDeleteSpot={handleDeleteSpot}
         />
       );
     }
@@ -8597,7 +8627,19 @@ export default function App() {
       })()}
       </Modal>
 
-      <Modal isOpen={isRecommendSpotOpen} onClose={() => setIsRecommendSpotOpen(false)} title="Recommend a Spot">
+      <Modal isOpen={isRecommendSpotOpen} onClose={() => { 
+        setIsRecommendSpotOpen(false); 
+        setEditingSpotId(null);
+        setNewSpot({ 
+          name: '', 
+          description: '', 
+          category: 'Playground', 
+          imageUrl: '', 
+          place: null,
+          personallyVisited: false,
+          visitedYear: new Date().getFullYear()
+        });
+      }} title={editingSpotId ? "Bewerk Spot" : "Recommend a Spot"}>
         <form className="space-y-4" onSubmit={async (e) => { 
           e.preventDefault(); 
           if (!currentUser || !newSpot.place) {
@@ -8616,37 +8658,48 @@ export default function App() {
             return;
           }
           
-          const spot: Spot = {
-            id: `spot-${Date.now()}`,
-            name: cleanContent(newSpot.name),
-            description: cleanContent(newSpot.description),
-            category: newSpot.category,
-            imageUrl: newSpot.imageUrl,
-            place: newSpot.place,
-            verifiedTags: ['Community Recommended'],
-            tags: [],
-            rating: 5.0,
-            recommendedBy: currentUser.id,
-            citySlug: newSpot.place.city ? newSpot.place.city.toLowerCase().replace(/\s+/g, '-') : 'unknown',
-            countryCode: newSpot.place.countryCode || 'XX',
-            isVetted: false,
-            reportCount: 0,
-            isHidden: false,
-            dataSource: 'ugc',
-            viewCount: 0,
-            saveCount: 0,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-          
-          await useNomadStore.getState().addSpot(spot);
+          if (editingSpotId) {
+            await useNomadStore.getState().updateSpot(editingSpotId, {
+              name: cleanContent(newSpot.name),
+              description: cleanContent(newSpot.description),
+              category: newSpot.category,
+              imageUrl: newSpot.imageUrl,
+              place: newSpot.place,
+            });
+          } else {
+            const spot: Spot = {
+              id: `spot-${Date.now()}`,
+              name: cleanContent(newSpot.name),
+              description: cleanContent(newSpot.description),
+              category: newSpot.category,
+              imageUrl: newSpot.imageUrl,
+              place: newSpot.place,
+              verifiedTags: ['Community Recommended'],
+              tags: [],
+              rating: 5.0,
+              recommendedBy: currentUser.id,
+              citySlug: newSpot.place.city ? newSpot.place.city.toLowerCase().replace(/\s+/g, '-') : 'unknown',
+              countryCode: newSpot.place.countryCode || 'XX',
+              isVetted: false,
+              reportCount: 0,
+              isHidden: false,
+              dataSource: 'ugc',
+              viewCount: 0,
+              saveCount: 0,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            
+            await useNomadStore.getState().addSpot(spot);
 
-          // Add to past places if checked
-          if (newSpot.personallyVisited && newSpot.place) {
-            await useNomadStore.getState().addPastPlace(newSpot.place, newSpot.visitedYear);
+            // Add to past places if checked
+            if (newSpot.personallyVisited && newSpot.place) {
+              await useNomadStore.getState().addPastPlace(newSpot.place, newSpot.visitedYear);
+            }
           }
-
+          
           setIsRecommendSpotOpen(false); 
+          setEditingSpotId(null);
           setNewSpot({ 
             name: '', 
             description: '', 
@@ -8656,7 +8709,7 @@ export default function App() {
             personallyVisited: false,
             visitedYear: new Date().getFullYear()
           });
-          useNomadStore.getState().addToast("Bedankt voor je aanbeveling! Ons team zal het verifiëren.", "success"); 
+          useNomadStore.getState().addToast(editingSpotId ? "Spot bijgewerkt!" : "Bedankt voor je aanbeveling! Ons team zal het verifiëren.", "success"); 
         }}>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Spot Photo</label>
@@ -8734,7 +8787,7 @@ export default function App() {
                   <select 
                     className="bg-white border border-slate-100 rounded-lg px-2 py-1 text-xs font-bold"
                     value={newSpot.visitedYear}
-                    onChange={e => setNewSpot(prev => ({ ...prev, visitedYear: parseInt(e.target.value) }))}
+                    onChange={e => setNewSpot(prev => ({ ...prev, visitedYear: parseInt(e.target.value) || new Date().getFullYear() }))}
                   >
                     {Array.from({ length: 15 }, (_, i) => new Date().getFullYear() - i).map(year => (
                       <option key={year} value={year}>{year}</option>

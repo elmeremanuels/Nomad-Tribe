@@ -134,12 +134,13 @@ service cloud.firestore {
     match /spots/{spotId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn();
-      allow create: if isVerified() && isValidId(spotId);
+      allow create: if isVerified() && isValidId(spotId) && incoming().recommendedBy == request.auth.uid;
       allow update: if isVerified() && (
-        (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'category', 'imageUrl', 'place', 'tags', 'votes']) && !incoming().diff(existing()).affectedKeys().hasAny(['isVetted', 'isHidden'])) ||
+        (isOwner(existing().recommendedBy) && incoming().recommendedBy == existing().recommendedBy && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'category', 'imageUrl', 'place', 'tags', 'votes', 'updatedAt']) && !incoming().diff(existing()).affectedKeys().hasAny(['isVetted', 'isHidden'])) ||
+        (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['votes'])) || // Allow voting by anyone
         isAdmin()
       );
-      allow delete: if isAdmin();
+      allow delete: if isOwner(existing().recommendedBy) || isAdmin();
     }
 
     // LOOKING FOR
