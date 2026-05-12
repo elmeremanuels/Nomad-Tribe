@@ -15,7 +15,7 @@ interface SpaceCardProps {
 }
 
 export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, onReport }) => {
-  const { currentUser, vote, threadFollows, toggleFollowThread, toggleFollowHashtag, toggleWelcome, deleteThread } = useNomadStore();
+  const { currentUser, vote, threadFollows, toggleFollowThread, toggleFollowHashtag, toggleWelcome, deleteThread, collabMode } = useNomadStore();
   
   const getVoteScore = (votes: { up: string[], down: string[] }) => (votes?.up?.length || 0) - (votes?.down?.length || 0);
   const isUpvoted = thread.votes?.up?.includes(currentUser?.id || '');
@@ -33,13 +33,18 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
     <div 
       onClick={onClick}
       className={cn(
-        "p-4 border border-slate-100 rounded-[1.5rem] shadow-sm hover:shadow-xl transition-all cursor-pointer group flex gap-4 relative overflow-hidden",
-        "bg-white"
+        "p-5 border cursor-pointer transition-all group flex gap-4 relative overflow-hidden",
+        collabMode 
+          ? "bg-white/5 border-white/10 shadow-none hover:bg-white/10" 
+          : "bg-white border-slate-100 rounded-[2.5rem] shadow-sm hover:shadow-xl"
       )}
-      style={{ 
+      style={!collabMode ? { 
         borderLeftWidth: '4px', 
         borderLeftColor: accentColor,
         backgroundColor: `${accentColor}10` 
+      } : {
+        borderLeftWidth: '4px', 
+        borderLeftColor: accentColor,
       }}
     >
       <div className="absolute top-4 right-4 z-20">
@@ -93,7 +98,10 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
       <div className="flex-1 min-w-0 z-10">
         <div className="flex items-center gap-2 mb-1.5">
           <span className="text-xl mr-1">{thread.emoji || '💬'}</span>
-          <h3 className="text-base font-black text-secondary group-hover:text-primary transition-colors truncate">
+          <h3 className={cn(
+            "text-base font-black group-hover:text-primary transition-colors truncate",
+            collabMode ? "text-white" : "text-secondary"
+          )}>
             {thread.title}
           </h3>
         </div>
@@ -118,40 +126,40 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
 
         <div className="flex items-center gap-2 mb-4">
           <Avatar src={thread.authorPhotoUrl} name={thread.authorFamilyName} size="xs" />
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{thread.authorFamilyName}</span>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          <span className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/60" : "text-slate-500")}>{thread.authorFamilyName}</span>
+          <span className={cn("text-[10px] font-bold uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>
             • {topic?.name} • {thread.region}
           </span>
         </div>
 
         {/* De Vibe row - only for discussion topics */}
         {!isSocial && (
-          <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-            <span className="flex items-center gap-1.5 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-xl">
+          <div className={cn("flex items-center gap-4 text-[10px] font-black uppercase tracking-widest mb-2", collabMode ? "text-white/40" : "text-slate-400")}>
+            <span className={cn("flex items-center gap-1.5 backdrop-blur-sm px-3 py-1.5 rounded-xl", collabMode ? "bg-white/10" : "bg-white/50")}>
               <MessageSquare className="w-3.5 h-3.5" /> {thread.activeUserCount || 1} active
             </span>
-            <span className="flex items-center gap-1.5 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-xl">
+            <span className={cn("flex items-center gap-1.5 backdrop-blur-sm px-3 py-1.5 rounded-xl", collabMode ? "bg-white/10" : "bg-white/50")}>
               <Globe className="w-3.5 h-3.5" /> {thread.countryCount || 0} countries
             </span>
-            <span className="flex items-center gap-1.5 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-xl">
+            <span className={cn("flex items-center gap-1.5 backdrop-blur-sm px-3 py-1.5 rounded-xl", collabMode ? "bg-white/10" : "bg-white/50")}>
               <Eye className="w-3.5 h-3.5" /> {thread.viewCount} views
             </span>
           </div>
         )}
 
         {isSocial && (
-          <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-             <span className="flex items-center gap-1.5 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-xl">
+          <div className={cn("flex items-center gap-4 text-[10px] font-black uppercase tracking-widest mb-2", collabMode ? "text-white/40" : "text-slate-400")}>
+             <span className={cn("flex items-center gap-1.5 backdrop-blur-sm px-3 py-1.5 rounded-xl", collabMode ? "bg-white/10" : "bg-white/50")}>
               <Eye className="w-3.5 h-3.5" /> {thread.viewCount} views
             </span>
-             <span className="flex items-center gap-1.5 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-xl">
+             <span className={cn("flex items-center gap-1.5 backdrop-blur-sm px-3 py-1.5 rounded-xl", collabMode ? "bg-white/10" : "bg-white/50")}>
               <MessageSquare className="w-3.5 h-3.5" /> {thread.replyCount || 0} replies
             </span>
           </div>
         )}
 
         <div className="flex items-center justify-between mt-4">
-          <span className="text-[10px] font-bold text-slate-400">
+          <span className={cn("text-[10px] font-bold", collabMode ? "text-white/40" : "text-slate-400")}>
             {thread.createdAt ? format(parseISO(thread.createdAt), 'MMM d, yyyy') : 'Recently'}
           </span>
           <div className="flex items-center gap-2">
@@ -159,7 +167,9 @@ export const SpaceCard: React.FC<SpaceCardProps> = ({ thread, topic, onClick, on
               onClick={(e) => { e.stopPropagation(); toggleFollowThread(thread.id); }}
               className={cn(
                 "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                isFollowing ? "bg-primary text-white shadow-md shadow-primary/20" : "bg-white text-slate-400 border border-slate-100 hover:border-slate-200"
+                isFollowing 
+                  ? "bg-primary text-white shadow-md shadow-primary/20" 
+                  : (collabMode ? "bg-white/10 text-white border border-white/10" : "bg-white text-slate-400 border border-slate-100 hover:border-slate-200")
               )}
              >
                {isFollowing ? 'Following' : 'Follow'}

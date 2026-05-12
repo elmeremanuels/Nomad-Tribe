@@ -91,6 +91,7 @@ export interface Connection {
   participantIds: string[]; // [requesterId, recipientId]
   status: 'none' | 'pending' | 'accepted';
   category?: 'tribe' | 'collab';
+  context?: ContentContext;
 }
 
 export interface Conversation {
@@ -100,6 +101,7 @@ export interface Conversation {
   lastMessageSnippet: string;
   lastMessageAt: string;
   category?: 'tribe' | 'collab';
+  context?: ContentContext;
 }
 
 export interface Message {
@@ -110,6 +112,7 @@ export interface Message {
   content: string;
   createdAt: string;
   category?: 'tribe' | 'collab';
+  context?: ContentContext;
 }
 
 export interface CollabCard {
@@ -445,6 +448,7 @@ export interface AppSettings {
     currency: 'EUR' | 'USD' | 'GBP';
     trialDays: number;
   };
+  useContextualNetwork?: boolean;
 }
 
 export const DEFAULT_PRICING: AppSettings['pricing'] = {

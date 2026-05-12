@@ -26,7 +26,7 @@ import { isPubliclyVisible, canShowFieldToPublic } from './lib/privacyFilter';
 import { DataSaverImage } from './components/DataSaverImage';
 import { resolveReportContext } from './lib/reportContextResolver';
 import { UserInspector } from './components/UserInspector';
-import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance, Deal, PlaceResult, BlockedUser, AppNotification, hasValidCoords } from './types';
+import { calculateDistance, calculateMatchScore, Trip, MarketItem, PopUpEvent, LookingForRequest, Kid, Spot, FamilyProfile, Parent, CollabAsk, CollabCard, CollabEndorsement, Report, CityProfile, CityEvent, SpotCategory, DestinationGuidance, Deal, PlaceResult, BlockedUser, AppNotification, hasValidCoords, ContentContext } from './types';
 import { format, parseISO } from 'date-fns';
 import { auth, googleProvider, facebookProvider, appleProvider } from './firebase';
 import { signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth';
@@ -50,6 +50,7 @@ import { CategoryTile } from './components/CategoryTile';
 import { CardActionsMenu } from './components/CardActionsMenu';
 import { TribeBrowserOverlay } from './components/TribeBrowserOverlay';
 import { ImageUpload } from './components/ImageUpload';
+import { ConfirmDeleteModal } from './components/ConfirmDeleteModal';
 import AdminSeedTab from './components/admin/AdminSeedTab';
 import AdminDealsTab from './components/admin/AdminDealsTab';
 import AdminCommunityTab from './components/admin/AdminCommunityTab';
@@ -810,7 +811,7 @@ const AdminDashboard = () => {
                         <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all group">
                           <div className="flex items-center gap-4">
                             <div className="w-14 h-14 rounded-xl bg-white overflow-hidden border border-slate-100 shadow-sm">
-                              <img src={item.imageUrl || `https://picsum.photos/seed/${item.id}/100/100`} alt="" className="w-full h-full object-cover" />
+                              <img src={item.imageUrls?.[0] || item.imageUrl || `https://picsum.photos/seed/${item.id}/100/100`} alt="" className="w-full h-full object-cover" />
                             </div>
                             <div>
                               <p className="text-sm font-black text-secondary leading-tight">{item.title}</p>
@@ -1883,7 +1884,7 @@ const TribeView = ({
   setIsAddPastPlaceOpen, setActiveTab, onSetLocation, onAddTrip, onEditTrip,
   isLookingForOpen, setIsLookingForOpen, isAddItemOpen, setIsAddItemOpen,
   isAddEventOpen, setIsAddEventOpen, isRecommendSpotOpen, setIsRecommendSpotOpen,
-  setReportingTarget, onEditSpot, onDeleteSpot
+  setReportingTarget, onEditSpot, onDeleteSpot, confirmingDeleteTarget, setConfirmingDeleteTarget
 }: { 
   onViewAllMarketplace: () => void, 
   onSayHello: (family: FamilyProfile, message?: string) => void, 
@@ -1904,7 +1905,9 @@ const TribeView = ({
   setIsRecommendSpotOpen: (open: boolean) => void,
   setReportingTarget: (target: { id: string, type: Report['targetType'] } | null) => void,
   onEditSpot: (spot: Spot) => void,
-  onDeleteSpot: (id: string) => void
+  onDeleteSpot: (id: string) => void,
+  confirmingDeleteTarget: { type: 'event' | 'marketItem' | 'spot' | 'trip' | 'pastPlace' | 'request'; id: string } | null,
+  setConfirmingDeleteTarget: (target: { type: 'event' | 'marketItem' | 'spot' | 'trip' | 'pastPlace' | 'request'; id: string } | null) => void
 }) => {
   const { 
     currentUser, trips, profiles, lookingFor, addLookingFor, 
@@ -1921,9 +1924,40 @@ const TribeView = ({
   const labels = useModeLabels();
   const isPremium = currentUser?.isPremium || false;
 
+  const handleEditMarketItem = (item: MarketItem) => {
+    setNewItem({
+      title: item.title,
+      description: item.description,
+      price: item.price as number,
+      category: item.category,
+      mode: item.mode,
+      imageUrls: item.imageUrls,
+      meetingPlace: item.meetingPlace || '',
+      place: item.place || null
+    });
+    setEditingItemId(item.id);
+    setIsAddItemOpen(true);
+  };
+
+  const handleEditEvent = (event: PopUpEvent) => {
+    setNewEvent({
+      title: event.title,
+      description: event.description || '',
+      date: event.date,
+      time: event.time || '',
+      category: (event.category as any) || 'Social',
+      imageUrl: event.imageUrl || '',
+      place: event.place || null,
+      maxParticipants: event.maxParticipants
+    });
+    setEditingEventId(event.id);
+    setIsAddEventOpen(true);
+  };
+
   const [isCollabAskOpen, setIsCollabAskOpen] = useState(false);
   const [isMyPostsOpen, setIsMyPostsOpen] = useState(false);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [newRequest, setNewRequest] = useState<{ title: string; description: string; category: LookingForRequest['category']; place: PlaceResult | null; date: string }>({ title: '', description: '', category: 'Help', place: null, date: '' });
   const [newCollabAsk, setNewCollabAsk] = useState({ skillNeeded: '', description: '' });
   const [newItem, setNewItem] = useState<{ 
@@ -2272,9 +2306,9 @@ const TribeView = ({
       return;
     }
 
-    const { addItem } = useNomadStore.getState();
+    const { addItem, updateMarketItem } = useNomadStore.getState();
     const item: MarketItem = {
-      id: `m-${Date.now()}`,
+      id: editingItemId || `m-${Date.now()}`,
       sellerId: currentUser.id,
       sellerName: currentUser.familyName,
       title: newItem.title,
@@ -2284,17 +2318,27 @@ const TribeView = ({
       mode: newItem.mode || 'Sell',
       imageUrls: newItem.imageUrls,
       meetingPlace: newItem.meetingPlace,
-      status: 'Available',
+      status: editingItemId ? marketItems.find(i => i.id === editingItemId)?.status || 'Available' : 'Available',
       place: newItem.place || null,
       location: newItem.place ? `${newItem.place.city}, ${newItem.place.country}` : activeNode.label,
       lat: newItem.place?.lat || activeNode.lat,
       lng: newItem.place?.lng || activeNode.lng,
-      createdAt: new Date().toISOString(),
+      createdAt: editingItemId ? marketItems.find(i => i.id === editingItemId)?.createdAt || new Date().toISOString() : new Date().toISOString(),
       context: collabMode ? 'collab' : 'family'
     };
-    await addItem(item);
-    setIsAddItemOpen(false);
-    setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrls: [], place: null, meetingPlace: '' });
+    
+    try {
+      if (editingItemId) {
+        await updateMarketItem(editingItemId, item);
+      } else {
+        await addItem(item);
+      }
+      setIsAddItemOpen(false);
+      setEditingItemId(null);
+      setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrls: [], place: null, meetingPlace: '' });
+    } catch (err) {
+      addToast("Failed to save item.", "error");
+    }
   };
 
   const handleAddEvent = async (e: React.FormEvent) => {
@@ -2307,9 +2351,10 @@ const TribeView = ({
       return;
     }
 
-    const { addEvent } = useNomadStore.getState();
+    const { addEvent, updateEvent } = useNomadStore.getState();
+
     const event: PopUpEvent = {
-      id: `e-${Date.now()}`,
+      id: editingEventId || `e-${Date.now()}`,
       organizerId: currentUser.id,
       organizerName: currentUser.familyName,
       title: newEvent.title,
@@ -2322,16 +2367,27 @@ const TribeView = ({
       lng: newEvent.place?.lng || activeNode.lng,
       category: newEvent.category,
       imageUrl: newEvent.imageUrl || '',
-      participants: [currentUser.id],
-      waitlist: [],
+      participants: editingEventId ? localEvents.find(e => e.id === editingEventId)?.participants || [currentUser.id] : [currentUser.id],
+      waitlist: editingEventId ? localEvents.find(e => e.id === editingEventId)?.waitlist || [] : [],
       maxParticipants: newEvent.maxParticipants,
       isVerified: false,
       isCollaborative: collabMode,
       context: collabMode ? 'collab' : 'family'
     };
-    await addEvent(event);
-    setIsAddEventOpen(false);
-    setNewEvent({ title: '', description: '', date: '', time: '', category: 'Social', imageUrl: '', place: null, maxParticipants: 10 });
+
+    try {
+      if (editingEventId) {
+        await updateEvent(editingEventId, event);
+      } else {
+        await addEvent(event);
+      }
+      setIsAddEventOpen(false);
+      setEditingEventId(null);
+      setNewEvent({ title: '', description: '', date: '', time: '', category: 'Social', imageUrl: '', place: null, maxParticipants: 10 });
+    } catch (err) {
+      console.error('[event-post] FAILED:', err);
+      addToast(`Couldn't post event: ${(err as Error).message}`, 'error');
+    }
   };
 
   const familyMatches = useMemo(() => {
@@ -2606,7 +2662,7 @@ const TribeView = ({
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <h3 className="font-black text-xs uppercase tracking-widest opacity-40">Live Feed</h3>
-                  <p className="text-xl font-black tracking-tight mt-1">Next Up</p>
+                  <p className="text-xl font-black tracking-tight mt-1">Radar</p>
                 </div>
                 
                 <div className="relative">
@@ -2686,9 +2742,15 @@ const TribeView = ({
 
               <button 
                 onClick={() => setActiveOverlay('events')}
-                className="mt-6 w-full py-5 rounded-[2rem] border-2 border-dashed border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:border-primary hover:text-primary transition-colors active:scale-95"
+                className={cn(
+                  "mt-6 w-full py-4 rounded-[1.5rem] text-xs font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 group",
+                  collabMode
+                    ? "bg-white/10 text-white hover:bg-white/15"
+                    : "bg-slate-900 text-white hover:bg-secondary shadow-lg shadow-slate-900/10"
+                )}
               >
-                Explore Full Schedule
+                See What's Happening
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </button>
             </div>
           </section>
@@ -2755,7 +2817,7 @@ const TribeView = ({
               renderItem={(item: any) => (
                 <div key={item.id} className="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors px-1 rounded-lg">
                   <div className="w-8 h-8 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden">
-                    {item.imageUrl && <img src={item.imageUrl} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />}
+                    {(item.imageUrls?.[0] || item.imageUrl) && <img src={item.imageUrls?.[0] || item.imageUrl} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />}
                   </div>
                   <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                     <div className="min-w-0">
@@ -2868,30 +2930,26 @@ const TribeView = ({
                   "p-8 rounded-[2.5rem] border flex flex-col justify-between h-full group relative",
                   collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
                 )}>
-                  <div className="absolute top-6 right-6 z-10">
+                  <div className="absolute top-4 right-4 z-20">
                     <CardActionsMenu 
                       isOwn={currentUser?.id === event.organizerId}
                       onReport={() => setReportingTarget({ id: event.id, type: 'Event' })}
-                      onDelete={() => {
-                        if (window.confirm("Are you sure you want to delete this event?")) {
-                          useNomadStore.getState().removeEvent(event.id);
-                          addToast("Event deleted", "success");
-                        }
-                      }}
+                      onDelete={() => setConfirmingDeleteTarget({ type: 'event', id: event.id })}
+                      onEdit={() => handleEditEvent(event)}
                       dark={collabMode}
                     />
                   </div>
                   <div>
-                    <div className="flex justify-between items-start mb-6">
+                    <div className="flex items-start mb-6">
                       <span className="px-3 py-1 bg-primary/10 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest">{event.category}</span>
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                        <Users className="w-3.5 h-3.5" />
-                        {event.participants.length}/{event.maxParticipants}
-                      </div>
                     </div>
-                    <h3 className="text-xl font-black mb-3">{event.title}</h3>
+                    <h3 className="text-xl font-black mb-3 pr-10">{event.title}</h3>
                     <p className="text-sm text-slate-500 italic mb-6 line-clamp-3">"{event.description}"</p>
                     <div className="pt-6 border-t border-slate-100 space-y-3">
+                       <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          <Users className="w-4 h-4" />
+                          {event.participants.length}/{event.maxParticipants} attending
+                       </div>
                        <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
                           <Calendar className="w-4 h-4" />
                           {event.date} • {event.time}
@@ -2934,21 +2992,17 @@ const TribeView = ({
                   "rounded-[2.5rem] overflow-hidden border flex flex-col group relative",
                   collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow"
                 )}>
-                  <div className="absolute top-4 right-4 z-10">
+                  <div className="absolute top-4 right-4 z-20">
                     <CardActionsMenu 
                       isOwn={currentUser?.id === item.sellerId}
                       onReport={() => setReportingTarget({ id: item.id, type: 'MarketItem' })}
-                      onDelete={() => {
-                        if (window.confirm("Are you sure you want to remove this item?")) {
-                          useNomadStore.getState().removeMarketItem(item.id);
-                          addToast("Item removed", "success");
-                        }
-                      }}
-                      dark={true}
+                      onDelete={() => setConfirmingDeleteTarget({ type: 'marketItem', id: item.id })}
+                      onEdit={() => handleEditMarketItem(item)}
+                      dark={collabMode}
                     />
                   </div>
                   <div className="h-48 relative overflow-hidden bg-slate-100">
-                    {item.imageUrl && <img src={item.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" referrerPolicy="no-referrer" />}
+                    {(item.imageUrls?.[0] || item.imageUrl) && <img src={item.imageUrls?.[0] || item.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" referrerPolicy="no-referrer" />}
                     <div className="absolute top-4 left-4 bg-white shadow-lg px-4 py-2 rounded-2xl">
                       <span className="text-sm font-black text-secondary">€{item.price}</span>
                     </div>
@@ -3048,8 +3102,8 @@ const TribeView = ({
               <div className="space-y-4">
                 {marketItems.filter(i => i.sellerId === currentUser?.id).map(item => (
                   <div key={item.id} className={cn("p-6 rounded-[2.5rem] border flex gap-4 items-center", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 card-shadow")}>
-                    {item.imageUrl ? (
-                      <img src={item.imageUrl || undefined} className="w-16 h-16 rounded-2xl object-cover" alt="" />
+                    {item.imageUrls?.[0] || item.imageUrl ? (
+                      <img src={item.imageUrls?.[0] || item.imageUrl || undefined} className="w-16 h-16 rounded-2xl object-cover" alt="" />
                     ) : (
                       <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
                         <ShoppingBag className="w-6 h-6 opacity-20" />
@@ -3059,10 +3113,10 @@ const TribeView = ({
                       <p className="font-bold truncate">{item.title}</p>
                       <p className="text-[10px] opacity-40 font-black uppercase">{item.category} • €{item.price}</p>
                     </div>
-                    {confirmingDeleteId === item.id ? (
+                    {confirmingDeleteTarget?.type === 'marketItem' && confirmingDeleteTarget.id === item.id ? (
                       <div className="flex gap-2">
                         <button 
-                          onClick={() => setConfirmingDeleteId(null)}
+                          onClick={() => setConfirmingDeleteTarget(null)}
                           className="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase"
                         >
                           No
@@ -3070,7 +3124,7 @@ const TribeView = ({
                         <button 
                           onClick={() => {
                             removeMarketItem(item.id);
-                            setConfirmingDeleteId(null);
+                            setConfirmingDeleteTarget(null);
                           }}
                           className="px-3 py-2 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase"
                         >
@@ -3079,7 +3133,7 @@ const TribeView = ({
                       </div>
                     ) : (
                       <button 
-                        onClick={() => setConfirmingDeleteId(item.id)}
+                        onClick={() => setConfirmingDeleteTarget({ type: 'marketItem', id: item.id })}
                         className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -3110,10 +3164,10 @@ const TribeView = ({
                       <p className="font-bold truncate">{request.title}</p>
                       <p className="text-[10px] opacity-40 font-black uppercase">{request.category} • {request.location}</p>
                     </div>
-                    {confirmingDeleteId === request.id ? (
+                    {confirmingDeleteTarget?.id === request.id ? (
                       <div className="flex gap-2">
                         <button 
-                          onClick={() => setConfirmingDeleteId(null)}
+                          onClick={() => setConfirmingDeleteTarget(null)}
                           className="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase"
                         >
                           No
@@ -3121,7 +3175,7 @@ const TribeView = ({
                         <button 
                           onClick={() => {
                             removeLookingFor(request.id);
-                            setConfirmingDeleteId(null);
+                            setConfirmingDeleteTarget(null);
                           }}
                           className="px-3 py-2 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase"
                         >
@@ -3130,7 +3184,7 @@ const TribeView = ({
                       </div>
                     ) : (
                       <button 
-                        onClick={() => setConfirmingDeleteId(request.id)}
+                        onClick={() => setConfirmingDeleteTarget({ type: 'marketItem', id: request.id } as any)}
                         className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -3161,11 +3215,10 @@ const TribeView = ({
                       <p className="font-bold truncate">{event.title}</p>
                       <p className="text-[10px] opacity-40 font-black uppercase">{event.date} • {event.location}</p>
                     </div>
-                    <div className="flex gap-2">
-                      {confirmingDeleteId === event.id ? (
+                    {confirmingDeleteTarget?.type === 'event' && confirmingDeleteTarget.id === event.id ? (
                         <div className="flex gap-2">
                           <button 
-                            onClick={() => setConfirmingDeleteId(null)}
+                            onClick={() => setConfirmingDeleteTarget(null)}
                             className="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase"
                           >
                             No
@@ -3173,7 +3226,7 @@ const TribeView = ({
                           <button 
                             onClick={() => {
                               removeEvent(event.id);
-                              setConfirmingDeleteId(null);
+                              setConfirmingDeleteTarget(null);
                             }}
                             className="px-3 py-2 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase"
                           >
@@ -3182,13 +3235,12 @@ const TribeView = ({
                         </div>
                       ) : (
                         <button 
-                          onClick={() => setConfirmingDeleteId(event.id)}
+                          onClick={() => setConfirmingDeleteTarget({ type: 'event', id: event.id })}
                           className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
-                    </div>
                   </div>
                 ))}
               </div>
@@ -3324,7 +3376,16 @@ const TribeView = ({
         </form>
       </Modal>
 
-      <Modal isOpen={isAddItemOpen} onClose={() => setIsAddItemOpen(false)} title="Sell / Swap Gear" dark={collabMode}>
+      <Modal 
+        isOpen={isAddItemOpen} 
+        onClose={() => {
+          setIsAddItemOpen(false);
+          setEditingItemId(null);
+          setNewItem({ title: '', description: '', price: 0, category: 'Gear', mode: 'Sell', imageUrls: [], place: null, meetingPlace: '' });
+        }} 
+        title={editingItemId ? "Edit Listing" : "Sell / Swap Gear"} 
+        dark={collabMode}
+      >
         <form onSubmit={handleAddMarketItem} className="space-y-6">
           <div className="space-y-4">
             <div className="flex gap-2">
@@ -3416,12 +3477,21 @@ const TribeView = ({
             </div>
           </div>
           <button type="submit" className="w-full bg-secondary text-white py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl shadow-secondary/20 active:scale-[0.98] transition-all">
-            List in marketplace
+            {editingItemId ? 'Update Listing' : 'List in marketplace'}
           </button>
         </form>
       </Modal>
 
-      <Modal isOpen={isAddEventOpen} onClose={() => setIsAddEventOpen(false)} title="Post Pop-up Event" dark={collabMode}>
+      <Modal 
+        isOpen={isAddEventOpen} 
+        onClose={() => {
+          setIsAddEventOpen(false);
+          setEditingEventId(null);
+          setNewEvent({ title: '', description: '', date: '', time: '', category: 'Social', imageUrl: '', place: null, maxParticipants: 10 });
+        }} 
+        title={editingEventId ? "Edit Pop-up Event" : "Post Pop-up Event"} 
+        dark={collabMode}
+      >
         <form onSubmit={handleAddEvent} className="space-y-6">
           <div className="space-y-4">
             <input 
@@ -3492,7 +3562,7 @@ const TribeView = ({
             </div>
           </div>
           <button type="submit" className="w-full bg-accent text-white py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl shadow-accent/20 active:scale-[0.98] transition-all">
-            Create Event
+            {editingEventId ? 'Update Event' : 'Create Event'}
           </button>
         </form>
       </Modal>
@@ -3605,7 +3675,11 @@ const CollabOpportunitySummary = ({ onUpgrade, stats }: { onUpgrade: () => void,
 };
 
 const ConnectView = ({ onPaywall, onSayHello, onReport }: { onPaywall: () => void, onSayHello: (family: FamilyProfile, msg: string) => void, onReport: (id: string, type: Report['targetType']) => void }) => {
-  const { currentUser, profiles, conversations, messages, sendMessage, subscribeToMessages, connections, acceptConnection, cancelConnection, addToast, trips, collabMode, notifications, markNotificationRead, lookingFor } = useNomadStore();
+  const { 
+    currentUser, profiles, conversations, messages, sendMessage, subscribeToMessages, 
+    connections, acceptConnection, cancelConnection, addToast, trips, collabMode, 
+    notifications, markNotificationRead, lookingFor, appSettings 
+  } = useNomadStore();
   const [activeConvoId, setActiveConvoId] = useState<string | null>(null);
   const [activePortalTab, setActivePortalTab] = useState<'chat' | 'notifications'>('chat');
   const [messageText, setMessageText] = useState('');
@@ -3665,10 +3739,20 @@ const ConnectView = ({ onPaywall, onSayHello, onReport }: { onPaywall: () => voi
   const otherParticipantId = connection?.requesterId === currentUser?.id ? connection?.recipientId : connection?.requesterId;
   const otherParticipant = profiles.find(p => p.id === otherParticipantId);
 
-  const pendingConnections = connections.filter(c => c.recipientId === currentUser?.id && c.status === 'pending');
-  const sentRequests = connections.filter(c => c.requesterId === currentUser?.id && c.status === 'pending');
+  const targetContext: ContentContext = collabMode ? 'collab' : 'family';
+  const pendingConnections = connections.filter(c => 
+    c.recipientId === currentUser?.id && 
+    c.status === 'pending' && 
+    (!appSettings.useContextualNetwork || c.context === targetContext)
+  );
+  const sentRequests = connections.filter(c => 
+    c.requesterId === currentUser?.id && 
+    c.status === 'pending' && 
+    (!appSettings.useContextualNetwork || c.context === targetContext)
+  );
 
   const filteredConversations = conversations.filter(convo => {
+    if (appSettings.useContextualNetwork && convo.context !== targetContext) return false;
     const conn = connections.find(c => c.id === convo.connectionId);
     const otherId = conn?.requesterId === currentUser?.id ? conn?.recipientId : conn?.requesterId;
     const other = profiles.find(p => p.id === otherId);
@@ -4224,7 +4308,8 @@ const TribeNearbyView = ({
         title: cleanContent(newRequest.title),
         description: cleanContent(newRequest.description),
         date: newRequest.category === 'Playdate' ? newRequest.date : null,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        context: collabMode ? 'collab' : 'family'
       };
       await addLookingFor(request);
       setIsLookingForOpen(false);
@@ -4622,7 +4707,7 @@ const TribeNearbyView = ({
               )}
             >
               <div className="h-32 bg-slate-100 relative">
-                <img src={item.imageUrl || `https://picsum.photos/seed/${item.id}/400/300`} alt="" className="w-full h-full object-cover" />
+                <img src={item.imageUrls?.[0] || item.imageUrl || `https://picsum.photos/seed/${item.id}/400/300`} alt="" className="w-full h-full object-cover" />
                 <div className="absolute top-3 right-3 flex gap-2">
                   {currentUser?.id === item.sellerId ? (
                     <button 
@@ -5216,7 +5301,7 @@ const ProfileView = ({
   isNotificationCenterOpen, setIsConnectOpen, onSetLocation, setIsAddPastPlaceOpen,
   isLookingForOpen, setIsLookingForOpen, isAddItemOpen, setIsAddItemOpen,
   isAddEventOpen, setIsAddEventOpen, isRecommendSpotOpen, setIsRecommendSpotOpen,
-  setReportingTarget
+  setReportingTarget, confirmingDeleteTarget, setConfirmingDeleteTarget
 }: { 
   onShare: () => void, 
   onLogout: () => void, 
@@ -5235,7 +5320,9 @@ const ProfileView = ({
   setIsAddEventOpen: (open: boolean) => void,
   isRecommendSpotOpen: boolean,
   setIsRecommendSpotOpen: (open: boolean) => void,
-  setReportingTarget: (target: { id: string, type: Report['targetType'] } | null) => void
+  setReportingTarget: (target: { id: string, type: Report['targetType'] } | null) => void,
+  confirmingDeleteTarget: { type: 'event' | 'marketItem' | 'spot' | 'trip' | 'pastPlace' | 'request'; id: string } | null,
+  setConfirmingDeleteTarget: (target: { type: 'event' | 'marketItem' | 'spot' | 'trip' | 'pastPlace' | 'request'; id: string } | null) => void
 }) => {
   const { 
     currentUser, 
@@ -5260,7 +5347,6 @@ const ProfileView = ({
   const [isEditTribeOpen, setIsEditTribeOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isEditCollabCardOpen, setIsEditCollabCardOpen] = useState(false);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   
   const [editProfile, setEditProfile] = useState<Partial<FamilyProfile>>({
     collabCard: { occupation: '', superpowers: [], currentMission: '', linkedInUrl: '' },
@@ -5991,14 +6077,14 @@ const ProfileView = ({
                         <Calendar className="w-5 h-5" />
                       </div>
                       <div className="flex gap-2">
-                        {confirmingDeleteId === trip.id ? (
+                        {confirmingDeleteTarget?.type === 'trip' && confirmingDeleteTarget.id === trip.id ? (
                           <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center p-3 text-center space-y-2 animate-in fade-in zoom-in duration-200 rounded-[2.5rem]">
                             <p className="text-[10px] font-black text-secondary uppercase tracking-widest">Delete?</p>
                             <div className="flex gap-2 w-full px-4">
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setConfirmingDeleteId(null);
+                                  setConfirmingDeleteTarget(null);
                                 }}
                                 className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-tight hover:bg-slate-200"
                               >
@@ -6008,7 +6094,7 @@ const ProfileView = ({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   removeTrip(trip.id);
-                                  setConfirmingDeleteId(null);
+                                  setConfirmingDeleteTarget(null);
                                 }}
                                 className="flex-1 py-2 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-tight shadow-lg shadow-red-500/20 hover:bg-red-600"
                               >
@@ -6020,7 +6106,7 @@ const ProfileView = ({
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              setConfirmingDeleteId(trip.id);
+                              setConfirmingDeleteTarget({ type: 'trip', id: trip.id });
                             }}
                             className={cn("p-2 transition-colors relative z-10", collabMode ? "text-white/40 hover:text-red-400" : "text-slate-300 hover:text-red-500")}
                           >
@@ -6111,14 +6197,14 @@ const ProfileView = ({
                 .map((place) => (
                   <div key={place.id} className={cn("p-4 rounded-3xl border group relative overflow-hidden", collabMode ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100")}>
                     <div className="space-y-1">
-                      {confirmingDeleteId === place.id ? (
+                      {confirmingDeleteTarget?.type === 'pastPlace' && confirmingDeleteTarget.id === place.id ? (
                         <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center p-3 text-center space-y-2 animate-in fade-in zoom-in duration-200">
                           <p className="text-[10px] font-black text-secondary uppercase tracking-widest">Delete?</p>
                           <div className="flex gap-2 w-full">
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setConfirmingDeleteId(null);
+                                setConfirmingDeleteTarget(null);
                               }}
                               className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-tight hover:bg-slate-200"
                             >
@@ -6128,7 +6214,7 @@ const ProfileView = ({
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 await removePastPlace(place.id);
-                                setConfirmingDeleteId(null);
+                                setConfirmingDeleteTarget(null);
                               }}
                               className="flex-1 py-2 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-tight shadow-lg shadow-red-500/20 hover:bg-red-600"
                             >
@@ -6140,7 +6226,7 @@ const ProfileView = ({
                         <button 
                           onClick={(e) => { 
                             e.stopPropagation(); 
-                            setConfirmingDeleteId(place.id);
+                            setConfirmingDeleteTarget({ type: 'pastPlace', id: place.id });
                           }}
                           className={cn(
                             "absolute top-2 right-2 p-1.5 transition-all rounded-lg z-20 opacity-0 group-hover:opacity-100",
@@ -6888,30 +6974,33 @@ const ExploreView = ({ onAddTrip, onEditSpot, onDeleteSpot }: { onAddTrip: (plac
                       {city.familyScore}
                     </div>
                   </div>
-                  <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
-                    <div>
-                      <h3 className="font-black text-secondary leading-tight">{city.name}</h3>
-                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{city.country} • {city.continent}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 pt-4 border-t border-slate-50">
-                      <div className="flex items-center gap-1.5 p-2 bg-slate-50 rounded-xl">
-                        <Shield size={12} className="text-slate-400" />
-                        <span className="text-[10px] font-black text-slate-500">{city.safetyScore}</span>
+                    <div className={cn(
+                      "p-5 space-y-3 flex-1 flex flex-col justify-between",
+                      collabMode ? "bg-[#006d77]/60" : ""
+                    )}>
+                      <div>
+                        <h3 className={cn("font-black leading-tight", collabMode ? "text-white" : "text-secondary")}>{city.name}</h3>
+                        <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>{city.country} • {city.continent}</p>
                       </div>
-                      <div className="flex items-center gap-1.5 p-2 bg-slate-50 rounded-xl">
-                        <Zap size={12} className="text-slate-400" />
-                        <span className="text-[10px] font-black text-slate-500">{city.internetScore}</span>
+                      <div className={cn("grid grid-cols-2 gap-2 pt-4 border-t", collabMode ? "border-white/10" : "border-slate-50")}>
+                        <div className={cn("flex items-center gap-1.5 p-2 rounded-xl", collabMode ? "bg-white/10" : "bg-slate-50")}>
+                          <Shield size={12} className={collabMode ? "text-white/40" : "text-slate-400"} />
+                          <span className={cn("text-[10px] font-black", collabMode ? "text-white/60" : "text-slate-500")}>{city.safetyScore}</span>
+                        </div>
+                        <div className={cn("flex items-center gap-1.5 p-2 rounded-xl", collabMode ? "bg-white/10" : "bg-slate-50")}>
+                          <Zap size={12} className={collabMode ? "text-white/40" : "text-slate-400"} />
+                          <span className={cn("text-[10px] font-black", collabMode ? "text-white/60" : "text-slate-500")}>{city.internetScore}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-2">
+                        <div className="flex items-center gap-1">
+                          {[...Array(5)].map((_, i) => (
+                            <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < city.costIndex ? "bg-green-500" : (collabMode ? "bg-white/10" : "bg-slate-200"))} />
+                          ))}
+                        </div>
+                        <span className={cn("text-[9px] font-black uppercase tracking-tighter", collabMode ? "text-white/40" : "text-slate-300")}>Budget Lvl {city.costIndex}</span>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between pt-2">
-                      <div className="flex items-center gap-1">
-                        {[...Array(5)].map((_, i) => (
-                          <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < city.costIndex ? "bg-green-500" : "bg-slate-200")} />
-                        ))}
-                      </div>
-                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">Budget Lvl {city.costIndex}</span>
-                    </div>
-                  </div>
                 </motion.div>
               ))}
             </div>
@@ -7013,13 +7102,18 @@ const CityPage = ({ city, onBack, onAddTrip, onEditSpot, onDeleteSpot }: { city:
             { label: 'Nomad Score', value: `${city.nomadScore}/100`, icon: Zap, color: 'bg-indigo-500' },
             { label: 'Families', value: `${city.familyCount} Tribers`, icon: Users, color: 'bg-primary' },
           ].map((stat, i) => (
-            <div key={i} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl flex items-center gap-4 group">
+            <div key={i} className={cn(
+              "p-6 flex items-center gap-4 group transition-all",
+              collabMode 
+                ? "bg-white/5 border border-white/10 rounded-[2.5rem] shadow-none" 
+                : "bg-white rounded-3xl border border-slate-100 shadow-xl"
+            )}>
                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center text-white transition-transform group-hover:scale-110", stat.color)}>
                   <stat.icon className="w-6 h-6" />
                </div>
                <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
-                  <p className="text-sm font-black text-secondary">{stat.value}</p>
+                  <p className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>{stat.label}</p>
+                  <p className={cn("text-sm font-black", collabMode ? "text-white" : "text-secondary")}>{stat.value}</p>
                </div>
             </div>
           ))}
@@ -7367,6 +7461,7 @@ export default function App() {
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [confirmingDeleteTarget, setConfirmingDeleteTarget] = useState<{ type: 'event' | 'marketItem' | 'spot' | 'trip' | 'pastPlace' | 'request'; id: string } | null>(null);
 
   useEffect(() => {
     // Dynamic import for gmpx-api-loader
@@ -7401,9 +7496,7 @@ export default function App() {
   };
 
   const handleDeleteSpot = (id: string) => {
-    if (window.confirm("Weet je zeker dat je deze spot wilt verwijderen?")) {
-      useNomadStore.getState().removeSpot(id);
-    }
+    setConfirmingDeleteTarget({ type: 'spot', id });
   };
 
   const [isLookingForOpen, setIsLookingForOpen] = useState(false);
@@ -7836,6 +7929,8 @@ export default function App() {
           setReportingTarget={setReportingTarget}
           onEditSpot={handleEditSpot}
           onDeleteSpot={handleDeleteSpot}
+          confirmingDeleteTarget={confirmingDeleteTarget}
+          setConfirmingDeleteTarget={setConfirmingDeleteTarget}
         />
       );
       case 'profile': return (
@@ -7869,6 +7964,8 @@ export default function App() {
           isRecommendSpotOpen={isRecommendSpotOpen}
           setIsRecommendSpotOpen={setIsRecommendSpotOpen}
           setReportingTarget={setReportingTarget}
+          confirmingDeleteTarget={confirmingDeleteTarget}
+          setConfirmingDeleteTarget={setConfirmingDeleteTarget}
         />
       );
       case 'explore': return (
@@ -7931,6 +8028,8 @@ export default function App() {
           setReportingTarget={setReportingTarget}
           onEditSpot={handleEditSpot}
           onDeleteSpot={handleDeleteSpot}
+          confirmingDeleteTarget={confirmingDeleteTarget}
+          setConfirmingDeleteTarget={setConfirmingDeleteTarget}
         />
       );
     }
@@ -9051,6 +9150,28 @@ export default function App() {
           </button>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal 
+        target={confirmingDeleteTarget}
+        onCancel={() => setConfirmingDeleteTarget(null)}
+        onConfirm={async () => {
+          if (!confirmingDeleteTarget) return;
+          const { type, id } = confirmingDeleteTarget;
+          try {
+            if (type === 'event') await useNomadStore.getState().removeEvent(id);
+            else if (type === 'marketItem') await useNomadStore.getState().removeMarketItem(id);
+            else if (type === 'spot') await useNomadStore.getState().removeSpot(id);
+            else if (type === 'trip') await useNomadStore.getState().removeTrip(id);
+            else if (type === 'pastPlace') await useNomadStore.getState().removePastPlace(id);
+            else if (type === 'request') await useNomadStore.getState().removeLookingFor(id);
+            addToast("Item removed", "success");
+          } catch (e) {
+            addToast("Failed to remove item", "error");
+          } finally {
+            setConfirmingDeleteTarget(null);
+          }
+        }}
+      />
     </div>
     </ErrorBoundary>
     </APIProvider>

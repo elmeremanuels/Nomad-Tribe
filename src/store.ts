@@ -140,11 +140,13 @@ interface NomadStore {
   reserveItem: (itemId: string, buyerId: string) => Promise<void>;
   addItem: (item: MarketItem) => Promise<void>;
   removeMarketItem: (itemId: string) => Promise<void>;
+  updateMarketItem: (itemId: string, updates: Partial<MarketItem>) => Promise<void>;
   cancelReservation: (itemId: string) => Promise<void>;
   processPayment: (itemId: string, amount: number) => Promise<boolean>;
   rsvpForEvent: (eventId: string, userId: string) => Promise<void>;
   addEvent: (event: PopUpEvent) => Promise<void>;
   removeEvent: (eventId: string) => Promise<void>;
+  updateEvent: (eventId: string, updates: Partial<PopUpEvent>) => Promise<void>;
   voteOnPost: (postId: string, collection: 'marketplace' | 'lookingFor' | 'events', delta: 1 | -1) => Promise<void>;
   addLookingFor: (request: LookingForRequest) => Promise<void>;
   removeLookingFor: (requestId: string) => Promise<void>;
@@ -284,6 +286,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     maxUploadSizeKB: 500,
     maintenanceMode: false,
     featuredDestinations: ['d1'],
+    useContextualNetwork: true,
     pricing: {
       familyPosting: 3.99,
       collab: {
@@ -628,7 +631,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'opportunities')));
 
         const today = new Date().toISOString().split('T')[0];
-        unsubscribes.push(onSnapshot(query(collection(db, 'events'), where('endDate', '>=', today), limit(100)), (snapshot) => {
+        unsubscribes.push(onSnapshot(query(collection(db, 'events'), where('date', '>=', today), limit(100)), (snapshot) => {
           set({ events: snapshot.docs.map(d => {
             const data = d.data() as PopUpEvent;
             return {
@@ -729,12 +732,24 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
 
         // Connections: Use array-contains for participantIds
         unsubscribes.push(onSnapshot(query(collection(db, 'connections'), where('participantIds', 'array-contains', firebaseUser.uid), limit(500)), (snapshot) => {
-          set({ connections: snapshot.docs.map(d => d.data() as Connection) });
+          set({ connections: snapshot.docs.map(d => {
+            const data = d.data() as Connection;
+            return {
+              ...data,
+              context: data.context || (data.category === 'collab' ? 'collab' : 'family')
+            };
+          }) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'connections')));
 
         // Conversations: Use array-contains for participantIds
         unsubscribes.push(onSnapshot(query(collection(db, 'conversations'), where('participantIds', 'array-contains', firebaseUser.uid), limit(500)), (snapshot) => {
-          set({ conversations: snapshot.docs.map(d => d.data() as Conversation) });
+          set({ conversations: snapshot.docs.map(d => {
+            const data = d.data() as Conversation;
+            return {
+              ...data,
+              context: data.context || (data.category === 'collab' ? 'collab' : 'family')
+            };
+          }) });
         }, (err) => handleFirestoreError(err, OperationType.LIST, 'conversations')));
 
       } else {
@@ -1046,6 +1061,18 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     } catch (err) {
       console.error('removeMarketItem failed:', err);
       get().addToast("Could not remove item. Please try again.", "error");
+      throw err;
+    }
+  },
+
+  updateMarketItem: async (itemId, updates) => {
+    try {
+      const clean = Object.fromEntries(Object.entries(updates).filter(([_, v]) => v !== undefined));
+      await updateDoc(doc(db, 'marketplace', itemId), clean);
+      get().addToast("Listing updated", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `marketplace/${itemId}`);
+      throw err;
     }
   },
 
@@ -1290,6 +1317,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       get().addToast("Request removed.", "info");
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `lookingFor/${requestId}`);
+      throw err;
     }
   },
 
@@ -1328,6 +1356,18 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       get().addToast("Event cancelled and removed.", "info");
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `events/${eventId}`);
+      throw err;
+    }
+  },
+
+  updateEvent: async (eventId, updates) => {
+    try {
+      const clean = Object.fromEntries(Object.entries(updates).filter(([_, v]) => v !== undefined));
+      await updateDoc(doc(db, 'events', eventId), clean);
+      get().addToast("Event updated", "success");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `events/${eventId}`);
+      throw err;
     }
   },
 
@@ -1392,8 +1432,9 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
     }
   },
 
-  requestConnection: async (targetId, category = 'tribe') => {
+  requestConnection: async (targetId) => {
     const user = get().currentUser;
+    const collabMode = get().collabMode;
     if (!user) return;
     
     if (!targetId || targetId === user.id) {
@@ -1401,7 +1442,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       return;
     }
     
-    const connectionId = `conn-${[user.id, targetId].sort().join('-')}`;
+    const context: ContentContext = collabMode ? 'collab' : 'family';
+    const connectionId = `conn-${[user.id, targetId].sort().join('-')}-${context === 'collab' ? 'collab' : 'family'}`;
     
     // Check if connection already exists
     const existing = get().connections.find(c => c.id === connectionId);
@@ -1416,7 +1458,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       recipientId: targetId,
       participantIds: [user.id, targetId],
       status: 'pending',
-      category: category as any
+      category: collabMode ? 'collab' : 'tribe',
+      context: context
     };
 
     try {
@@ -1485,7 +1528,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         participantIds: connData.participantIds,
         lastMessageSnippet: '',
         lastMessageAt: new Date().toISOString(),
-        category: connData.category
+        category: connData.category,
+        context: connData.context || (connData.category === 'collab' ? 'collab' : 'family')
       };
       await setDoc(doc(db, 'conversations', conversationId), conversation);
     } catch (err) {
@@ -1523,7 +1567,8 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
         participantIds: convoData.participantIds,
         content,
         createdAt: new Date().toISOString(),
-        category: convoData.category
+        category: convoData.category,
+        context: convoData.context || (convoData.category === 'collab' ? 'collab' : 'family')
       };
 
       await setDoc(doc(db, 'messages', messageId), newMessage);
@@ -1626,6 +1671,7 @@ export const useNomadStore = create<NomadStore>((set, get) => ({
       get().addToast("Spot verwijderd", "success");
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `spots/${spotId}`);
+      throw err;
     }
   },
 

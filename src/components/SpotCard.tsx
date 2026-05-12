@@ -16,6 +16,7 @@ interface SpotCardProps {
   onEdit?: (spot: Spot) => void;
   onReport?: (id: string, type: 'Spot') => void;
   onClick?: () => void;
+  compact?: boolean;
   className?: string;
 }
 
@@ -28,6 +29,7 @@ export const SpotCard = React.memo(({
   onEdit,
   onReport,
   onClick,
+  compact = false,
   className
 }: SpotCardProps) => {
   const dataSaver = useNomadStore(state => state.dataSaver);
@@ -49,7 +51,8 @@ export const SpotCard = React.memo(({
   return (
     <div
       className={cn(
-        "flex-shrink-0 w-64 rounded-[2rem] overflow-hidden border transition-all",
+        "rounded-[2rem] overflow-hidden border transition-all",
+        compact ? "flex-shrink-0 w-64" : "w-full",
         collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100 shadow-sm",
         onClick && "cursor-pointer hover:shadow-md",
         className

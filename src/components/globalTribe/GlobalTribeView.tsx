@@ -25,7 +25,8 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
     hashtags,
     seedTopics,
     setIsFamilyPaywallOpen,
-    setPaywallReason
+    setPaywallReason,
+    collabMode
   } = useNomadStore();
   const { canPostInFamilyMode } = usePostingAccess();
   
@@ -117,34 +118,54 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 space-y-4 max-w-7xl mx-auto pb-24">
+    <div className={cn(
+      "min-h-screen space-y-4 max-w-7xl mx-auto pb-24 transition-colors duration-500",
+      collabMode ? "bg-[#006d77] text-white" : "bg-slate-50/50 text-slate-900"
+    )}>
       {/* Header Hub */}
-      <header className="px-4 py-4 md:p-6 bg-white border-b border-slate-100 shadow-sm sticky top-0 z-40 backdrop-blur-md bg-white/90">
+      <header className={cn(
+        "px-4 py-4 md:p-6 border-b sticky top-0 z-40 backdrop-blur-md transition-colors",
+        collabMode 
+          ? "bg-[#006d77]/90 border-white/10" 
+          : "bg-white/90 border-slate-100 shadow-sm"
+      )}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setActiveTab('home')}
-              className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 rotate-3 hover:rotate-0 transition-transform"
+              className={cn(
+                "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg rotate-3 hover:rotate-0 transition-all",
+                collabMode ? "bg-white text-[#006d77]" : "bg-primary text-white shadow-primary/20"
+              )}
             >
               <Users className="w-6 h-6" />
             </button>
             <div onClick={() => setActiveTab('home')} className="cursor-pointer">
-              <h1 className="text-2xl font-black text-secondary tracking-tight">Global Tribe</h1>
-              <p className="text-slate-500 font-bold text-xs">
-                {activeTab === 'home' ? 'Knowledge base for families' : (activeTopic?.name || activeTab)}
+              <h1 className={cn("text-2xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>
+                {collabMode ? "Collab Network" : "Global Tribe"}
+              </h1>
+              <p className={cn("font-bold text-xs", collabMode ? "text-white/60" : "text-slate-500")}>
+                {activeTab === 'home' 
+                  ? (collabMode ? 'Connect with nomad founders' : 'Knowledge base for families') 
+                  : (activeTopic?.name || activeTab)}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
              <div className="relative group flex-1 md:w-80">
-                <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-primary transition-colors" />
+                <Search className={cn("absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors", collabMode ? "text-white/40 group-focus-within:text-white" : "text-slate-300 group-focus-within:text-primary")} />
                 <input 
                   type="text" 
                   placeholder="Search spaces..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all"
+                  className={cn(
+                    "w-full pl-12 pr-4 py-3 border rounded-2xl text-xs font-bold transition-all focus:outline-none focus:ring-4",
+                    collabMode 
+                      ? "bg-white/10 border-white/10 text-white placeholder:text-white/30 focus:bg-white/20 focus:ring-white/10" 
+                      : "bg-slate-50 border-slate-100 text-secondary focus:bg-white focus:ring-primary/10"
+                  )}
                 />
              </div>
              {activeTab !== 'home' && activeTab !== 'following' && activeTab !== 'all' && (
@@ -157,7 +178,12 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
                     }
                     setIsNewSpaceModalOpen(true);
                   }}
-                  className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:-translate-y-0.5 transition-all"
+                  className={cn(
+                    "flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all",
+                    collabMode 
+                      ? "bg-white text-[#006d77] shadow-xl hover:-translate-y-0.5" 
+                      : "bg-primary text-white shadow-xl shadow-primary/20 hover:-translate-y-0.5"
+                  )}
                 >
                     <Plus className="w-4 h-4" /> New Space
                 </button>
@@ -173,14 +199,16 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
               onClick={() => setActiveTab('following')}
               label="Following" 
               icon={Users}
+              collabMode={collabMode}
             />
             <TabButton 
               active={activeTab === 'all'} 
               onClick={() => setActiveTab('all')}
               label="All Spaces" 
               icon={Globe}
+              collabMode={collabMode}
             />
-            <div className="w-px h-6 bg-slate-100 mx-2" />
+            <div className={cn("w-px h-6 mx-2", collabMode ? "bg-white/10" : "bg-slate-100")} />
             {topics.map((topic: any) => (
               <TabButton 
                 key={topic.id}
@@ -190,6 +218,7 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
                 topicId={topic.id}
                 topicIcon={topic.icon}
                 isLocked={topic.isLocked}
+                collabMode={collabMode}
               />
             ))}
           </div>
@@ -198,7 +227,7 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
         {/* Trending Hashtags */}
         {activeTab !== 'home' && activeTopic?.type !== 'social' && trendingHashtags.length > 0 && (
           <div className="mt-4 flex items-center gap-3 overflow-x-auto py-1 no-scrollbar">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 shrink-0">
+            <span className={cn("text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0", collabMode ? "text-white/40" : "text-slate-400")}>
               <TrendingUp className="w-3 h-3" /> Trending:
             </span>
             {trendingHashtags.map(tag => (
@@ -206,10 +235,10 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
                 key={tag.id}
                 onClick={() => setSelectedHashtag(selectedHashtag === tag.id ? null : tag.id)}
                 className={cn(
-                  "px-3 py-1 rounded-full text-[10px] font-bold transition-all whitespace-nowrap",
+                  "px-3 py-1 rounded-full text-[10px] font-bold transition-all whitespace-nowrap border",
                   selectedHashtag === tag.id 
-                    ? "bg-secondary text-white shadow-lg" 
-                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-100"
+                    ? (collabMode ? "bg-white text-[#006d77] border-white shadow-lg" : "bg-secondary text-white border-secondary shadow-lg")
+                    : (collabMode ? "bg-white/5 text-white/60 border-white/10 hover:bg-white/10" : "bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-100")
                 )}
               >
                 #{tag.id}
@@ -227,15 +256,17 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
                   title="Following"
                   description="Your personalized feed"
                   icon={<Users className="w-6 h-6" />}
-                  color="#6366f1"
+                  color={collabMode ? "#ffffff" : "#6366f1"}
                   onClick={() => setActiveTab('following')}
+                  collabMode={collabMode}
                 />
                 <CategoryTile 
                   title="All Spaces"
                   description="Browse everything happening in the tribe"
                   icon={<Globe className="w-6 h-6" />}
-                  color="#14b8a6"
+                  color={collabMode ? "#4db6ac" : "#14b8a6"}
                   onClick={() => setActiveTab('all')}
+                  collabMode={collabMode}
                 />
                 {topics.map((topic: any) => {
                   const Icon = getTopicIcon(topic.icon || topic.id);
@@ -245,9 +276,10 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
                       title={topic.name}
                       description={topic.description}
                       icon={Icon ? <Icon className="w-6 h-6" /> : null}
-                      color={topic.color}
+                      color={collabMode ? "#ffffff" : topic.color}
                       isLocked={topic.isLocked}
                       onClick={() => setActiveTab(topic.id)}
+                      collabMode={collabMode}
                     />
                   );
                 })}
@@ -268,16 +300,16 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-4">
               {activeTopic?.type !== 'social' ? (
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sort by:</span>
-                    <div className="flex bg-white p-1 rounded-xl border border-slate-100">
-                      <SortButton active={sortBy === 'hot'} onClick={() => setSortBy('hot')} label="Hot" />
-                      <SortButton active={sortBy === 'new'} onClick={() => setSortBy('new')} label="New" />
-                      <SortButton active={sortBy === 'active'} onClick={() => setSortBy('active')} label="Most Active" />
+                    <span className={cn("text-[10px] font-black uppercase tracking-widest", collabMode ? "text-white/40" : "text-slate-400")}>Sort by:</span>
+                    <div className={cn("flex p-1 rounded-xl border", collabMode ? "bg-white/5 border-white/10" : "bg-white border-slate-100")}>
+                      <SortButton active={sortBy === 'hot'} onClick={() => setSortBy('hot')} label="Hot" collabMode={collabMode} />
+                      <SortButton active={sortBy === 'new'} onClick={() => setSortBy('new')} label="New" collabMode={collabMode} />
+                      <SortButton active={sortBy === 'active'} onClick={() => setSortBy('active')} label="Most Active" collabMode={collabMode} />
                     </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Sorted by newest intro</span>
+                    <span className={cn("text-[10px] font-black uppercase tracking-widest italic", collabMode ? "text-white/40" : "text-slate-400")}>Sorted by newest intro</span>
                 </div>
               )}
               
@@ -313,10 +345,10 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
                     })()}
                   </div>
                   <div>
-                    <h3 className="text-xl font-black text-secondary tracking-tight">
+                    <h3 className={cn("text-xl font-black tracking-tight", collabMode ? "text-white" : "text-secondary")}>
                       {activeTopic?.type === 'social' ? 'No intros yet!' : 'No spaces found'}
                     </h3>
-                    <p className="text-slate-400 font-medium">
+                    <p className={cn("font-medium", collabMode ? "text-white/40" : "text-slate-400")}>
                       {activeTopic?.type === 'social' ? 'Be the first to introduce yourself!' : 'Try adjusting your filters or be the first to post!'}
                     </p>
                   </div>
@@ -335,10 +367,15 @@ export const GlobalTribeView: React.FC<GlobalTribeViewProps> = ({ onReport }) =>
   );
 };
 
-const CategoryTile = ({ title, description, icon, color, isLocked, onClick }: any) => (
+const CategoryTile = ({ title, description, icon, color, isLocked, onClick, collabMode }: any) => (
   <button 
     onClick={onClick}
-    className="group relative flex flex-col items-start p-4 bg-white border border-slate-100 rounded-[1.5rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left overflow-hidden h-full"
+    className={cn(
+      "group relative flex flex-col items-start p-4 border transition-all text-left overflow-hidden h-full",
+      collabMode 
+        ? "bg-white/5 border-white/10 rounded-[1.5rem] shadow-none hover:bg-white/10 hover:-translate-y-1" 
+        : "bg-white border-slate-100 rounded-[1.5rem] shadow-sm hover:shadow-xl hover:-translate-y-1"
+    )}
   >
     <div 
       className="absolute top-0 right-0 w-16 h-16 -mr-4 -mt-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity rotate-12"
@@ -349,28 +386,31 @@ const CategoryTile = ({ title, description, icon, color, isLocked, onClick }: an
     
     <div 
       className="w-10 h-10 rounded-xl flex items-center justify-center mb-3 shadow-lg transition-transform group-hover:scale-110"
-      style={{ backgroundColor: `${color}15`, color }}
+      style={collabMode ? { backgroundColor: 'rgba(255,255,255,0.1)', color: '#ffffff' } : { backgroundColor: `${color}15`, color }}
     >
       {icon}
     </div>
 
     <div className="space-y-0.5">
-      <h3 className="text-sm font-black text-secondary flex items-center gap-2">
+      <h3 className={cn("text-sm font-black flex items-center gap-2", collabMode ? "text-white" : "text-secondary")}>
         {title}
         {isLocked && <span className="text-xs">🔒</span>}
       </h3>
-      <p className="text-[10px] font-medium text-slate-400 leading-tight line-clamp-2">
+      <p className={cn("text-[10px] font-medium leading-tight line-clamp-2", collabMode ? "text-white/60" : "text-slate-400")}>
         {description}
       </p>
     </div>
 
-    <div className="mt-auto pt-3 flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 translate-x-[-10px] group-hover:translate-x-0 transition-all">
+    <div className={cn(
+      "mt-auto pt-3 flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 translate-x-[-10px] group-hover:translate-x-0 transition-all",
+      collabMode ? "text-white" : "text-primary"
+    )}>
       Enter Board <span>→</span>
     </div>
   </button>
 );
 
-const TabButton = ({ active, onClick, label, topicId, icon, isLocked, topicIcon }: any) => {
+const TabButton = ({ active, onClick, label, topicId, icon, isLocked, topicIcon, collabMode }: any) => {
   const Icon = icon || (topicIcon ? getTopicIcon(topicIcon) : (topicId ? getTopicIcon(topicId) : null));
   
   return (
@@ -378,7 +418,9 @@ const TabButton = ({ active, onClick, label, topicId, icon, isLocked, topicIcon 
       onClick={onClick}
       className={cn(
         "flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shrink-0",
-        active ? "bg-secondary text-white shadow-xl shadow-secondary/10" : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+        active 
+          ? (collabMode ? "bg-white text-[#006d77] shadow-xl" : "bg-secondary text-white shadow-xl shadow-secondary/10")
+          : (collabMode ? "text-white/40 hover:text-white hover:bg-white/5" : "text-slate-400 hover:text-slate-600 hover:bg-slate-50")
       )}
     >
       {Icon && <Icon className="w-4 h-4" />}
@@ -388,12 +430,14 @@ const TabButton = ({ active, onClick, label, topicId, icon, isLocked, topicIcon 
   );
 };
 
-const SortButton = ({ active, onClick, label }: any) => (
+const SortButton = ({ active, onClick, label, collabMode }: any) => (
   <button
     onClick={onClick}
     className={cn(
       "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors",
-      active ? "bg-slate-100 text-secondary" : "text-slate-400 hover:text-slate-600"
+      active 
+        ? (collabMode ? "bg-white/20 text-white" : "bg-slate-100 text-secondary")
+        : (collabMode ? "text-white/40 hover:text-white" : "text-slate-400 hover:text-slate-600")
     )}
   >
     {label}
